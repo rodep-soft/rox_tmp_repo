@@ -11,7 +11,7 @@ services:
       - DEBIAN_FRONTEND=noninteractive
     volumes:
       - ~/.ssh:/root/.ssh:ro
-      - ~/ros_ws:/ros_ws
+      - ./ros_ws:/ros_ws
     devices:
       - /dev/video0:/dev/video0
       - /dev/video1:/dev/video1
