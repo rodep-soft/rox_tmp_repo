@@ -12,12 +12,15 @@ find_package(ament_cmake REQUIRED)
 # find_package(<dependency> REQUIRED)
 
 find_package(rclcpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 add_executable(mecanum_wheel_controller_node src/mecanum_wheel_controller_node.cpp)
 target_include_directories(mecanum_wheel_controller_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_compile_features(mecanum_wheel_controller_node PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+
+ament_target_dependencies(mecanum_wheel_controller_node rclcpp geometry_msgs)
 
 install(TARGETS mecanum_wheel_controller_node
   DESTINATION lib/${PROJECT_NAME})
