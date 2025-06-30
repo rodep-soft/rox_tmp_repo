@@ -12,6 +12,7 @@ services:
       - DEBIAN_FRONTEND=noninteractive
     volumes:
       - ~/.ssh:/root/.ssh:ro
+      - ~/ros_ws:/ros_ws
     devices:
       - /dev/video0:/dev/video0
       - /dev/video1:/dev/video1
@@ -23,22 +24,21 @@ services:
       set -e &&
       echo 'Installing dependencies...' &&
       apt-get update -qq &&
-      apt-get install -y -qq --no-install-recommends
-        ros-humble-ros-base
-        python3-colcon-common-extensions
-        python3-rosdep
-        python3-vcstool
-        python3-pip
-        libcamera-tools
-        libcamera-apps-lite
-        libcap-dev
-        libcamera-dev
-        libatlas-base-dev
-        libopenjp2-7
-        libkms++-dev
-        libfmt-dev
-        libdrm-dev
-        python3-opencv
+      apt-get install -y -qq --no-install-recommends \
+        python3-colcon-common-extensions \
+        python3-rosdep \
+        python3-vcstool \
+        python3-pip \
+        libcamera-tools \
+        libcamera-apps-lite \
+        libcap-dev \
+        libcamera-dev \
+        libatlas-base-dev \
+        libopenjp2-7 \
+        libkms++-dev \
+        libfmt-dev \
+        libdrm-dev \
+        python3-opencv \
         ros-humble-cv-bridge &&
       rm -rf /var/lib/apt/lists/* &&
       echo 'Installing Python packages...' &&
