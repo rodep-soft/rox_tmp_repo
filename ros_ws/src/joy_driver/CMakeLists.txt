@@ -11,11 +11,17 @@ find_package(ament_cmake REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+
 add_executable(joy_driver_node src/joy_driver_node.cpp)
 target_include_directories(joy_driver_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_compile_features(joy_driver_node PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+
+ament_target_dependencies(joy_driver_node rclcpp sensor_msgs geometry_msgs)
 
 install(TARGETS joy_driver_node
   DESTINATION lib/${PROJECT_NAME})
