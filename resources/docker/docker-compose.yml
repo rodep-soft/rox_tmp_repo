@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  ros2_rox:
+    image: osrf/ros:humble-desktop
+    container_name: ros2_rox_container
+    privileged: true
+    network_mode: host
+    working_dir: /ros_ws
+    environment:
+      - ROS_DOMAIN_ID=0
+      - DEBIAN_FRONTEND=noninteractive
+    volumes:
+      - ~/.ssh:/root/.ssh:ro
+    devices:
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    command: >
+      bash -c "
+      set -e &&
+      echo 'Installing dependencies...' &&
+      apt-get update -qq &&
+      apt-get install -y -qq --no-install-recommends
+        ros-humble-ros-base
+        python3-colcon-common-extensions
+        python3-rosdep
+        python3-vcstool
+        python3-pip
+        libcamera-tools
+        libcamera-apps-lite
+        libcap-dev
+        libcamera-dev
+        libatlas-base-dev
+        libopenjp2-7
+        libkms++-dev
+        libfmt-dev
+        libdrm-dev
+        python3-opencv
+        ros-humble-cv-bridge &&
+      rm -rf /var/lib/apt/lists/* &&
+      echo 'Installing Python packages...' &&
+      pip install --no-cache-dir rpi-libcamera rpi-kms picamera2 &&
+      echo 'Sourcing ROS environment...' &&
+      source /opt/ros/humble/setup.bash &&
+      echo 'Building ROS workspace...' &&
+      colcon build --packages-select imx500_publisher --cmake-args -DCMAKE_BUILD_TYPE=Release &&
+      echo 'Starting IMX500 publisher...' &&
+      source install/setup.bash &&
+      ros2 run imx500_publisher imx500_publisher
+      "
+
+
