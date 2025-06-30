@@ -29,27 +29,14 @@ services:
         python3-rosdep \
         python3-vcstool \
         python3-pip \
-        libcamera-tools \
-        libcamera-apps-lite \
         libcap-dev \
-        libcamera-dev \
         libatlas-base-dev \
         libopenjp2-7 \
-        libkms++-dev \
         libfmt-dev \
         libdrm-dev \
         python3-opencv \
         ros-humble-cv-bridge &&
-      rm -rf /var/lib/apt/lists/* &&
-      echo 'Installing Python packages...' &&
-      pip install --no-cache-dir rpi-libcamera rpi-kms picamera2 &&
-      echo 'Sourcing ROS environment...' &&
-      source /opt/ros/humble/setup.bash &&
-      echo 'Building ROS workspace...' &&
-      colcon build --packages-select imx500_publisher --cmake-args -DCMAKE_BUILD_TYPE=Release &&
-      echo 'Starting IMX500 publisher...' &&
-      source install/setup.bash &&
-      ros2 run imx500_publisher imx500_publisher
+      rm -rf /var/lib/apt/lists/*
       "
 
 
