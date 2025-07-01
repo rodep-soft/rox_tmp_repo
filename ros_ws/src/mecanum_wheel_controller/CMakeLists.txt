@@ -13,14 +13,22 @@ find_package(ament_cmake REQUIRED)
 
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(Boost QUIET COMPONENTS system)
 
-add_executable(mecanum_wheel_controller_node src/mecanum_wheel_controller_node.cpp)
+if(NOT Boost_FOUND)
+  message(WARNING "Boost not found. Please install libboost-system-dev")
+endif()
+
+add_executable(mecanum_wheel_controller_node src/mecanum_wheel_controller_node.cpp src/ddsm_ctrl.cpp)
 target_include_directories(mecanum_wheel_controller_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_compile_features(mecanum_wheel_controller_node PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
 ament_target_dependencies(mecanum_wheel_controller_node rclcpp geometry_msgs)
+if(Boost_FOUND)
+  target_link_libraries(mecanum_wheel_controller_node ${Boost_LIBRARIES})
+endif()
 
 install(TARGETS mecanum_wheel_controller_node
   DESTINATION lib/${PROJECT_NAME})

@@ -21,12 +21,7 @@ services:
       bash -c "
         echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc &&
         apt-get update && apt-get upgrade -y &&
-        apt-get install -y \
-          git \
-          vim \
-          less \
-          tree \
-          fzf \
-          fish &&
-          exec bash
+        apt-get install -y git vim less tree fzf fish libboost-system-dev &&
+        exec bash
       "
+
