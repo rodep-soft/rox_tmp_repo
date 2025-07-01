@@ -1,5 +1,7 @@
 from launch import LaunchDescription
+from launch.substitutions import PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -33,11 +35,10 @@ def generate_launch_description():
             package='mecanum_wheel_controller',
             executable='mecanum_wheel_controller_node',
             name='mecanum_wheel_controller_node',
-            parameters=[{
-                # Mecanum wheel configuration
-                'wheel_radius': 0.05,     # Wheel radius in meters (5cm)
-                'wheel_base_x': 0.3,      # Distance between front and rear wheels (30cm)
-                'wheel_base_y': 0.3,      # Distance between left and right wheels (30cm)
-            }]
+            parameters=[PathJoinSubstitution([
+                FindPackageShare('mecanum_wheel_controller'),
+                'config',
+                'mechanum.yaml'])
+            ]
         )
     ])

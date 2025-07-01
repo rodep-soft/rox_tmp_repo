@@ -1,0 +1,8 @@
+/mecanum_wheel_controller_node:
+  ros__parameters:
+    wheel_radius: 0.1
+    wheel_base_x: 0.5
+    wheel_base_y: 0.5
+    serial_port: "/dev/ttyUSB0"
+    baud_rate: 115200
+    motor_ids: [1, 2, 3, 4]  # FL, FR, BL, BR
