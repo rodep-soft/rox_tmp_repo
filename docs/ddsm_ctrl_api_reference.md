@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `DDSM_CTRL` class provides a C++ interface for controlling DDSM (Digital DC Servo Motor) motors through serial communication. It supports both DDSM115 and DDSM210 motor types with various control modes including current loop, speed loop, and position loop control.
+The `DDSM_CTRL` class provides a C++ interface for controlling DDSM115 (Digital DC Servo Motor) motors through serial communication. It supports current loop, speed loop, and position loop control modes.
 
 ## Table of Contents
 - [Class Definition](#class-definition)
@@ -131,13 +131,18 @@ if (motor.init("/dev/ttyUSB0", 115200)) {
 
 ## Motor Control Methods
 
-### `void ddsm_ctrl(uint8_t id, int cmd, uint8_t act)`
+### `void ddsm_ctrl(uint8_t id, int cmd, uint8_t acceleration_time)`
+### `void ddsm_ctrl(uint8_t id, int cmd, uint8_t acceleration_time, uint8_t brake)`
 **Description:** Main motor control function that sends commands to a specific motor.
 
 **Parameters:**
 - `id`: Motor ID (1-255)
 - `cmd`: Command value (range depends on mode and motor type)
-- `act`: Action/enable flag (1 = enable, 0 = disable)
+- `acceleration_time`: Acceleration time per 1 RPM in 0.1ms units (valid in speed loop mode)
+  - Value 1 = 0.1ms per RPM
+  - Value 10 = 1ms per RPM  
+  - Value 0 defaults to 1 (0.1ms per RPM)
+- `brake`: (Optional) Brake control (0xFF = brake, other values = no brake, valid in speed loop mode)
 
 **Command Ranges by Mode:**
 
@@ -146,18 +151,16 @@ if (motor.init("/dev/ttyUSB0", 115200)) {
 - **Speed loop:** cmd = -200 to 200 rpm
 - **Position loop:** cmd = 0 to 32767 → 0° to 360°
 
-#### DDSM210:
-- **Open loop:** cmd = -32767 to 32767
-- **Speed loop:** cmd = -2100 to 2100 → -210 to 210 rpm  
-- **Position loop:** cmd = 0 to 32767 → 0° to 360°
-
 **Example:**
 ```cpp
-// Speed control: rotate at 100 rpm
-motor.ddsm_ctrl(1, 100, 1);  // Motor ID 1, 100 rpm, enable
+// Speed control: rotate at 100 rpm with 1ms acceleration per RPM
+motor.ddsm_ctrl(1, 100, 10);  // Motor ID 1, 100 rpm, 10*0.1ms=1ms per rpm
 
-// Position control: move to 180 degrees
-motor.ddsm_ctrl(1, 16384, 1);  // Motor ID 1, 180°, enable
+// Speed control with brake
+motor.ddsm_ctrl(1, 0, 1, 0xFF);  // Motor ID 1, stop with brake
+
+// Position control: move to 180 degrees  
+motor.ddsm_ctrl(1, 16384, 1);  // Motor ID 1, 180°, 0.1ms accel time
 ```
 
 ---
@@ -183,17 +186,16 @@ motor.ddsm_stop(1);  // Stop motor with ID 1
 **Description:** Sets the motor type for proper command formatting.
 
 **Parameters:**
-- `inputType`: Motor type (115, 210, TYPE_DDSM115, or TYPE_DDSM210)
+- `inputType`: Motor type (115 or TYPE_DDSM115)
 
 **Returns:**
 - `TYPE_DDSM115` (1): Successfully set to DDSM115
-- `TYPE_DDSM210` (2): Successfully set to DDSM210  
 - `-1`: Invalid input type
 
 **Example:**
 ```cpp
-if (motor.set_ddsm_type(210) == TYPE_DDSM210) {
-    std::cout << "Motor type set to DDSM210" << std::endl;
+if (motor.set_ddsm_type(115) == TYPE_DDSM115) {
+    std::cout << "Motor type set to DDSM115" << std::endl;
 }
 ```
 
@@ -211,11 +213,6 @@ if (motor.set_ddsm_type(210) == TYPE_DDSM210) {
 #### DDSM115:
 - `1`: Current loop control
 - `2`: Speed loop control  
-- `3`: Position loop control
-
-#### DDSM210:
-- `0`: Open loop control
-- `2`: Speed loop control
 - `3`: Position loop control
 
 **Example:**
@@ -398,7 +395,8 @@ void speed_control_demo(DDSM_CTRL& motor, uint8_t id) {
     
     // Accelerate to 100 RPM
     for (int speed = 0; speed <= 100; speed += 10) {
-        motor.ddsm_ctrl(id, speed, 1);
+        // Use 5*0.1ms = 0.5ms acceleration time per RPM for smooth control
+        motor.ddsm_ctrl(id, speed, 5);
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         
         // Read feedback
@@ -408,8 +406,8 @@ void speed_control_demo(DDSM_CTRL& motor, uint8_t id) {
         }
     }
     
-    // Stop motor
-    motor.ddsm_stop(id);
+    // Stop motor with brake
+    motor.ddsm_ctrl(id, 0, 1, 0xFF);
 }
 ```
 
@@ -458,7 +456,8 @@ void multi_motor_control() {
     std::vector<int> speeds = {100, -100, 100, -100}; // Opposite directions
     
     for (size_t i = 0; i < motors.size(); i++) {
-        motors[i].ddsm_ctrl(motor_ids[i], speeds[i], 1);
+        // Use moderate acceleration time (2*0.1ms = 0.2ms per RPM)
+        motors[i].ddsm_ctrl(motor_ids[i], speeds[i], 2);
     }
     
     // Monitor all motors

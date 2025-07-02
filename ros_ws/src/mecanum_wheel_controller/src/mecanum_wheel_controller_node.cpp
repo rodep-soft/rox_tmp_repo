@@ -17,8 +17,9 @@ public:
     this->declare_parameter("wheel_radius", 0.05);      // Wheel radius in meters
     this->declare_parameter("wheel_base_x", 0.3);       // Distance between front and rear wheels
     this->declare_parameter("wheel_base_y", 0.3);       // Distance between left and right wheels
-    this->declare_parameter("serial_port", "/dev/ttyUSB0");  // Serial port for DDSM motors
+    this->declare_parameter("serial_port", "/dev/ttyACM0");  // Serial port for DDSM motors
     this->declare_parameter("baud_rate", 115200);       // Baud rate for serial communication
+    //　モーターのIDは事前に設定する必要あり
     this->declare_parameter("motor_ids", std::vector<int64_t>{1, 2, 3, 4});  // Motor IDs [FL, FR, BL, BR]
     
     // Initialize DDSM controllers for each motor
@@ -26,7 +27,7 @@ public:
       ddsm_controllers_[i] = std::make_unique<DDSM_CTRL>();
     }
     
-    // Initialize serial connection
+    // Initialize serial connection and set motor type
     std::string port = this->get_parameter("serial_port").as_string();
     int baud = this->get_parameter("baud_rate").as_int();
     
@@ -35,6 +36,9 @@ public:
       if (!ddsm_controllers_[i]->init(port, baud)) {
         RCLCPP_ERROR(this->get_logger(), "Failed to initialize DDSM controller %d", i);
         init_success = false;
+      } else {
+        // Set motor type to DDSM115
+        ddsm_controllers_[i]->set_ddsm_type(115);
       }
     }
     
@@ -53,6 +57,10 @@ public:
   }
 
 private:
+  // Member variables
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
+  std::unique_ptr<DDSM_CTRL> ddsm_controllers_[4]; // FL, FR, BL, BR
+
   void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
   {
     // Get parameters
@@ -113,6 +121,7 @@ private:
     
     try {
       // Send commands to each motor (FL, FR, BL, BR)
+      // Third parameter is acceleration_time: 0.1ms per rpm (1 = 0.1ms per rpm)
       if (motor_ids.size() >= 4) {
         ddsm_controllers_[0]->ddsm_ctrl(motor_ids[0], fl_cmd, 1); // Front Left
         ddsm_controllers_[1]->ddsm_ctrl(motor_ids[1], fr_cmd, 1); // Front Right
@@ -136,9 +145,6 @@ private:
       RCLCPP_ERROR(this->get_logger(), "Error stopping motors: %s", e.what());
     }
   }
-
-  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
-  std::unique_ptr<DDSM_CTRL> ddsm_controllers_[4]; // FL, FR, BL, BR
 };
 
 int main(int argc, char ** argv)

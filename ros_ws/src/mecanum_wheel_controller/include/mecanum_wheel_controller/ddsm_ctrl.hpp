@@ -12,7 +12,6 @@
 #define DDSM_BAUDRATE 115200
 
 #define TYPE_DDSM115  1
-#define TYPE_DDSM210  2
 #define TIME_BETWEEN_CMD 4
 #define TIMEOUT_MS 4
 
@@ -33,10 +32,10 @@ public:
     int ddsm_id_check();
     int ddsm_change_id(uint8_t id);
     void ddsm_change_mode(uint8_t id, uint8_t mode);
-    void ddsm_ctrl(uint8_t id, int cmd, uint8_t act);
+    void ddsm_ctrl(uint8_t id, int cmd, uint8_t acceleration_time);
+    void ddsm_ctrl(uint8_t id, int cmd, uint8_t acceleration_time, uint8_t brake);
     void ddsm_get_info(uint8_t id);
     void ddsm_stop(uint8_t id);
-    int ddsm210_fb();
     int ddsm115_fb();
 
 private:
@@ -57,20 +56,14 @@ private:
     void sleep_ms(int ms);
 
 public:
-    // Data members - sensor readings
-    int speed_data;  // 115 210
-    int current;     // 210
-    int acceleration_time; // 210
-    int temperature; // 115[info] 210
-
-    int ddsm_mode;   // 115
-    int ddsm_torque; // 115
-    int ddsm_u8;     // 115[info]
-
-    int32_t mileage; // 210[info]
-    int ddsm_pos;    // 115 210[info]
-
-    int fault_code;  // 115 210
+    // Data members - sensor readings (DDSM115)
+    int speed_data;      // Current speed
+    int temperature;     // Temperature (from info request)
+    int ddsm_mode;       // Current control mode
+    int ddsm_torque;     // Torque output
+    int ddsm_u8;         // Additional status data (from info request)
+    int ddsm_pos;        // Current position
+    int fault_code;      // Error/fault code
 };
 
 #endif
