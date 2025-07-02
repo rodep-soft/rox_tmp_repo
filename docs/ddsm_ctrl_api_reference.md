@@ -148,7 +148,7 @@ if (motor.init("/dev/ttyUSB0", 115200)) {
 
 #### DDSM115:
 - **Current loop:** cmd = -32767 to 32767 → -8A to 8A (max 2.7A)
-- **Speed loop:** cmd = -200 to 200 rpm
+- **Speed loop:** cmd = -330 to 330 rpm
 - **Position loop:** cmd = 0 to 32767 → 0° to 360°
 
 **Example:**
@@ -320,33 +320,34 @@ std::cout << "Fault code: " << motor.fault_code << std::endl;
 ## Data Members
 
 ### Speed & Motion
-- `int speed_data`: Current motor speed in RPM (both DDSM115/210)
-- `int ddsm_pos`: Current position (both DDSM115/210)
-- `int32_t mileage`: Total distance/rotation counter (DDSM210 info only)
+- `int speed_data`: Current motor speed in RPM 
+- `int ddsm_pos`: Current position (0-32767 = 0°-360°)
 
 ### Current & Power  
-- `int current`: Current consumption in mA (DDSM210 only)
-- `int ddsm_torque`: Torque output (DDSM115 only)
+- `int ddsm_torque`: Torque output (signed 16-bit)
 
 ### Status & Health
-- `int temperature`: Motor temperature in °C
+- `int temperature`: Motor winding temperature in °C (from info request)
 - `int fault_code`: Error/fault code (0 = no fault)
-- `int ddsm_mode`: Current control mode (DDSM115 only)
+- `int ddsm_mode`: Current control mode (1=current, 2=speed, 3=position)
 
-### Timing & Control
-- `int acceleration_time`: Acceleration time setting (DDSM210 only)
-- `int ddsm_u8`: Additional status data (DDSM115 info only)
+### Additional Data
+- `int ddsm_u8`: U8 position value 0-255 = 0°-360° (from info request)
 
 ---
 
 ## Constants
 
 ```cpp
-#define DDSM_BAUDRATE 115200    // Default baud rate
-#define TYPE_DDSM115  1         // DDSM115 motor type identifier
-#define TYPE_DDSM210  2         // DDSM210 motor type identifier  
-#define TIME_BETWEEN_CMD 4      // Milliseconds between commands
-#define TIMEOUT_MS 4            // Communication timeout in milliseconds
+#define DDSM_BAUDRATE 115200         // Default baud rate
+#define TYPE_DDSM115  1              // DDSM115 motor type identifier
+#define TIME_BETWEEN_CMD 4           // Milliseconds between commands
+#define TIMEOUT_MS 4                 // Communication timeout in milliseconds
+
+// DDSM115 Control Modes
+#define DDSM115_CURRENT_MODE  1      // Current loop control
+#define DDSM115_SPEED_MODE    2      // Speed/velocity loop control  
+#define DDSM115_POSITION_MODE 3      // Position loop control
 ```
 
 ---

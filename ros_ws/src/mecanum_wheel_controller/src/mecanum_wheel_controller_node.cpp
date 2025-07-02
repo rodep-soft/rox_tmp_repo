@@ -1,5 +1,7 @@
 #include <memory>
 #include <algorithm>
+#include <thread>
+#include <cmath>
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include "mecanum_wheel_controller/ddsm_ctrl.hpp"
@@ -37,8 +39,15 @@ public:
         RCLCPP_ERROR(this->get_logger(), "Failed to initialize DDSM controller %d", i);
         init_success = false;
       } else {
-        // Set motor type to DDSM115
+        // Set motor type to DDSM115 and configure speed mode
         ddsm_controllers_[i]->set_ddsm_type(115);
+        
+        // Set to speed/velocity mode (mode 2)
+        auto motor_ids = this->get_parameter("motor_ids").as_integer_array();
+        if (i < motor_ids.size()) {
+          ddsm_controllers_[i]->ddsm_change_mode(motor_ids[i], 2);
+          std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Small delay between commands
+        }
       }
     }
     
@@ -104,20 +113,21 @@ private:
   void send_motor_commands(double fl, double fr, double bl, double br) {
     auto motor_ids = this->get_parameter("motor_ids").as_integer_array();
     
-    // Convert rad/s to motor commands (assuming speed mode)
-    // Scale factor may need adjustment based on your motor specifications
-    const double scale_factor = 30.0; // Adjust this based on your motors
+    // Convert rad/s to RPM and apply scale factor
+    // DDSM115 speed range: -330 to 330 rpm
+    const double rad_s_to_rpm = 60.0 / (2.0 * M_PI); // Convert rad/s to RPM
+    const double scale_factor = 50.0; // Adjust this based on your desired max speed
     
-    int fl_cmd = static_cast<int>(fl * scale_factor);
-    int fr_cmd = static_cast<int>(fr * scale_factor);
-    int bl_cmd = static_cast<int>(bl * scale_factor);
-    int br_cmd = static_cast<int>(br * scale_factor);
+    int fl_cmd = static_cast<int>(fl * rad_s_to_rpm * scale_factor);
+    int fr_cmd = static_cast<int>(fr * rad_s_to_rpm * scale_factor);
+    int bl_cmd = static_cast<int>(bl * rad_s_to_rpm * scale_factor);
+    int br_cmd = static_cast<int>(br * rad_s_to_rpm * scale_factor);
     
-    // Clamp commands to motor limits
-    fl_cmd = std::max(-200, std::min(200, fl_cmd));
-    fr_cmd = std::max(-200, std::min(200, fr_cmd));
-    bl_cmd = std::max(-200, std::min(200, bl_cmd));
-    br_cmd = std::max(-200, std::min(200, br_cmd));
+    // Clamp commands to DDSM115 limits (-330 to 330 rpm)
+    fl_cmd = std::max(-330, std::min(330, fl_cmd));
+    fr_cmd = std::max(-330, std::min(330, fr_cmd));
+    bl_cmd = std::max(-330, std::min(330, bl_cmd));
+    br_cmd = std::max(-330, std::min(330, br_cmd));
     
     try {
       // Send commands to each motor (FL, FR, BL, BR)

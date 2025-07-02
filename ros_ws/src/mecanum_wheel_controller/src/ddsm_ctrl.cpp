@@ -6,7 +6,6 @@
 
 DDSM_CTRL::DDSM_CTRL() 
     : packet_length(10),
-      ddsm_type(TYPE_DDSM115), 
       get_info_flag(false),
       serial_port(nullptr)
 {
@@ -73,10 +72,9 @@ uint8_t DDSM_CTRL::crc8_update(uint8_t crc, uint8_t data) {
   return crc;
 }
 
-// config the type of ddsm.
+// Set motor type - only DDSM115 supported
 int DDSM_CTRL::set_ddsm_type(int inputType) {
 	if (inputType == 115 || inputType == TYPE_DDSM115) {
-		ddsm_type = TYPE_DDSM115;
 		return TYPE_DDSM115;
 	}
 	return -1;
@@ -187,26 +185,19 @@ int DDSM_CTRL::ddsm_id_check() {
 }
 
 int DDSM_CTRL::ddsm_change_id(uint8_t id) {
+    // ID setting protocol: send 5 times, no CRC
     packet_move[0] = 0xAA;
-
     packet_move[1] = 0x55;
     packet_move[2] = 0x53;
-
     packet_move[3] = id;
-
     packet_move[4] = 0x00;
     packet_move[5] = 0x00;
     packet_move[6] = 0x00;
     packet_move[7] = 0x00;
     packet_move[8] = 0x00;
+    packet_move[9] = 0x00;  // No CRC for ID setting
 
-    // CRC-8/MAXIM
-    uint8_t crc = 0;
-    for (size_t i = 0; i < packet_length - 1; ++i) {
-        crc = crc8_update(crc, packet_move[i]);
-    }
-    packet_move[9] = crc;
-
+    // Send 5 times as per protocol
     for (int i = 0; i < 5; i++) {
         if (!write_data(packet_move, packet_length)) {
             return -1;
@@ -214,37 +205,21 @@ int DDSM_CTRL::ddsm_change_id(uint8_t id) {
         sleep_ms(TIME_BETWEEN_CMD);
     }
 
-    ddsm_id_check();
-    
-    uint8_t data[10];
-    if (!read_data(data, 10, TIMEOUT_MS)) {
-        return -1;
-    }
-
-    // CRC-8/MAXIM
-    crc = 0;
-    for (size_t i = 0; i < packet_length - 1; ++i) {
-        crc = crc8_update(crc, data[i]);
-    }
-    if (crc != data[9]) {
-        return -1;
-    }
-    
-    int feedback_type = data[1];
-    uint8_t ID = data[0];
-
-    if (id != ID) {
-        return -1;
+    // Verify the ID change by querying
+    int new_id = ddsm_id_check();
+    if (new_id == id) {
+        return id;
     } else {
-        return ID;
+        return -1;
     }
 }
 
-// change mode
-// ddsm115:
-// 1 - current loop
-// 2 - speed loop
-// 3 - position loop
+// change mode - DDSM115 protocol
+// Mode values:
+// 0x01: current loop
+// 0x02: speed/velocity loop  
+// 0x03: position loop
+// Note: This command has no feedback
 void DDSM_CTRL::ddsm_change_mode(uint8_t id, uint8_t mode) {
     packet_move[0] = id;
     packet_move[1] = 0xA0;
@@ -255,19 +230,18 @@ void DDSM_CTRL::ddsm_change_mode(uint8_t id, uint8_t mode) {
     packet_move[6] = 0x00;
     packet_move[7] = 0x00;
     packet_move[8] = 0x00;
-    packet_move[9] = mode;
+    packet_move[9] = mode;  // Mode is stored in DATA[9], no CRC needed
     
     write_data(packet_move, packet_length);
 }
 
-// --- DDSM115 ---
-// current loop, cmd: -32767 ~ 32767 -> -8 ~ 8 A (ddsm115 max current < 2.7A)
-// speed loop, cmd: -200 ~ 200 rpm
-// position loop, cmd: 0 ~ 32767 -> 0 ~ 360°
+// --- DDSM115 Protocol Specifications ---
+// current loop: cmd = -32767 ~ 32767 -> -8A ~ 8A (max current < 2.7A)
+// speed loop: cmd = -330 ~ 330 rpm  
+// position loop: cmd = 0 ~ 32767 -> 0° ~ 360°
 
-//    wherever the mode is set to position mode
-//    the currently position is the 0 position and it moves to the goal position
-//    at the direction as the shortest path.
+//    In position mode, the current position becomes 0 position and motor
+//    moves to the goal position via the shortest path.
 void DDSM_CTRL::ddsm_ctrl(uint8_t id, int cmd, uint8_t acceleration_time) {
     ddsm_ctrl(id, cmd, acceleration_time, 0x00); // Default: no brake
 }

@@ -15,6 +15,11 @@
 #define TIME_BETWEEN_CMD 4
 #define TIMEOUT_MS 4
 
+// DDSM115 Control Modes
+#define DDSM115_CURRENT_MODE  1
+#define DDSM115_SPEED_MODE    2
+#define DDSM115_POSITION_MODE 3
+
 
 class DDSM_CTRL {
 public:
@@ -41,7 +46,6 @@ public:
 private:
     const size_t packet_length;   
     uint8_t packet_move[10];
-    uint8_t ddsm_type;
     bool get_info_flag;
     
     // Boost.ASIO components
