@@ -17,6 +17,8 @@ services:
     devices:
       - /dev/video0:/dev/video0
       - /dev/video1:/dev/video1
+      - /dev/ttyACM0:/dev/ttyACM0
+      - /dev/ttyACM1:/dev/ttyACM1
     command: >
       bash -c "
         echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc &&
