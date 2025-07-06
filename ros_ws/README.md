@@ -1,6 +1,15 @@
 # ROS 2 Mecanum Wheel Control System
 
-A complete ROS 2 system for controlling mecanum wheel robots using joystick input. This system provides a full control pipeline from joystick input to individual wheel velocity commands.
+A complete ROS 2 system for controlling mecanum wheel robots using joystick input. This system provides a full control pipeline from joystick input to individual wheel velocity commands with serial communication to motor controllers.
+
+## Docker Environment
+
+This project includes a complete Docker setup for easy deployment and development:
+
+- **Base Image**: `osrf/ros:humble-desktop`
+- **Included Packages**: ROS 2 Humble, joy package, development tools
+- **Serial Support**: Full device access for motor communication
+- **Network**: Host networking for easy ROS 2 communication
 
 ## System Overview
 
@@ -26,14 +35,17 @@ The system consists of three main components:
 
 ## Prerequisites
 
-- ROS 2 (tested on ROS 2 Humble)
-- A USB joystick/gamepad
-- `joy` package: `sudo apt install ros-humble-joy`
+- Docker and Docker Compose
+- A USB joystick/gamepad (for joystick control)
+- ROS 2 (tested on ROS 2 Humble) - included in Docker container
+- Serial connection to motor controller (for actual robot control)
 
 ## Package Structure
 
 ```
 ros_ws/
+├── config/
+│   └── mechanum.yaml           # Robot configuration parameters
 ├── src/
 │   ├── joy_driver/              # Joystick to cmd_vel converter
 │   │   ├── src/
@@ -43,14 +55,39 @@ ros_ws/
 │   └── mecanum_wheel_controller/ # Mecanum wheel kinematics
 │       ├── src/
 │       │   └── mecanum_wheel_controller_node.cpp
+│       ├── config/
+│       │   └── mechanum.yaml    # Local config copy
 │       ├── package.xml
 │       └── CMakeLists.txt
 ├── launch/
-│   └── launch.py               # Complete system launch file
+│   ├── launch.py               # Complete system with joystick
+│   └── launch_without_joy.py   # System without joystick (direct cmd_vel)
 └── README.md
 ```
 
 ## Building the System
+
+### Using Docker (Recommended)
+
+1. **Build and start the Docker container**:
+   ```bash
+   cd /home/tatsv/jordan/rox_repo
+   docker-compose up -d
+   ```
+
+2. **Access the container**:
+   ```bash
+   docker exec -it ros2_rox_container bash
+   ```
+
+3. **Build the ROS 2 workspace**:
+   ```bash
+   cd /ros_ws
+   colcon build
+   source install/setup.bash
+   ```
+
+### Native Installation
 
 ```bash
 cd ros_ws
@@ -59,6 +96,21 @@ source install/setup.bash
 ```
 
 ## Configuration
+
+### Robot Configuration File
+
+The main robot parameters are configured in `config/mechanum.yaml`:
+
+```yaml
+/mechanum_wheel_controller:
+  ros__parameters:
+    wheel_radius: 0.1
+    wheel_base_x: 0.5
+    wheel_base_y: 0.5
+    serial_port: "/dev/ttyACM1"
+    baud_rate: 115200
+    motor_ids: [1, 2, 3, 4]  # FL, FR, BL, BR
+```
 
 ### Joystick Axis Mapping
 
@@ -85,24 +137,58 @@ The default axis mapping assumes a standard Xbox/PlayStation controller:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `wheel_radius` | 0.05 | Wheel radius in meters |
-| `wheel_base_x` | 0.3 | Distance between front and rear wheels (m) |
-| `wheel_base_y` | 0.3 | Distance between left and right wheels (m) |
+| `wheel_radius` | 0.1 | Wheel radius in meters |
+| `wheel_base_x` | 0.5 | Distance between front and rear wheels (m) |
+| `wheel_base_y` | 0.5 | Distance between left and right wheels (m) |
+| `serial_port` | "/dev/ttyACM1" | Serial port for motor communication |
+| `baud_rate` | 115200 | Serial communication baud rate |
+| `motor_ids` | [1, 2, 3, 4] | Motor IDs: [FL, FR, BL, BR] |
 
 ## Usage
 
-### Quick Start
+### Quick Start with Joystick Control
 
-1. **Connect your joystick** to the computer
-2. **Launch the complete system**:
+1. **Start the Docker container**:
    ```bash
-   cd ros_ws
+   docker-compose up -d
+   docker exec -it ros2_rox_container bash
+   ```
+
+2. **Connect your joystick** to the computer and ensure it's accessible in the container
+
+3. **Launch the complete system with joystick**:
+   ```bash
+   cd /ros_ws
    source install/setup.bash
    ros2 launch launch/launch.py
    ```
-3. **Use the joystick** to control the robot:
+
+4. **Use the joystick** to control the robot:
    - Left stick: Forward/backward and strafe left/right
    - Right stick: Rotation
+
+### Quick Start without Joystick
+
+For testing or manual control without a physical joystick:
+
+1. **Launch the system without joystick**:
+   ```bash
+   cd /ros_ws
+   source install/setup.bash
+   ros2 launch launch/launch_without_joy.py
+   ```
+
+2. **Manually publish velocity commands**:
+   ```bash
+   # Example: Move forward
+   ros2 topic pub /cmd_vel geometry_msgs/Twist "linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}"
+   
+   # Example: Strafe right
+   ros2 topic pub /cmd_vel geometry_msgs/Twist "linear: {x: 0.0, y: -0.5, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}"
+   
+   # Example: Rotate clockwise
+   ros2 topic pub /cmd_vel geometry_msgs/Twist "linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: -0.5}"
+   ```
 
 ### Finding Your Joystick Axes
 
@@ -115,7 +201,20 @@ If your controller uses different axis mappings:
 
 ### Custom Configuration
 
-Edit `launch/launch.py` to customize parameters:
+Edit `config/mechanum.yaml` to customize robot parameters:
+
+```yaml
+# Example: Smaller robot configuration
+/mechanum_wheel_controller:
+  ros__parameters:
+    wheel_radius: 0.05      # Smaller wheels
+    wheel_base_x: 0.3       # Shorter wheelbase
+    wheel_base_y: 0.3       # Narrower track width
+    serial_port: "/dev/ttyUSB0"  # Different serial port
+    baud_rate: 9600         # Lower baud rate
+```
+
+Edit `launch/launch.py` to customize joystick parameters:
 
 ```python
 # Example: Slower, more precise control
@@ -134,7 +233,7 @@ Edit `launch/launch.py` to customize parameters:
 You can also run components separately for testing:
 
 ```bash
-# Run joy node only
+# Run joy node only (inside container)
 ros2 run joy joy_node
 
 # Run joy driver only
@@ -143,6 +242,24 @@ ros2 run joy_driver joy_driver_node
 # Run mecanum controller only
 ros2 run mecanum_wheel_controller mecanum_wheel_controller_node
 ```
+
+### Serial Motor Communication
+
+The mecanum wheel controller communicates with motors via serial connection. Ensure:
+
+1. **Serial device permissions** (inside container):
+   ```bash
+   # Check if serial device exists
+   ls -la /dev/ttyACM* /dev/ttyUSB*
+   
+   # If permission denied, add user to dialout group (on host system)
+   sudo usermod -a -G dialout $USER
+   ```
+
+2. **Motor controller protocol**: The system sends wheel velocities as comma-separated values:
+   ```
+   FL_velocity,FR_velocity,BL_velocity,BR_velocity\n
+   ```
 
 ## Mecanum Wheel Kinematics
 
@@ -206,41 +323,78 @@ ros2 node info /mecanum_wheel_controller_node
 
 ### Adding Motor Control
 
-To connect to actual motors, modify the `mecanum_wheel_controller_node.cpp`:
+The system is already configured for serial motor communication. To modify motor control:
 
-1. Add your motor driver dependencies to `package.xml` and `CMakeLists.txt`
-2. Implement motor communication in the `publish_motor_commands()` function
-3. Examples of motor interfaces:
-   - PWM signals
-   - Serial communication
-   - CAN bus
-   - ROS 2 motor controller topics
+1. **Update motor protocol** in `mecanum_wheel_controller_node.cpp`
+2. **Configure serial parameters** in `config/mechanum.yaml`
+3. **Test motor communication**:
+   ```bash
+   # Monitor serial output (on host system)
+   sudo cat /dev/ttyACM1
+   
+   # Send test commands
+   echo "10.0,10.0,10.0,10.0" > /dev/ttyACM1
+   ```
 
-### Example Motor Integration
+### Example Alternative Motor Interfaces
 
 ```cpp
-// Add to constructor
-motor_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>("motor_commands", 10);
+// For CAN bus communication
+#include <linux/can.h>
+#include <linux/can/raw.h>
 
-// Implement motor publishing
-void publish_motor_commands(double fl, double fr, double bl, double br) {
-    auto motor_msg = std_msgs::msg::Float64MultiArray();
-    motor_msg.data = {fl, fr, bl, br};
-    motor_pub_->publish(motor_msg);
-}
+// For I2C communication  
+#include <linux/i2c-dev.h>
+
+// For SPI communication
+#include <linux/spi/spidev.h>
+
+// For ROS 2 motor controller topics
+motor_pub_ = this->create_publisher<control_msgs::msg::JointJog>("joint_commands", 10);
 ```
 
 ## Troubleshooting
 
+### Docker Issues
+
+```bash
+# Rebuild container if needed
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Check container logs
+docker logs ros2_rox_container
+
+# Access container shell
+docker exec -it ros2_rox_container bash
+```
+
 ### Joystick Not Detected
 
 ```bash
-# Check if joystick is connected
+# Check if joystick is connected (on host)
 ls /dev/input/js*
 
-# Test joystick directly
+# Test joystick directly (on host)
 sudo apt install jstest-gtk
 jstest /dev/input/js0
+
+# Ensure device is accessible in container
+docker exec -it ros2_rox_container ls /dev/input/
+```
+
+### Serial Communication Issues
+
+```bash
+# Check serial devices (in container)
+ls -la /dev/ttyACM* /dev/ttyUSB*
+
+# Test serial communication (on host)
+sudo minicom -D /dev/ttyACM1 -b 115200
+
+# Check permissions (on host)
+sudo chmod 666 /dev/ttyACM1
 ```
 
 ### Wrong Axis Mapping
@@ -255,6 +409,7 @@ jstest /dev/input/js0
 2. Check topic communication: `ros2 topic echo /cmd_vel`
 3. Verify joystick input: `ros2 topic echo /joy`
 4. Check parameter values are reasonable (not too small)
+5. Verify serial connection: `ros2 topic echo /motor_commands`
 
 ## License
 
