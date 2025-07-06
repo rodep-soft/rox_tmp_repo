@@ -1,166 +1,226 @@
-#include <memory>
-#include <algorithm>
-#include <thread>
-#include <cmath>
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
-#include "mecanum_wheel_controller/ddsm_ctrl.hpp"
+#include <cmath>
+#include <memory>
+#include <boost/asio.hpp>
+#include <array>
+#include <string>
+#include <iostream>
+#include <algorithm>
 
-class MecanumWheelControllerNode : public rclcpp::Node
-{
-public:
-  MecanumWheelControllerNode() : Node("mecanum_wheel_controller_node")
-  {
-    // Create subscription to cmd_vel topic
-    cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>(
-      "cmd_vel", 10, std::bind(&MecanumWheelControllerNode::cmd_vel_callback, this, std::placeholders::_1));
-    
-    // Parameters for mecanum wheel configuration
-    this->declare_parameter("wheel_radius", 0.05);      // Wheel radius in meters
-    this->declare_parameter("wheel_base_x", 0.3);       // Distance between front and rear wheels
-    this->declare_parameter("wheel_base_y", 0.3);       // Distance between left and right wheels
-    this->declare_parameter("serial_port", "/dev/ttyACM0");  // Serial port for DDSM motors
-    this->declare_parameter("baud_rate", 115200);       // Baud rate for serial communication
-    //　モーターのIDは事前に設定する必要あり
-    this->declare_parameter("motor_ids", std::vector<int64_t>{1, 2, 3, 4});  // Motor IDs [FL, FR, BL, BR]
-    
-    // Initialize DDSM controllers for each motor
-    for (int i = 0; i < 4; i++) {
-      ddsm_controllers_[i] = std::make_unique<DDSM_CTRL>();
-    }
-    
-    // Initialize serial connection and set motor type
-    std::string port = this->get_parameter("serial_port").as_string();
-    int baud = this->get_parameter("baud_rate").as_int();
-    
-    bool init_success = true;
-    for (int i = 0; i < 4; i++) {
-      if (!ddsm_controllers_[i]->init(port, baud)) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to initialize DDSM controller %d", i);
-        init_success = false;
-      } else {
-        // Set motor type to DDSM115 and configure speed mode
-        ddsm_controllers_[i]->set_ddsm_type(115);
-        
-        // Set to speed/velocity mode (mode 2)
-        auto motor_ids = this->get_parameter("motor_ids").as_integer_array();
-        if (i < motor_ids.size()) {
-          ddsm_controllers_[i]->ddsm_change_mode(motor_ids[i], 2);
-          std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Small delay between commands
+class MotorController {
+    public:
+            MotorController() : serial_port_(io_context_) {}
+
+            void init_port(const std::string& port_name) {
+                try {
+                    serial_port_.open(port_name);
+
+                    serial_port_.set_option(boost::asio::serial_port_base::baud_rate(115200));
+                    serial_port_.set_option(boost::asio::serial_port_base::character_size(8));
+                    serial_port_.set_option(boost::asio::serial_port_base::flow_control(boost::asio::serial_port_base::flow_control::none));
+                    serial_port_.set_option(boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
+                    serial_port_.set_option(boost::asio::serial_port_base::stop_bits(boost::asio::serial_port_base::stop_bits::one));
+                } catch (const std::exception& e) {
+                    throw std::runtime_error("Failed to initialize serial port: " + std::string(e.what()));
+                }
+            }
+
+            void control_with_velocity(const uint8_t id = 0x01, const int16_t rpm = 0, bool brake = false) {
+                send_data_[0] = id;
+                send_data_[1] = 0x64;
+                
+                uint16_t val_u16 = static_cast<uint16_t>(rpm); // 符号付きを符号なしに変換
+
+                send_data_[2] = static_cast<uint8_t>((val_u16 >> 8) & 0xFF); // High
+                send_data_[3] = static_cast<uint8_t>(val_u16 & 0xFF); // Low
+
+                send_data_[4] = 0x00;
+                send_data_[5] = 0x00;
+                send_data_[6] = 0x00;
+
+                if (brake) {
+                    send_data_[7] = 0xFF;
+                } else {
+                    send_data_[7] = 0x00;
+                }
+
+                send_data_[8] = 0x00;
+
+                std::array<uint8_t, 9> crc_input;
+                std::copy(send_data_.begin(), send_data_.begin() + 9, crc_input.begin());
+                send_data_[9] = calc_crc8_maxim(crc_input);
+
+
+                try {
+                    boost::asio::write(serial_port_, boost::asio::buffer(send_data_, send_data_.size()));
+                } catch (const std::exception& e) {
+                    // エラーログを出力するが、例外は再投げしない（ロボット制御の継続性のため）
+                    // RCLCPP_ERROR を使用（this->get_logger()は利用できないため、静的にログを出力）
+                    std::cerr << "Failed to write to serial port: " << e.what() << std::endl;
+                }
+            }
+
+    private:
+        boost::asio::io_context io_context_;
+        boost::asio::serial_port serial_port_;
+        std::array<uint8_t, 10> send_data_;
+
+
+
+        uint8_t calc_crc8_maxim(const std::array<uint8_t, 9>& data) {
+            uint8_t crc = 0x00; // 初期値  (一般的なMaxim CRCの標準)
+
+            const uint8_t reflected_polynomial = 0x8C; 
+
+            // データバイトを一つずつ処理
+            for (size_t i = 0; i < data.size(); i++) { // DATA[0]~DATA[8]まで、合計9バイト
+                crc ^= data[i]; // 現在のバイトとCRCレジスタをXOR
+
+                // 各バイトの8ビットを処理 (LSB First)
+                for (uint8_t bit = 0; bit < 8; bit++) {
+                    if (crc & 0x01) { // 最下位ビットが1の場合
+                        crc = (crc >> 1) ^ reflected_polynomial; // 右シフトして多項式とXOR
+                    } else {
+                        crc >>= 1; // 最下位ビットが0の場合、単に右シフト
+                    }
+                }
+            }
+            return crc;
         }
-      }
-    }
-    
-    if (init_success) {
-      RCLCPP_INFO(this->get_logger(), "Mecanum wheel controller node started successfully!");
-    } else {
-      RCLCPP_WARN(this->get_logger(), "Mecanum wheel controller node started with some initialization errors");
-    }
-    
-    RCLCPP_INFO(this->get_logger(), "Waiting for cmd_vel messages...");
-  }
-  
-  ~MecanumWheelControllerNode() {
-    // Stop all motors on shutdown
-    stop_all_motors();
-  }
-
-private:
-  // Member variables
-  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
-  std::unique_ptr<DDSM_CTRL> ddsm_controllers_[4]; // FL, FR, BL, BR
-
-  void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
-  {
-    // Get parameters
-    double wheel_radius = this->get_parameter("wheel_radius").as_double();
-    double wheel_base_x = this->get_parameter("wheel_base_x").as_double();
-    double wheel_base_y = this->get_parameter("wheel_base_y").as_double();
-    
-    // Extract velocity components
-    double vx = msg->linear.x;   // Forward/backward velocity
-    double vy = msg->linear.y;   // Left/right strafe velocity
-    double wz = msg->angular.z;  // Rotational velocity
-    
-    // Mecanum wheel kinematics
-    // For a mecanum wheel robot with wheels arranged as:
-    //   FL(+)  FR(-)
-    //   BL(-)  BR(+)
-    // Where (+) means forward rolling gives positive robot motion
-    
-    double lx = wheel_base_x / 2.0;  // Half distance between front and rear
-    double ly = wheel_base_y / 2.0;  // Half distance between left and right
-    
-    // Calculate individual wheel velocities (rad/s)
-    double front_left_vel  = (vx - vy - (lx + ly) * wz) / wheel_radius;
-    double front_right_vel = (vx + vy + (lx + ly) * wz) / wheel_radius;
-    double back_left_vel   = (vx + vy - (lx + ly) * wz) / wheel_radius;
-    double back_right_vel  = (vx - vy + (lx + ly) * wz) / wheel_radius;
-    
-    // Log the received cmd_vel and calculated wheel velocities
-    RCLCPP_INFO(this->get_logger(), 
-                "Received cmd_vel: vx=%.3f, vy=%.3f, wz=%.3f", 
-                vx, vy, wz);
-    
-    RCLCPP_INFO(this->get_logger(), 
-                "Wheel velocities (rad/s): FL=%.3f, FR=%.3f, BL=%.3f, BR=%.3f",
-                front_left_vel, front_right_vel, back_left_vel, back_right_vel);
-    
-    // Send commands to DDSM motors
-    send_motor_commands(front_left_vel, front_right_vel, back_left_vel, back_right_vel);
-  }
-
-  void send_motor_commands(double fl, double fr, double bl, double br) {
-    auto motor_ids = this->get_parameter("motor_ids").as_integer_array();
-    
-    // Convert rad/s to RPM and apply scale factor
-    // DDSM115 speed range: -330 to 330 rpm
-    const double rad_s_to_rpm = 60.0 / (2.0 * M_PI); // Convert rad/s to RPM
-    const double scale_factor = 50.0; // Adjust this based on your desired max speed
-    
-    int fl_cmd = static_cast<int>(fl * rad_s_to_rpm * scale_factor);
-    int fr_cmd = static_cast<int>(fr * rad_s_to_rpm * scale_factor);
-    int bl_cmd = static_cast<int>(bl * rad_s_to_rpm * scale_factor);
-    int br_cmd = static_cast<int>(br * rad_s_to_rpm * scale_factor);
-    
-    // Clamp commands to DDSM115 limits (-330 to 330 rpm)
-    fl_cmd = std::max(-330, std::min(330, fl_cmd));
-    fr_cmd = std::max(-330, std::min(330, fr_cmd));
-    bl_cmd = std::max(-330, std::min(330, bl_cmd));
-    br_cmd = std::max(-330, std::min(330, br_cmd));
-    
-    try {
-      // Send commands to each motor (FL, FR, BL, BR)
-      // Third parameter is acceleration_time: 0.1ms per rpm (1 = 0.1ms per rpm)
-      if (motor_ids.size() >= 4) {
-        ddsm_controllers_[0]->ddsm_ctrl(motor_ids[0], fl_cmd, 1); // Front Left
-        ddsm_controllers_[1]->ddsm_ctrl(motor_ids[1], fr_cmd, 1); // Front Right
-        ddsm_controllers_[2]->ddsm_ctrl(motor_ids[2], bl_cmd, 1); // Back Left
-        ddsm_controllers_[3]->ddsm_ctrl(motor_ids[3], br_cmd, 1); // Back Right
-      }
-    } catch (const std::exception& e) {
-      RCLCPP_ERROR(this->get_logger(), "Error sending motor commands: %s", e.what());
-    }
-  }
-  
-  void stop_all_motors() {
-    auto motor_ids = this->get_parameter("motor_ids").as_integer_array();
-    
-    try {
-      for (size_t i = 0; i < std::min(motor_ids.size(), static_cast<size_t>(4)); i++) {
-        ddsm_controllers_[i]->ddsm_stop(motor_ids[i]);
-      }
-      RCLCPP_INFO(this->get_logger(), "All motors stopped");
-    } catch (const std::exception& e) {
-      RCLCPP_ERROR(this->get_logger(), "Error stopping motors: %s", e.what());
-    }
-  }
 };
 
-int main(int argc, char ** argv)
+class MecanumKinematicsNode : public rclcpp::Node
 {
-  rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<MecanumWheelControllerNode>());
-  rclcpp::shutdown();
-  return 0;
+public:
+    MecanumKinematicsNode()
+        : Node("mecanum_kinematics_node")
+    {
+        // ROS 2 パラメータを宣言し、デフォルト値を設定
+        this->declare_parameter<double>("wheel_radius", 0.05); // ホイール半径 (m)
+        this->declare_parameter<double>("wheel_base_x", 0.2);  // lx: ロボット中心から左右ホイールまでの距離の半分 (m)
+        this->declare_parameter<double>("wheel_base_y", 0.2);  // ly: ロボット中心から前後ホイールまでの距離の半分 (m)
+
+        this->declare_parameter<std::string>("serial_port", "/dev/ttyACM0");
+  
+        // パラメータを取得
+        this->get_parameter("wheel_radius", wheel_radius_);
+        this->get_parameter("wheel_base_x", wheel_base_x_);
+        this->get_parameter("wheel_base_y", wheel_base_y_);
+        
+        // パラメータの妥当性チェック
+        if (wheel_radius_ <= 0.0 || wheel_base_x_ <= 0.0 || wheel_base_y_ <= 0.0) {
+            RCLCPP_ERROR(this->get_logger(), "Invalid robot parameters detected");
+            throw std::invalid_argument("Robot parameters must be positive values");
+        }
+        
+        std::string serial_port;
+        this->get_parameter("serial_port", serial_port);
+        
+        // モーターコントローラーの初期化
+        try {
+            motor_controller_.init_port(serial_port);
+            RCLCPP_INFO(this->get_logger(), "Serial port initialized: %s", serial_port.c_str());
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "Failed to initialize serial port: %s", e.what());
+            // 必要に応じてここで例外を再投げするか、代替処理を行う
+        }
+        
+        lxy_sum_ = wheel_base_x_ + wheel_base_y_;
+
+        // commented out for debugging purposes
+        // RCLCPP_INFO(this->get_logger(), "Mecanum Kinematics Node started with parameters:");
+        // RCLCPP_INFO(this->get_logger(), "Wheel Radius (r): %.3f m", wheel_radius_);
+        // RCLCPP_INFO(this->get_logger(), "Wheel Base X (lx): %.3f m", wheel_base_x_);
+        // RCLCPP_INFO(this->get_logger(), "Wheel Base Y (ly): %.3f m", wheel_base_y_);
+
+        // Twistメッセージを購読するためのSubscriptionを作成
+        // トピック名 /cmd_vel はジョイスティックやナビゲーションで一般的に使われる
+        subscription_ = this->create_subscription<geometry_msgs::msg::Twist>(
+            "/cmd_vel", 10, std::bind(&MecanumKinematicsNode::velocity_callback, this, std::placeholders::_1));
+
+    }
+
+private:
+    MotorController motor_controller_;
+
+    enum class MotorIndex : uint8_t {
+        FRONT_RIGHT = 0,
+        FRONT_LEFT = 1,
+        BACK_RIGHT = 2,
+        BACK_LEFT = 3
+    };
+
+    static constexpr size_t FR = static_cast<size_t>(MotorIndex::FRONT_RIGHT);
+    static constexpr size_t FL = static_cast<size_t>(MotorIndex::FRONT_LEFT);
+    static constexpr size_t BR = static_cast<size_t>(MotorIndex::BACK_RIGHT);
+    static constexpr size_t BL = static_cast<size_t>(MotorIndex::BACK_LEFT);
+
+
+    // Helper
+    static constexpr uint8_t motor_id(MotorIndex index) {
+        return static_cast<uint8_t>(index) + 1;
+    }
+
+
+    std::array<double, 4> wheel_vel_rad_per_s_;
+    std::array<int16_t, 4> wheel_vel_rpm_;
+    
+    const double rad_s_to_rpm_factor = 60.0 / (2.0 * M_PI);
+
+    int16_t rad_per_s_to_rpm(double rad_per_s) {
+        const double rpm = rad_per_s * rad_s_to_rpm_factor;
+        return static_cast<int16_t>(std::round(rpm));
+    }
+
+
+
+    void velocity_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
+    {
+        // Twistメッセージから速度を取得
+        const double vx = msg->linear.x;
+        const double vy = msg->linear.y;
+        const double wz = msg->angular.z;
+
+
+        // 逆運動学の計算 (rad/s)
+        // 論文の式展開: ω = (1/r) * [vx ± vy ± (lx+ly)wz]
+        wheel_vel_rad_per_s_[FR] = (1.0 / wheel_radius_) * (vx - vy - lxy_sum_ * wz);
+        wheel_vel_rad_per_s_[FL] = (1.0 / wheel_radius_) * (vx + vy + lxy_sum_ * wz);
+        wheel_vel_rad_per_s_[BR] = (1.0 / wheel_radius_) * (vx + vy - lxy_sum_ * wz);
+        wheel_vel_rad_per_s_[BL] = (1.0 / wheel_radius_) * (vx - vy + lxy_sum_ * wz);
+
+        // rad/s から RPM への変換
+        for (size_t i = 0; i < wheel_vel_rpm_.size(); ++i) {
+            wheel_vel_rpm_[i] = rad_per_s_to_rpm(wheel_vel_rad_per_s_[i]);
+        }
+        
+        RCLCPP_DEBUG(this->get_logger(), "RPMs: [FR: %d, FL: %d, BR: %d, BL: %d]",
+            wheel_vel_rpm_[0], wheel_vel_rpm_[1], wheel_vel_rpm_[2], wheel_vel_rpm_[3]);
+
+        // 計算済みのRPM値を使用してモーター制御
+        motor_controller_.control_with_velocity(motor_id(MotorIndex::FRONT_RIGHT), wheel_vel_rpm_[FR]);
+        motor_controller_.control_with_velocity(motor_id(MotorIndex::FRONT_LEFT), wheel_vel_rpm_[FL]);
+        motor_controller_.control_with_velocity(motor_id(MotorIndex::BACK_RIGHT), wheel_vel_rpm_[BR]);
+        motor_controller_.control_with_velocity(motor_id(MotorIndex::BACK_LEFT), wheel_vel_rpm_[BL]);
+
+    }
+    
+
+    // ROS 2 サブスクライバとパブリッシャ
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr subscription_;
+
+    // ロボットのパラメータ
+    double wheel_radius_;
+    double wheel_base_x_;
+    double wheel_base_y_;
+    double lxy_sum_;
+};
+
+int main(int argc, char *argv[])
+{
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<MecanumKinematicsNode>());
+    rclcpp::shutdown();
+    return 0;
 }
