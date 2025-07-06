@@ -47,7 +47,10 @@ class MotorController {
 
                 send_data_[8] = 0x00;
 
-                send_data_[9] = calc_crc8_maxim({send_data_.begin(), send_data_.begin() + 9});
+                std::array<uint8_t, 9> crc_input;
+                std::copy(send_data_.begin(), send_data_.begin() + 9, crc_input.begin());
+                send_data_[9] = calc_crc8_maxim(crc_input);
+
 
                 try {
                     boost::asio::write(serial_port_, boost::asio::buffer(send_data_, send_data_.size()));
