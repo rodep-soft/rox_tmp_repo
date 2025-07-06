@@ -15,15 +15,12 @@ services:
       - ~/.ssh:/root/.ssh:ro
       - ./ros_ws:/ros_ws
     devices:
-      - /dev/video0:/dev/video0
-      - /dev/video1:/dev/video1
-      - /dev/ttyACM0:/dev/ttyACM0
-      - /dev/ttyACM1:/dev/ttyACM1
+      - /dev/*:/dev/* # Allow access to all devices
     command: >
       bash -c "
         echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc &&
         apt-get update && apt-get upgrade -y &&
-        apt-get install -y git vim less tree fzf fish libboost-system-dev &&
+        apt-get install -y git vim less tree fzf fish libboost-system-dev ros-humble-joy &&
         exec bash
       "
 
