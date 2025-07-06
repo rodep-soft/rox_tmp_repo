@@ -35,11 +35,7 @@ def generate_launch_description():
             package='mecanum_wheel_controller',
             executable='mecanum_wheel_controller_node',
             name='mecanum_wheel_controller_node',
-            parameters=[PathJoinSubstitution([
-                FindPackageShare('mecanum_wheel_controller'),
-                'config',
-                'mechanum.yaml'])
-            ]
+            parameters=[]
         )
     ])
 

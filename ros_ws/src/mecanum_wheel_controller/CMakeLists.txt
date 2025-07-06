@@ -19,7 +19,7 @@ if(NOT Boost_FOUND)
   message(WARNING "Boost not found. Please install libboost-system-dev")
 endif()
 
-add_executable(mecanum_wheel_controller_node src/mecanum_wheel_controller_node.cpp src/ddsm_ctrl.cpp)
+add_executable(mecanum_wheel_controller_node src/mecanum_wheel_controller_node.cpp)
 target_include_directories(mecanum_wheel_controller_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
