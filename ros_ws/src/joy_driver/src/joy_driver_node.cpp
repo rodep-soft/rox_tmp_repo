@@ -57,6 +57,9 @@ private:
     twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
     twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
     twist_msg->angular.z = msg->axes[angular_axis_] * angular_scale_;
+
+    // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
+    //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
     
     // Publish the velocity command
     cmd_vel_publisher_->publish(std::move(twist_msg));

@@ -1,6 +1,6 @@
 services:
   ros2_rox:
-    image: osrf/ros:humble-desktop
+    image: ros:humble-ros-base
     # For arm64
     # ros:humble-ros-base
     container_name: ros2_rox_container

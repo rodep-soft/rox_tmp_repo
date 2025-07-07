@@ -52,7 +52,7 @@ public:
       0x64, // Command for velocity control
       static_cast<uint8_t>((rpm >> 8) & 0xFF), // High byte of RPM
       static_cast<uint8_t>(rpm & 0xFF),        // Low byte of RPM
-      0x00, 0x00, 0x00, 0x00 // Reserved bytes
+      0x00, 0x00, 0x00, 0x00, 0x00 // Reserved bytes
     };
     command_data.push_back(calc_crc8_maxim(command_data));
 
