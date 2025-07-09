@@ -29,8 +29,8 @@ private:
     this->declare_parameter<double>("linear_x_scale", 1.0);
     this->declare_parameter<double>("linear_y_scale", 1.0);
     this->declare_parameter<double>("angular_scale", 1.0);
-    this->declare_parameter<int>("linear_x_axis", 1);
-    this->declare_parameter<int>("linear_y_axis", 0);
+    this->declare_parameter<int>("linear_x_axis", 1); // Vertical movement
+    this->declare_parameter<int>("linear_y_axis", 0); // Horizontal movement
     this->declare_parameter<int>("angular_axis", 3);
   }
 
