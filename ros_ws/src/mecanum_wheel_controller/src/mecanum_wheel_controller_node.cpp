@@ -101,6 +101,7 @@ public:
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
 
 private:
@@ -128,7 +129,7 @@ public:
     vx_.store(0.0);
     vy_.store(0.0);
     wz_.store(0.0);
-    auto timer = this->create_wall_timer(
+    timer_ = this->create_wall_timer(
       std::chrono::milliseconds(50),
       std::bind(&MecanumWheelControllerNode::timer_send_velocity_callback, this));
 
@@ -197,6 +198,8 @@ private:
   std::string serial_port_;
   int baud_rate_;
   std::vector<int> motor_ids_;
+
+  rclcpp::TimerBase::SharedPtr timer_;
 };
 
 int main(int argc, char ** argv)
