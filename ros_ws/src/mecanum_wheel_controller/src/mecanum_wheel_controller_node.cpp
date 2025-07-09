@@ -50,12 +50,12 @@ uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data) {
 class MotorController
 {
 public:
-  MotorController(rclcpp::Logger logger) : logger_(logger) {}
+  MotorController(rclcpp::Logger logger) : serial_port_(io_context_), logger_(logger) {}
 
   bool init_port(const std::string& port_name, int baud_rate)
   {
     try {
-      serial_port_(io_context_, port_name);
+      serial_port_.open(port_name);
       serial_port_.set_option(boost::asio::serial_port_base::baud_rate(baud_rate));
       serial_port_.set_option(boost::asio::serial_port_base::character_size(8));
       serial_port_.set_option(boost::asio::serial_port_base::flow_control(boost::asio::serial_port_base::flow_control::none));
@@ -79,7 +79,7 @@ public:
     // };
     // command_data.push_back(calc_crc8_maxim(command_data));
 
-    std::vector<uint8_t> command_data;
+    std::vector<uint8_t> data;
 
     data.push_back(static_cast<uint8_t>(motor_id & 0xFF));
     data.push_back(0x64);
@@ -93,10 +93,10 @@ public:
     data.push_back(0x00);
     data.push_back(0x00);
     data.push_back(0x00); 
-    data.push_back(crc8_maxim(data));
+    data.push_back(calc_crc8_maxim(data));
 
     try {
-      boost::asio::write(serial_port_, boost::asio::buffer(command_data, command_data.size()));
+      boost::asio::write(serial_port_, boost::asio::buffer(data, data.size()));
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
     }
@@ -182,7 +182,7 @@ private:
   double wheel_base_y_;
   std::string serial_port_;
   int baud_rate_;
-  std::vector<uint8_t> motor_ids_;
+  std::vector<int> motor_ids_;
 };
 
 int main(int argc, char ** argv)
