@@ -6,38 +6,61 @@
 #include <string>
 #include <cmath>
 
-// A simple CRC8 calculator for motor communication
-uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data)
-{
-  uint8_t crc = 0x00;
-  const uint8_t polynomial = 0x31;
-  for (uint8_t byte : data) {
-    crc ^= byte;
-    for (int i = 0; i < 8; ++i) {
-      if (crc & 0x80) {
-        crc = (crc << 1) ^ polynomial;
-      } else {
-        crc <<= 1;
-      }
+// Deprecated function for CRC8 calculation
+// // A simple CRC8 calculator for motor communication
+// uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data)
+// {
+//   uint8_t crc = 0x00;
+//   const uint8_t polynomial = 0x31;
+//   for (uint8_t byte : data) {
+//     crc ^= byte;
+//     for (int i = 0; i < 8; ++i) {
+//       if (crc & 0x80) {
+//         crc = (crc << 1) ^ polynomial;
+//       } else {
+//         crc <<= 1;
+//       }
+//     }
+//   }
+//   return crc;
+// }
+
+// Robust version
+uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data) {
+    uint8_t crc = 0x00; // 初期値  (一般的なMaxim CRCの標準)
+
+    const uint8_t reflected_polynomial = 0x8C; 
+
+    // データバイトを一つずつ処理
+    for (size_t i = 0; i < data.size(); i++) { // DATA[0]~DATA[8]まで、合計9バイト
+        crc ^= data[i]; // 現在のバイトとCRCレジスタをXOR
+
+        // 各バイトの8ビットを処理 (LSB First)
+        for (uint8_t bit = 0; bit < 8; bit++) {
+            if (crc & 0x01) { // 最下位ビットが1の場合
+                crc = (crc >> 1) ^ reflected_polynomial; // 右シフトして多項式とXOR
+            } else {
+                crc >>= 1; // 最下位ビットが0の場合、単に右シフト
+            }
+        }
     }
-  }
-  return crc;
+    return crc;
 }
 
 class MotorController
 {
 public:
-  MotorController(rclcpp::Logger logger) : logger_(logger) {}
+  MotorController(rclcpp::Logger logger) : serial_port_(io_context_), logger_(logger) {}
 
   bool init_port(const std::string& port_name, int baud_rate)
   {
     try {
-      serial_port_ = std::make_unique<boost::asio::serial_port>(io_context_, port_name);
-      serial_port_->set_option(boost::asio::serial_port_base::baud_rate(baud_rate));
-      serial_port_->set_option(boost::asio::serial_port_base::character_size(8));
-      serial_port_->set_option(boost::asio::serial_port_base::flow_control(boost::asio::serial_port_base::flow_control::none));
-      serial_port_->set_option(boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
-      serial_port_->set_option(boost::asio::serial_port_base::stop_bits(boost::asio::serial_port_base::stop_bits::one));
+      serial_port_.open(port_name);
+      serial_port_.set_option(boost::asio::serial_port_base::baud_rate(baud_rate));
+      serial_port_.set_option(boost::asio::serial_port_base::character_size(8));
+      serial_port_.set_option(boost::asio::serial_port_base::flow_control(boost::asio::serial_port_base::flow_control::none));
+      serial_port_.set_option(boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
+      serial_port_.set_option(boost::asio::serial_port_base::stop_bits(boost::asio::serial_port_base::stop_bits::one));
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to open serial port %s: %s", port_name.c_str(), e.what());
       return false;
@@ -47,17 +70,33 @@ public:
 
   void send_velocity_command(uint8_t motor_id, int16_t rpm)
   {
-    std::vector<uint8_t> command_data = {
-      motor_id,
-      0x64, // Command for velocity control
-      static_cast<uint8_t>((rpm >> 8) & 0xFF), // High byte of RPM
-      static_cast<uint8_t>(rpm & 0xFF),        // Low byte of RPM
-      0x00, 0x00, 0x00, 0x00, 0x00 // Reserved bytes
-    };
-    command_data.push_back(calc_crc8_maxim(command_data));
+    // std::vector<uint8_t> command_data = {
+    //   motor_id,
+    //   0x64, // Command for velocity control
+    //   static_cast<uint8_t>((rpm >> 8) & 0xFF), // High byte of RPM
+    //   static_cast<uint8_t>(rpm & 0xFF),        // Low byte of RPM
+    //   0x00, 0x00, 0x00, 0x00, 0x00 // Reserved bytes
+    // };
+    // command_data.push_back(calc_crc8_maxim(command_data));
+
+    std::vector<uint8_t> data;
+
+    data.push_back(static_cast<uint8_t>(motor_id & 0xFF));
+    data.push_back(0x64);
+    uint16_t val_u16 = static_cast<uint16_t>(rpm); // 符号付きを符号なしに変換
+
+    data.push_back(static_cast<uint8_t>((val_u16 >> 8) & 0xFF)); // Highバイト  
+    data.push_back(static_cast<uint8_t>(val_u16 & 0xFF));        // Lowバイト
+
+    data.push_back(0x00);
+    data.push_back(0x00);
+    data.push_back(0x00);
+    data.push_back(0x00);
+    data.push_back(0x00); 
+    data.push_back(calc_crc8_maxim(data));
 
     try {
-      boost::asio::write(*serial_port_, boost::asio::buffer(command_data));
+      boost::asio::write(serial_port_, boost::asio::buffer(data, data.size()));
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
     }
@@ -65,7 +104,7 @@ public:
 
 private:
   boost::asio::io_context io_context_;
-  std::unique_ptr<boost::asio::serial_port> serial_port_;
+  boost::asio::serial_port serial_port_;
   rclcpp::Logger logger_;
 };
 
@@ -143,7 +182,7 @@ private:
   double wheel_base_y_;
   std::string serial_port_;
   int baud_rate_;
-  std::vector<uint8_t> motor_ids_;
+  std::vector<int> motor_ids_;
 };
 
 int main(int argc, char ** argv)
