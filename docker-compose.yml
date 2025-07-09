@@ -1,6 +1,6 @@
 services:
   ros2_rox:
-    image: ros:humble-ros-base
+    image: osrf/ros:humble-desktop
     # For arm64
     # ros:humble-ros-base
     container_name: ros2_rox_container
@@ -20,7 +20,8 @@ services:
       bash -c "
         echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc &&
         apt-get update && apt-get upgrade -y &&
-        apt-get install -y git vim less tree fzf fish libboost-system-dev ros-humble-joy &&
+        apt-get install -y git vim less tree fzf fish libboost-system-dev ros-humble-joy python3-pip &&
+        pip install smbus2 &&
         exec bash
       "
 
