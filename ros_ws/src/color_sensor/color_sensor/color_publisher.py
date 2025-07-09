@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import ColorRGBA
+from std_msgs.msg import ColorRGBA, Float32
 from color_sensor.tcs34725 import TCS34725
 
 class ColorPublisher(Node):
@@ -10,7 +10,6 @@ class ColorPublisher(Node):
         super().__init__('color_publisher')
         self.TCS34725 = TCS34725(1, 0x29)
         self.TCS34725.change_integration_time(integration_time)
-        self.TCS34725.change_gain(0x02)
         self.TCS34725.enable()
         self.publisher_ = self.create_publisher(ColorRGBA, 'color_data', 10)
         timer_period = 0.1  # seconds
@@ -23,9 +22,9 @@ class ColorPublisher(Node):
         msg.r = r / 65535.0  # Normalize to [0, 1]
         msg.g = g / 65535.0  # Normalize to [0, 1]
         msg.b = b / 65535.0  # Normalize to [0, 1]
-        msg.a = c / 65535.0  # Normalize to [0, 1]
+        msg.a = 1.0  # Alpha channel is not used, set to 0
         self.publisher_.publish(msg)
-        self.get_logger().info(f'Publishing: R:{msg.r} G:{msg.g} B:{msg.b} C:{msg.a}')
+        self.get_logger().info(f'Publishing: R:{msg.r} G:{msg.g} B:{msg.b} C:{c}')
     
 def main(args=None):
     rclpy.init(args=args)
