@@ -6,6 +6,9 @@ class TCS34725():
     
     def enable(self):
         self.i2c.write_byte(0b10000000, 0x03)
+    
+    def disable(self):
+        self.i2c.write_byte(0b10000000, 0x00)
 
     def read_colors(self):
         data = self.i2c.read_block_data(0b10100000|0x14, 8)
@@ -21,6 +24,16 @@ class TCS34725():
         if byte < 0x00 or byte > 0xFF:
             raise ValueError("Integration time byte must be between 0x00 and 0xFF")
         self.i2c.write_byte(0b10000000|0x01, byte)
+        return
+    
+    def change_gain(self, byte):
+        # 0x00 : 1x gain
+        # 0x01 : 4x gain
+        # 0x02 : 16x gain
+        # 0x03 : 60x gain
+        if byte < 0x00 or byte > 0x03:
+            raise ValueError("Gain byte must be between 0x00 and 0x03")
+        self.i2c.write_byte(0b10000000|0x0F, byte)
         return
         
         
