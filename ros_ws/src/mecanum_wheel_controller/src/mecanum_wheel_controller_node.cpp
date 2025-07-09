@@ -164,6 +164,7 @@ private:
     vx_.store(msg->linear.x);
     vy_.store(msg->linear.y);
     wz_.store(msg->angular.z);
+    RCLCPP_INFO(this->get_logger(), "Received cmd_vel: vx=%.2f, vy=%.2f, wz=%.2f", vx_.load(), vy_.load(), wz_.load());
   }
 
   void timer_send_velocity_callback()
