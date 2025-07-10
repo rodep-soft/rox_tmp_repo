@@ -6,6 +6,7 @@
 #include <string>
 #include <cmath>
 #include <atomic>
+#include <bit>
 
 // Deprecated function for CRC8 calculation
 // // A simple CRC8 calculator for motor communication
@@ -84,7 +85,7 @@ public:
 
     data.push_back(static_cast<uint8_t>(motor_id & 0xFF));
     data.push_back(0x64);
-    uint16_t val_u16 = static_cast<uint16_t>(rpm); // 符号付きを符号なしに変換
+    uint16_t val_u16 = std::bit_cast<uint16_t>(rpm); // 符号付きを符号なしに変換
 
     data.push_back(static_cast<uint8_t>((val_u16 >> 8) & 0xFF)); // Highバイト  
     data.push_back(static_cast<uint8_t>(val_u16 & 0xFF));        // Lowバイト
@@ -164,7 +165,7 @@ private:
     vx_.store(msg->linear.x);
     vy_.store(msg->linear.y);
     wz_.store(msg->angular.z);
-    RCLCPP_INFO(this->get_logger(), "Received cmd_vel: vx=%.2f, vy=%.2f, wz=%.2f", vx_.load(), vy_.load(), wz_.load());
+    //RCLCPP_INFO(this->get_logger(), "Received cmd_vel: vx=%.2f, vy=%.2f, wz=%.2f", vx_.load(), vy_.load(), wz_.load());
   }
 
   void timer_send_velocity_callback()
@@ -176,16 +177,24 @@ private:
     const double lxy_sum = wheel_base_x_ + wheel_base_y_;
     const double rad_to_rpm = 60.0 / (2.0 * M_PI);
 
-    const double wheel_front_left_vel = (vx + vy + lxy_sum * wz) / wheel_radius_;
-    const double wheel_front_right_vel = (vx - vy - lxy_sum * wz) / wheel_radius_;
+    const double wheel_front_left_vel = (vx - vy - lxy_sum * wz) / wheel_radius_;
+    const double wheel_front_right_vel = (vx + vy + lxy_sum * wz) / wheel_radius_;
     const double wheel_rear_left_vel = (vx + vy - lxy_sum * wz) / wheel_radius_;
     const double wheel_rear_right_vel = (vx - vy + lxy_sum * wz) / wheel_radius_;
     
     // Convert to RPM and send to motors
-    motor_controller_.send_velocity_command(motor_ids_[0], static_cast<int16_t>(wheel_front_left_vel * rad_to_rpm));
-    motor_controller_.send_velocity_command(motor_ids_[1], static_cast<int16_t>(wheel_front_right_vel * rad_to_rpm));
-    motor_controller_.send_velocity_command(motor_ids_[2], static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm));
-    motor_controller_.send_velocity_command(motor_ids_[3], static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm));
+    int16_t rpm_front_left = static_cast<int16_t>(wheel_front_left_vel * rad_to_rpm);
+    int16_t rpm_front_right = static_cast<int16_t>(wheel_front_right_vel * rad_to_rpm * -1);
+    int16_t rpm_rear_left = static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm);
+    int16_t rpm_rear_right = static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm * -1);
+    
+    RCLCPP_INFO(this->get_logger(), "RPM values: FL=%d, FR=%d, RL=%d, RR=%d", 
+                rpm_front_left, rpm_front_right, rpm_rear_left, rpm_rear_right);
+    
+    motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left);
+    motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right);
+    motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left);
+    motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right);
   }
   // ROS 2 components
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
