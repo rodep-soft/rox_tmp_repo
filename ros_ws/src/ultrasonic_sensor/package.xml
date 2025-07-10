@@ -16,6 +16,10 @@
   <!-- System dependencies for GPIO access -->
   <!-- Install with: sudo apt install libgpiod-dev libgpiod2 -->
 
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 

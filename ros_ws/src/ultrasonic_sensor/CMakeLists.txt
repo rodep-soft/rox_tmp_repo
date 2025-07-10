@@ -10,12 +10,23 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+
+
 
 # Create executable
 add_executable(ultrasonic_sensor src/ultrasonic_sensor.cpp)
 
 # Link gpiod library
 target_link_libraries(ultrasonic_sensor gpiod)
+
+ament_target_dependencies(ultrasonic_sensor
+  rclcpp
+  sensor_msgs
+  geometry_msgs
+)
 
 # Install executable
 install(TARGETS ultrasonic_sensor
