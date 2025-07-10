@@ -22,8 +22,8 @@ install(TARGETS ultrasonic_sensor
   DESTINATION lib/${PROJECT_NAME})
 
 # Install header files
-install(DIRECTORY include/
-  DESTINATION include/)
+#install(DIRECTORY include/
+#  DESTINATION include/)
 
 # Install launch files if any
 # install(DIRECTORY launch/
