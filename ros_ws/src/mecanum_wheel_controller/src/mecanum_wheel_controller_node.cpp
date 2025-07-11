@@ -102,7 +102,7 @@ public:
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    std::this_thread::sleep_for(std::chrono::milliseconds(3));
   }
 
 private:
@@ -130,11 +130,27 @@ public:
     vx_.store(0.0);
     vy_.store(0.0);
     wz_.store(0.0);
+    last_subscription_time_.store(std::chrono::steady_clock::now());
     timer_ = this->create_wall_timer(
       std::chrono::milliseconds(50),
       std::bind(&MecanumWheelControllerNode::timer_send_velocity_callback, this));
 
     RCLCPP_INFO(this->get_logger(), "Mecanum wheel controller node started.");
+  }
+
+  ~MecanumWheelControllerNode() override
+  {
+    if (timer_) {
+      timer_->cancel();
+    }
+    cmd_vel_subscription_.reset();
+    vx_.store(0.0);
+    vy_.store(0.0);
+    wz_.store(0.0);
+    RCLCPP_INFO(this->get_logger(), "Stopping motor controller...");
+    stop_all_motors();
+    RCLCPP_INFO(this->get_logger(), "Motors stopped.");
+    RCLCPP_INFO(this->get_logger(), "Mecanum wheel controller node shutting down.");
   }
 
 private:
@@ -146,6 +162,7 @@ private:
     this->declare_parameter<std::string>("serial_port", "/dev/ttyACM0");
     this->declare_parameter<int>("baud_rate", 115200);
     this->declare_parameter<std::vector<int64_t>>("motor_ids", {1, 2, 3, 4});
+    this->declare_parameter<int>("cmd_vel_timeout_ms", 500); // Timeout for cmd_vel in ms
   }
 
   void get_parameters()
@@ -155,7 +172,8 @@ private:
     wheel_base_y_ = this->get_parameter("wheel_base_y").as_double();
     serial_port_ = this->get_parameter("serial_port").as_string();
     baud_rate_ = this->get_parameter("baud_rate").as_int();
-    
+    cmd_vel_timeout_ms_ = this->get_parameter("cmd_vel_timeout_ms").as_int();
+
     auto motor_ids_int64 = this->get_parameter("motor_ids").as_integer_array();
     motor_ids_.assign(motor_ids_int64.begin(), motor_ids_int64.end());
   }
@@ -165,11 +183,23 @@ private:
     vx_.store(msg->linear.x);
     vy_.store(msg->linear.y);
     wz_.store(msg->angular.z);
+
+    last_subscription_time_.store(std::chrono::steady_clock::now());
     //RCLCPP_INFO(this->get_logger(), "Received cmd_vel: vx=%.2f, vy=%.2f, wz=%.2f", vx_.load(), vy_.load(), wz_.load());
   }
 
   void timer_send_velocity_callback()
   {
+    // Check if we have received a cmd_vel message in the last 500 milliseconds
+    auto now = std::chrono::steady_clock::now();
+    auto last_time = last_subscription_time_.load();
+    if (now - last_time > std::chrono::milliseconds(cmd_vel_timeout_ms_)) {
+      RCLCPP_WARN(this->get_logger(), "No cmd_vel message received in the last %d milliseconds. Stopping motors.", cmd_vel_timeout_ms_);
+      // Stop motors by sending zero velocity commands
+      stop_all_motors();
+      return;
+    }
+
     // Mecanum wheel kinematics
     const double vx = vx_.load();
     const double vy = vy_.load();
@@ -196,6 +226,14 @@ private:
     motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left);
     motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right);
   }
+
+  void stop_all_motors()
+  {
+    for (const auto& id : motor_ids_) {
+      motor_controller_.send_velocity_command(id, 0);
+    }
+  }
+
   // ROS 2 components
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
   MotorController motor_controller_;
@@ -205,13 +243,16 @@ private:
   double wheel_base_x_;
   double wheel_base_y_;
   std::atomic<double> vx_, vy_, wz_; // Current velocities
+
+  std::atomic<std::chrono::time_point<std::chrono::steady_clock>> last_subscription_time_;
   std::string serial_port_;
   int baud_rate_;
   std::vector<int> motor_ids_;
+  int cmd_vel_timeout_ms_;
 
   rclcpp::TimerBase::SharedPtr timer_;
-};
 
+};
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
