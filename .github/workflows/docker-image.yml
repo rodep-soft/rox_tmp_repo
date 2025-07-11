@@ -1,0 +1,42 @@
+# .github/workflows/docker-build-check.yml
+
+name: Docker Build Check for ROS 2
+
+# ワークフローが実行されるタイミングを定義
+on:
+  # mainブランチへのpush時に実行
+  push:
+    branches: [ "main", "master" ]
+  # mainブランチに対するpull request時に実行
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    # 実行環境として最新のUbuntuを使用
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. リポジトリのソースコードをチェックアウト
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Dockerのビルド環境をセットアップ (Buildx)
+      # Buildxは効率的なビルドを行うためのDockerのプラグインです
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Dockerイメージをビルド
+      # docker/build-push-action を使ってビルドを実行します
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          # Dockerfileがある場所 (リポジトリのルート)
+          context: .
+          # 使用するDockerfileのパス
+          file: ./Dockerfile
+          # push: false にすることで、ビルドのみを実行し、レジストリへのプッシュは行わない
+          # ビルドが通るかのチェックが目的なので false にします
+          push: false
+          # ビルドするイメージに一時的なタグを付ける
+          tags: ros2-rox-image:latest
