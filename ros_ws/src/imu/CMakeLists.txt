@@ -25,6 +25,9 @@ target_include_directories(imu_node
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+install(TARGETS imu_node
+  DESTINATION lib/${PROJECT_NAME} # ROS 2の一般的なインストールパス
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
