@@ -201,9 +201,15 @@ private:
     }
 
     // Mecanum wheel kinematics
-    const double vx = vx_.load();
-    const double vy = vy_.load();
-    const double wz = wz_.load();
+    // const double vx = vx_.load();
+    // const double vy = vy_.load();
+    // const double wz = wz_.load();
+
+    const double gain = 5.0;  // 必要に応じて調整
+    const double vx = std::tanh(gain * vx_.load());
+    const double vy = std::tanh(gain * vy_.load());
+    const double wz = std::tanh(gain * wz_.load());
+
     const double lxy_sum = wheel_base_x_ + wheel_base_y_;
     const double rad_to_rpm = 60.0 / (2.0 * M_PI);
 
