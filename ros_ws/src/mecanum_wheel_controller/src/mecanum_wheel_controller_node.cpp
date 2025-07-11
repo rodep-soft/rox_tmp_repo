@@ -137,6 +137,22 @@ public:
     RCLCPP_INFO(this->get_logger(), "Mecanum wheel controller node started.");
   }
 
+  ~MecanumWheelControllerNode() override
+  {
+    if (timer_) {
+      timer_->cancel();
+    }
+    cmd_vel_subscription_.reset();
+    RCLCPP_INFO(this->get_logger(), "Stopping motor controller...");
+    // Stop motors by sending zero velocity commands
+    motor_controller_.send_velocity_command(motor_ids_[0], 0);
+    motor_controller_.send_velocity_command(motor_ids_[1], 0);
+    motor_controller_.send_velocity_command(motor_ids_[2], 0);
+    motor_controller_.send_velocity_command(motor_ids_[3], 0);
+    RCLCPP_INFO(this->get_logger(), "Motors stopped.");
+    RCLCPP_INFO(this->get_logger(), "Mecanum wheel controller node shutting down.");
+  }
+
 private:
   void declare_parameters()
   {
@@ -165,11 +181,26 @@ private:
     vx_.store(msg->linear.x);
     vy_.store(msg->linear.y);
     wz_.store(msg->angular.z);
+
+    last_subscription_time_.store(std::chrono::system_clock::now());
     //RCLCPP_INFO(this->get_logger(), "Received cmd_vel: vx=%.2f, vy=%.2f, wz=%.2f", vx_.load(), vy_.load(), wz_.load());
   }
 
   void timer_send_velocity_callback()
   {
+    // Check if we have received a cmd_vel message in the last 500 milliseconds
+    auto now = std::chrono::system_clock::now();
+    auto last_time = last_subscription_time_.load();
+    if (now - last_time > std::chrono::milliseconds(500)) {
+      RCLCPP_WARN(this->get_logger(), "No cmd_vel message received in the last 500 milliseconds. Stopping motors.");
+      // Stop motors by sending zero velocity commands
+      motor_controller_.send_velocity_command(motor_ids_[0], 0);
+      motor_controller_.send_velocity_command(motor_ids_[1], 0);
+      motor_controller_.send_velocity_command(motor_ids_[2], 0);
+      motor_controller_.send_velocity_command(motor_ids_[3], 0);
+      return;
+    }
+
     // Mecanum wheel kinematics
     const double vx = vx_.load();
     const double vy = vy_.load();
@@ -205,6 +236,8 @@ private:
   double wheel_base_x_;
   double wheel_base_y_;
   std::atomic<double> vx_, vy_, wz_; // Current velocities
+
+  std::atomic<std::chrono::time_point<std::chrono::system_clock>> last_subscription_time_;
   std::string serial_port_;
   int baud_rate_;
   std::vector<int> motor_ids_;
