@@ -1,0 +1,27 @@
+services:
+  ros2_rox:
+    image: ros:humble-ros-base
+    # For arm64
+    # ros:humble-ros-base
+    container_name: ros2_rox_container
+    tty: true
+    privileged: true
+    network_mode: host
+    working_dir: /ros_ws
+    environment:
+      - ROS_DOMAIN_ID=0
+      - DEBIAN_FRONTEND=noninteractive
+    volumes:
+      - ~/.ssh:/root/.ssh:ro
+      - ./ros_ws:/ros_ws
+    devices:
+      - /dev/*:/dev/* # Allow access to all devices
+    command: >
+      bash -c "
+        echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc &&
+        apt-get update && apt-get upgrade -y &&
+        apt-get install -y git vim less tree fzf fish libboost-system-dev ros-humble-joy python3-pip libgpiod-dev gpiod &&
+        pip install smbus2 &&
+        exec bash
+      "
+
