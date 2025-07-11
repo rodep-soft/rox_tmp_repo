@@ -16,15 +16,16 @@
 
 #include "imu/imulib.h"
 
-#include <iostream>
-#include <limits>
+#include <fcntl.h>
+#include <linux/i2c-dev.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+
+#include <chrono>
 #include <cmath>
 #include <cstring>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/ioctl.h>
-#include <linux/i2c-dev.h>
-#include <chrono>
+#include <iostream>
+#include <limits>
 #include <thread>
 
 /*!
@@ -36,9 +37,8 @@
  *  @param  i2c_device
  *          I2C device path (e.g., "/dev/i2c-1")
  */
-BNO055::BNO055(int32_t sensorID, uint8_t address, const std::string& i2c_device) 
-    : _sensorID(sensorID), _address(address), _i2c_device(i2c_device), _i2c_fd(-1) {
-}
+BNO055::BNO055(int32_t sensorID, uint8_t address, const std::string &i2c_device)
+    : _sensorID(sensorID), _address(address), _i2c_device(i2c_device), _i2c_fd(-1) {}
 
 /*!
  *  @brief  Destructor - closes I2C device if open
@@ -85,7 +85,7 @@ bool BNO055::begin(opmode_t mode) {
   }
 
   // can take 850 ms to boot!
-  int timeout = 850; // in ms
+  int timeout = 850;  // in ms
   uint8_t id = 0;
   while (timeout > 0) {
     id = read8(BNO055_CHIP_ID_ADDR);
@@ -95,7 +95,7 @@ bool BNO055::begin(opmode_t mode) {
     delay(10);
     timeout -= 10;
   }
-  
+
   if (timeout <= 0) {
     std::cerr << "BNO055 not detected. ID: 0x" << std::hex << (int)id << std::endl;
     return false;
@@ -103,10 +103,10 @@ bool BNO055::begin(opmode_t mode) {
 
   /* Make sure we have the right device */
   if (id != BNO055_ID) {
-    delay(1000); // hold on for boot
+    delay(1000);  // hold on for boot
     id = read8(BNO055_CHIP_ID_ADDR);
     if (id != BNO055_ID) {
-      return false; // still not? ok bail
+      return false;  // still not? ok bail
     }
   }
 
@@ -166,9 +166,7 @@ void BNO055::setMode(opmode_t mode) {
  *  @return  operating_mode in integer which can be mapped in Section 3.3
  *           for example: a return of 12 (0X0C) => NDOF
  */
-opmode_t BNO055::getMode() {
-  return (opmode_t)read8(BNO055_OPR_MODE_ADDR);
-}
+opmode_t BNO055::getMode() { return (opmode_t)read8(BNO055_OPR_MODE_ADDR); }
 
 /*!
  *  @brief  Changes the chip's axis remap
@@ -252,9 +250,8 @@ void BNO055::setExtCrystalUse(bool usextal) {
  *   @param  system_error
  *           system error info
  */
-void BNO055::getSystemStatus(uint8_t *system_status,
-                            uint8_t *self_test_result,
-                            uint8_t *system_error) {
+void BNO055::getSystemStatus(uint8_t *system_status, uint8_t *self_test_result,
+                             uint8_t *system_error) {
   write8(BNO055_PAGE_ID_ADDR, 0);
 
   /* System Status (see section 4.3.58)
@@ -267,8 +264,7 @@ void BNO055::getSystemStatus(uint8_t *system_status,
      6 = System running without fusion algorithms
    */
 
-  if (system_status != 0)
-    *system_status = read8(BNO055_SYS_STAT_ADDR);
+  if (system_status != 0) *system_status = read8(BNO055_SYS_STAT_ADDR);
 
   /* Self Test Results
      1 = test passed, 0 = test failed
@@ -281,8 +277,7 @@ void BNO055::getSystemStatus(uint8_t *system_status,
      0x0F = all good!
    */
 
-  if (self_test_result != 0)
-    *self_test_result = read8(BNO055_SELFTEST_RESULT_ADDR);
+  if (self_test_result != 0) *self_test_result = read8(BNO055_SELFTEST_RESULT_ADDR);
 
   /* System Error (see section 4.3.59)
      0 = No error
@@ -298,8 +293,7 @@ void BNO055::getSystemStatus(uint8_t *system_status,
      A = Sensor configuration error
    */
 
-  if (system_error != 0)
-    *system_error = read8(BNO055_SYS_ERR_ADDR);
+  if (system_error != 0) *system_error = read8(BNO055_SYS_ERR_ADDR);
 
   delay(200);
 }
@@ -346,8 +340,7 @@ void BNO055::getRevInfo(rev_info_t *info) {
  *  @param  mag
  *          Current calibration status of Magnetometer, read-only
  */
-void BNO055::getCalibration(uint8_t *sys, uint8_t *gyro,
-                           uint8_t *accel, uint8_t *mag) {
+void BNO055::getCalibration(uint8_t *sys, uint8_t *gyro, uint8_t *accel, uint8_t *mag) {
   uint8_t calData = read8(BNO055_CALIB_STAT_ADDR);
   if (sys != NULL) {
     *sys = (calData >> 6) & 0x03;
@@ -404,42 +397,42 @@ Vector<3> BNO055::getVector(vector_type_t vector_type) {
    * and assign the value to the Vector type
    */
   switch (vector_type) {
-  case VECTOR_MAGNETOMETER:
-    /* 1uT = 16 LSB */
-    xyz[0] = ((double)x) / 16.0;
-    xyz[1] = ((double)y) / 16.0;
-    xyz[2] = ((double)z) / 16.0;
-    break;
-  case VECTOR_GYROSCOPE:
-    /* 1dps = 16 LSB */
-    xyz[0] = ((double)x) / 16.0;
-    xyz[1] = ((double)y) / 16.0;
-    xyz[2] = ((double)z) / 16.0;
-    break;
-  case VECTOR_EULER:
-    /* 1 degree = 16 LSB */
-    xyz[0] = ((double)x) / 16.0;
-    xyz[1] = ((double)y) / 16.0;
-    xyz[2] = ((double)z) / 16.0;
-    break;
-  case VECTOR_ACCELEROMETER:
-    /* 1m/s^2 = 100 LSB */
-    xyz[0] = ((double)x) / 100.0;
-    xyz[1] = ((double)y) / 100.0;
-    xyz[2] = ((double)z) / 100.0;
-    break;
-  case VECTOR_LINEARACCEL:
-    /* 1m/s^2 = 100 LSB */
-    xyz[0] = ((double)x) / 100.0;
-    xyz[1] = ((double)y) / 100.0;
-    xyz[2] = ((double)z) / 100.0;
-    break;
-  case VECTOR_GRAVITY:
-    /* 1m/s^2 = 100 LSB */
-    xyz[0] = ((double)x) / 100.0;
-    xyz[1] = ((double)y) / 100.0;
-    xyz[2] = ((double)z) / 100.0;
-    break;
+    case VECTOR_MAGNETOMETER:
+      /* 1uT = 16 LSB */
+      xyz[0] = ((double)x) / 16.0;
+      xyz[1] = ((double)y) / 16.0;
+      xyz[2] = ((double)z) / 16.0;
+      break;
+    case VECTOR_GYROSCOPE:
+      /* 1dps = 16 LSB */
+      xyz[0] = ((double)x) / 16.0;
+      xyz[1] = ((double)y) / 16.0;
+      xyz[2] = ((double)z) / 16.0;
+      break;
+    case VECTOR_EULER:
+      /* 1 degree = 16 LSB */
+      xyz[0] = ((double)x) / 16.0;
+      xyz[1] = ((double)y) / 16.0;
+      xyz[2] = ((double)z) / 16.0;
+      break;
+    case VECTOR_ACCELEROMETER:
+      /* 1m/s^2 = 100 LSB */
+      xyz[0] = ((double)x) / 100.0;
+      xyz[1] = ((double)y) / 100.0;
+      xyz[2] = ((double)z) / 100.0;
+      break;
+    case VECTOR_LINEARACCEL:
+      /* 1m/s^2 = 100 LSB */
+      xyz[0] = ((double)x) / 100.0;
+      xyz[1] = ((double)y) / 100.0;
+      xyz[2] = ((double)z) / 100.0;
+      break;
+    case VECTOR_GRAVITY:
+      /* 1m/s^2 = 100 LSB */
+      xyz[0] = ((double)x) / 100.0;
+      xyz[1] = ((double)y) / 100.0;
+      xyz[2] = ((double)z) / 100.0;
+      break;
   }
 
   return xyz;
@@ -510,12 +503,12 @@ bool BNO055::getSensorOffsets(offsets_t &offsets_type) {
        +/-4g  = +/- 4000 mg
        +/-8g  = +/- 8000 mg
        +/-16g = +/- 16000 mg */
-    offsets_type.accel_offset_x = (read8(ACCEL_OFFSET_X_MSB_ADDR) << 8) |
-                                  (read8(ACCEL_OFFSET_X_LSB_ADDR));
-    offsets_type.accel_offset_y = (read8(ACCEL_OFFSET_Y_MSB_ADDR) << 8) |
-                                  (read8(ACCEL_OFFSET_Y_LSB_ADDR));
-    offsets_type.accel_offset_z = (read8(ACCEL_OFFSET_Z_MSB_ADDR) << 8) |
-                                  (read8(ACCEL_OFFSET_Z_LSB_ADDR));
+    offsets_type.accel_offset_x =
+        (read8(ACCEL_OFFSET_X_MSB_ADDR) << 8) | (read8(ACCEL_OFFSET_X_LSB_ADDR));
+    offsets_type.accel_offset_y =
+        (read8(ACCEL_OFFSET_Y_MSB_ADDR) << 8) | (read8(ACCEL_OFFSET_Y_LSB_ADDR));
+    offsets_type.accel_offset_z =
+        (read8(ACCEL_OFFSET_Z_MSB_ADDR) << 8) | (read8(ACCEL_OFFSET_Z_LSB_ADDR));
 
     /* Magnetometer offset range = +/- 6400 LSB where 1uT = 16 LSB */
     offsets_type.mag_offset_x =
@@ -544,8 +537,7 @@ bool BNO055::getSensorOffsets(offsets_t &offsets_type) {
         (read8(ACCEL_RADIUS_MSB_ADDR) << 8) | (read8(ACCEL_RADIUS_LSB_ADDR));
 
     /* Magnetometer radius = +/- 960 LSB */
-    offsets_type.mag_radius =
-        (read8(MAG_RADIUS_MSB_ADDR) << 8) | (read8(MAG_RADIUS_LSB_ADDR));
+    offsets_type.mag_radius = (read8(MAG_RADIUS_MSB_ADDR) << 8) | (read8(MAG_RADIUS_LSB_ADDR));
 
     setMode(lastMode);
     return true;
@@ -663,23 +655,23 @@ bool BNO055::isFullyCalibrated() {
   getCalibration(&system, &gyro, &accel, &mag);
 
   switch (_mode) {
-  case OPERATION_MODE_ACCONLY:
-    return (accel == 3);
-  case OPERATION_MODE_MAGONLY:
-    return (mag == 3);
-  case OPERATION_MODE_GYRONLY:
-  case OPERATION_MODE_M4G: /* No magnetometer calibration required. */
-    return (gyro == 3);
-  case OPERATION_MODE_ACCMAG:
-  case OPERATION_MODE_COMPASS:
-    return (accel == 3 && mag == 3);
-  case OPERATION_MODE_ACCGYRO:
-  case OPERATION_MODE_IMUPLUS:
-    return (accel == 3 && gyro == 3);
-  case OPERATION_MODE_MAGGYRO:
-    return (mag == 3 && gyro == 3);
-  default:
-    return (system == 3 && gyro == 3 && accel == 3 && mag == 3);
+    case OPERATION_MODE_ACCONLY:
+      return (accel == 3);
+    case OPERATION_MODE_MAGONLY:
+      return (mag == 3);
+    case OPERATION_MODE_GYRONLY:
+    case OPERATION_MODE_M4G: /* No magnetometer calibration required. */
+      return (gyro == 3);
+    case OPERATION_MODE_ACCMAG:
+    case OPERATION_MODE_COMPASS:
+      return (accel == 3 && mag == 3);
+    case OPERATION_MODE_ACCGYRO:
+    case OPERATION_MODE_IMUPLUS:
+      return (accel == 3 && gyro == 3);
+    case OPERATION_MODE_MAGGYRO:
+      return (mag == 3 && gyro == 3);
+    default:
+      return (system == 3 && gyro == 3 && accel == 3 && mag == 3);
   }
 }
 
@@ -750,6 +742,4 @@ bool BNO055::readLen(bno055_reg_t reg, uint8_t *buffer, uint8_t len) {
 /*!
  *  @brief  Delay function using std::this_thread::sleep_for
  */
-void BNO055::delay(int ms) {
-  std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-}
+void BNO055::delay(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }

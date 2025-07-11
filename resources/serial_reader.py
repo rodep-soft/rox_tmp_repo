@@ -1,7 +1,8 @@
-import serial
 import time
 
-SERIAL_PORT = '/dev/ttyACM0'
+import serial
+
+SERIAL_PORT = "/dev/ttyACM0"
 BAUD_RATE = 115200
 
 try:
@@ -20,8 +21,6 @@ except serial.SerialException as e:
 except KeyboardInterrupt:
     print("\nStopping serial reader.")
 finally:
-    if 'ser' in locals() and ser.is_open:
+    if "ser" in locals() and ser.is_open:
         ser.close()
         print("Serial port closed.")
-
-
