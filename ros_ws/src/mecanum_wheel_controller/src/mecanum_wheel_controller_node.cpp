@@ -173,14 +173,14 @@ private:
     auto motor_ids_int64 = this->get_parameter("motor_ids").as_integer_array();
     motor_ids_.assign(motor_ids_int64.begin(), motor_ids_int64.end());
   }
-  
+
   void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
   {
     vx_.store(msg->linear.x);
     vy_.store(msg->linear.y);
     wz_.store(msg->angular.z);
 
-    last_subscription_time_.store(std::chrono::system_clock::now());
+    last_subscription_time_.store(std::chrono::steady_clock::now());
     //RCLCPP_INFO(this->get_logger(), "Received cmd_vel: vx=%.2f, vy=%.2f, wz=%.2f", vx_.load(), vy_.load(), wz_.load());
   }
 
