@@ -144,11 +144,7 @@ public:
     }
     cmd_vel_subscription_.reset();
     RCLCPP_INFO(this->get_logger(), "Stopping motor controller...");
-    // Stop motors by sending zero velocity commands
-    motor_controller_.send_velocity_command(motor_ids_[0], 0);
-    motor_controller_.send_velocity_command(motor_ids_[1], 0);
-    motor_controller_.send_velocity_command(motor_ids_[2], 0);
-    motor_controller_.send_velocity_command(motor_ids_[3], 0);
+    stop_all_motors();
     RCLCPP_INFO(this->get_logger(), "Motors stopped.");
     RCLCPP_INFO(this->get_logger(), "Mecanum wheel controller node shutting down.");
   }
@@ -162,6 +158,7 @@ private:
     this->declare_parameter<std::string>("serial_port", "/dev/ttyACM0");
     this->declare_parameter<int>("baud_rate", 115200);
     this->declare_parameter<std::vector<int64_t>>("motor_ids", {1, 2, 3, 4});
+    this->declare_parameter<int>("cmd_vel_timeout_ms", 500); // Timeout for cmd_vel in ms
   }
 
   void get_parameters()
@@ -171,11 +168,12 @@ private:
     wheel_base_y_ = this->get_parameter("wheel_base_y").as_double();
     serial_port_ = this->get_parameter("serial_port").as_string();
     baud_rate_ = this->get_parameter("baud_rate").as_int();
-    
+    cmd_vel_timeout_ms_ = this->get_parameter("cmd_vel_timeout_ms").as_int();
+
     auto motor_ids_int64 = this->get_parameter("motor_ids").as_integer_array();
     motor_ids_.assign(motor_ids_int64.begin(), motor_ids_int64.end());
   }
-
+  
   void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
   {
     vx_.store(msg->linear.x);
@@ -189,10 +187,10 @@ private:
   void timer_send_velocity_callback()
   {
     // Check if we have received a cmd_vel message in the last 500 milliseconds
-    auto now = std::chrono::system_clock::now();
+    auto now = std::chrono::steady_clock::now();
     auto last_time = last_subscription_time_.load();
-    if (now - last_time > std::chrono::milliseconds(500)) {
-      RCLCPP_WARN(this->get_logger(), "No cmd_vel message received in the last 500 milliseconds. Stopping motors.");
+    if (now - last_time > std::chrono::milliseconds(cmd_vel_timeout_ms_)) {
+      RCLCPP_WARN(this->get_logger(), "No cmd_vel message received in the last %d milliseconds. Stopping motors.", cmd_vel_timeout_ms_);
       // Stop motors by sending zero velocity commands
       motor_controller_.send_velocity_command(motor_ids_[0], 0);
       motor_controller_.send_velocity_command(motor_ids_[1], 0);
@@ -227,6 +225,14 @@ private:
     motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left);
     motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right);
   }
+
+  void stop_all_motors()
+  {
+    for (const auto& id : motor_ids_) {
+      motor_controller_.send_velocity_command(id, 0);
+    }
+  }
+
   // ROS 2 components
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
   MotorController motor_controller_;
@@ -237,14 +243,15 @@ private:
   double wheel_base_y_;
   std::atomic<double> vx_, vy_, wz_; // Current velocities
 
-  std::atomic<std::chrono::time_point<std::chrono::system_clock>> last_subscription_time_;
+  std::atomic<std::chrono::time_point<std::chrono::steady_clock>> last_subscription_time_;
   std::string serial_port_;
   int baud_rate_;
   std::vector<int> motor_ids_;
+  int cmd_vel_timeout_ms_;
 
   rclcpp::TimerBase::SharedPtr timer_;
-};
 
+};
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
