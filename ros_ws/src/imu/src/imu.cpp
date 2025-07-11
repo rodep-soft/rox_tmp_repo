@@ -24,7 +24,7 @@ class IMUNode : public rclcpp::Node {
             mag_publisher_ = this->create_publisher<sensor_msgs::msg::MagneticField>("imu/mag", 10);
             
             timer_ = this->create_wall_timer(
-                std::chrono::milliseconds(100),
+                std::chrono::milliseconds(50),
                 std::bind(&IMUNode::timer_callback, this)
             );
 
