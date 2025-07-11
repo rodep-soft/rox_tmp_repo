@@ -130,6 +130,7 @@ public:
     vx_.store(0.0);
     vy_.store(0.0);
     wz_.store(0.0);
+    last_subscription_time_.store(std::chrono::steady_clock::now());
     timer_ = this->create_wall_timer(
       std::chrono::milliseconds(50),
       std::bind(&MecanumWheelControllerNode::timer_send_velocity_callback, this));
@@ -192,10 +193,7 @@ private:
     if (now - last_time > std::chrono::milliseconds(cmd_vel_timeout_ms_)) {
       RCLCPP_WARN(this->get_logger(), "No cmd_vel message received in the last %d milliseconds. Stopping motors.", cmd_vel_timeout_ms_);
       // Stop motors by sending zero velocity commands
-      motor_controller_.send_velocity_command(motor_ids_[0], 0);
-      motor_controller_.send_velocity_command(motor_ids_[1], 0);
-      motor_controller_.send_velocity_command(motor_ids_[2], 0);
-      motor_controller_.send_velocity_command(motor_ids_[3], 0);
+      stop_all_motors();
       return;
     }
 
