@@ -1,6 +1,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include "custom_interfaces/msg/cmd_dpad.hpp"
 #include <memory>
 #include <algorithm>
 
@@ -19,7 +20,9 @@ public:
     
     // Create publisher for the /cmd_vel topic
     cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
-    
+   
+    cmd_dpad_publisher_ = this->create_publisher<custom_interfaces::msg::CmdDpad>("cmd_dpad", 10);
+
     RCLCPP_INFO(this->get_logger(), "Joy driver node started.");
   }
 
@@ -62,12 +65,22 @@ private:
     //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
     
     // Publish the velocity command
+    
+    auto dpad_msg = std::make_unique<custom_interfaces::msg::CmdDpad>();
+    dpad_msg->up = msg->buttons[11];
+    dpad_msg->down = msg->buttons[12];
+    dpad_msg->left = msg->buttons[13];
+    dpad_msg->right = msg->buttons[14];
+
     cmd_vel_publisher_->publish(std::move(twist_msg));
+    cmd_dpad_publisher_->publish(std::move(dpad_msg));
   }
 
   // ROS 2 components
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
+  rclcpp::Publisher<custom_interfaces::msg::CmdDpad>::SharedPtr cmd_dpad_publisher_;
+
 
   // Parameters
   double linear_x_scale_;
