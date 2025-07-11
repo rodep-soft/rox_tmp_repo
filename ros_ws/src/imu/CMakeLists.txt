@@ -10,8 +10,15 @@ find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
-add_executable(imu_node src/imu.cpp)
+add_executable(imu_node src/imu.cpp src/imulib.cpp)
+
+ament_target_dependencies(imu_node
+  rclcpp
+  sensor_msgs
+)
 
 target_include_directories(imu_node
   PUBLIC 
