@@ -4,13 +4,18 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
+
 def generate_launch_description():
     # Declare launch arguments
     declared_arguments = [
         DeclareLaunchArgument(
             "config_file",
             default_value=PathJoinSubstitution(
-                [FindPackageShare("mecanum_wheel_controller"), "config", "mechanum.yaml"]
+                [
+                    FindPackageShare("mecanum_wheel_controller"),
+                    "config",
+                    "mechanum.yaml",
+                ]
             ),
             description="Path to the configuration file.",
         )
@@ -34,6 +39,6 @@ def generate_launch_description():
         parameters=[config_file],
     )
 
-    return LaunchDescription(declared_arguments + [joy_driver_node, mecanum_wheel_controller_node])
-
-
+    return LaunchDescription(
+        declared_arguments + [joy_driver_node, mecanum_wheel_controller_node]
+    )

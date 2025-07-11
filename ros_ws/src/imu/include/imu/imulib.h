@@ -18,11 +18,11 @@
 #define BNO055_H
 
 #include <boost/asio.hpp>
-#include <cstdint>
-#include <vector>
-#include <memory>
 #include <chrono>
+#include <cstdint>
+#include <memory>
 #include <thread>
+#include <vector>
 
 // BNO055 I2C addresses
 #define BNO055_ADDRESS_A (0x28)
@@ -183,7 +183,7 @@ typedef enum {
 // Axis remap configurations
 typedef enum {
   REMAP_CONFIG_P0 = 0x21,
-  REMAP_CONFIG_P1 = 0x24, // default
+  REMAP_CONFIG_P1 = 0x24,  // default
   REMAP_CONFIG_P2 = 0x24,
   REMAP_CONFIG_P3 = 0x21,
   REMAP_CONFIG_P4 = 0x24,
@@ -195,7 +195,7 @@ typedef enum {
 // Axis remap signs
 typedef enum {
   REMAP_SIGN_P0 = 0x04,
-  REMAP_SIGN_P1 = 0x00, // default
+  REMAP_SIGN_P1 = 0x00,  // default
   REMAP_SIGN_P2 = 0x06,
   REMAP_SIGN_P3 = 0x02,
   REMAP_SIGN_P4 = 0x03,
@@ -219,13 +219,13 @@ typedef enum {
 // Vector class for 3D data
 template <int N>
 class Vector {
-public:
+ public:
   Vector() {
     for (int i = 0; i < N; i++) {
       data[i] = 0.0;
     }
   }
-  
+
   Vector(double x, double y, double z) {
     if (N >= 3) {
       data[0] = x;
@@ -233,30 +233,30 @@ public:
       data[2] = z;
     }
   }
-  
+
   double& operator[](int index) { return data[index]; }
   const double& operator[](int index) const { return data[index]; }
-  
+
   double x() const { return data[0]; }
   double y() const { return data[1]; }
   double z() const { return data[2]; }
-  
-private:
+
+ private:
   double data[N];
 };
 
 // Quaternion class
 class Quaternion {
-public:
+ public:
   Quaternion() : w_(0), x_(0), y_(0), z_(0) {}
   Quaternion(double w, double x, double y, double z) : w_(w), x_(x), y_(y), z_(z) {}
-  
+
   double w() const { return w_; }
   double x() const { return x_; }
   double y() const { return y_; }
   double z() const { return z_; }
-  
-private:
+
+ private:
   double w_, x_, y_, z_;
 };
 
@@ -274,58 +274,58 @@ struct offsets_t {
   int16_t accel_offset_x;
   int16_t accel_offset_y;
   int16_t accel_offset_z;
-  
+
   int16_t mag_offset_x;
   int16_t mag_offset_y;
   int16_t mag_offset_z;
-  
+
   int16_t gyro_offset_x;
   int16_t gyro_offset_y;
   int16_t gyro_offset_z;
-  
+
   int16_t accel_radius;
   int16_t mag_radius;
 };
 
 // Main BNO055 class
 class BNO055 {
-public:
-  BNO055(int32_t sensorID = -1, uint8_t address = BNO055_ADDRESS_A, 
+ public:
+  BNO055(int32_t sensorID = -1, uint8_t address = BNO055_ADDRESS_A,
          const std::string& i2c_device = "/dev/i2c-1");
   ~BNO055();
-  
+
   bool begin(opmode_t mode = OPERATION_MODE_NDOF);
   void setMode(opmode_t mode);
   opmode_t getMode();
-  
+
   void setAxisRemap(axis_remap_config_t remapcode);
   void setAxisSign(axis_remap_sign_t remapsign);
   void setExtCrystalUse(bool usextal);
-  
+
   void getSystemStatus(uint8_t* system_status, uint8_t* self_test_result, uint8_t* system_error);
   void getRevInfo(rev_info_t* info);
   void getCalibration(uint8_t* sys, uint8_t* gyro, uint8_t* accel, uint8_t* mag);
-  
+
   int8_t getTemp();
   Vector<3> getVector(vector_type_t vector_type);
   Quaternion getQuat();
-  
+
   bool getSensorOffsets(uint8_t* calibData);
   bool getSensorOffsets(offsets_t& offsets_type);
   void setSensorOffsets(const uint8_t* calibData);
   void setSensorOffsets(const offsets_t& offsets_type);
-  
+
   bool isFullyCalibrated();
   void enterSuspendMode();
   void enterNormalMode();
 
-private:
+ private:
   bool write8(bno055_reg_t reg, uint8_t value);
   uint8_t read8(bno055_reg_t reg);
   bool readLen(bno055_reg_t reg, uint8_t* buffer, uint8_t len);
-  
+
   void delay(int ms);
-  
+
   int32_t _sensorID;
   opmode_t _mode;
   uint8_t _address;
@@ -333,4 +333,4 @@ private:
   int _i2c_fd;
 };
 
-#endif // BNO055_H
+#endif  // BNO055_H
