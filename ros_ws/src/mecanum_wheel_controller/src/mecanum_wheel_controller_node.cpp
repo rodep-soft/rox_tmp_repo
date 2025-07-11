@@ -102,7 +102,7 @@ public:
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    std::this_thread::sleep_for(std::chrono::milliseconds(3));
   }
 
 private:
@@ -144,6 +144,9 @@ public:
       timer_->cancel();
     }
     cmd_vel_subscription_.reset();
+    vx_.store(0.0);
+    vy_.store(0.0);
+    wz_.store(0.0);
     RCLCPP_INFO(this->get_logger(), "Stopping motor controller...");
     stop_all_motors();
     RCLCPP_INFO(this->get_logger(), "Motors stopped.");
