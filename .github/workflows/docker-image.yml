@@ -1,6 +1,6 @@
 # .github/workflows/docker-build-check.yml
 
-name: Docker Build Check for ROS 2
+name: Docker and Colcon Build Check
 
 # ワークフローが実行されるタイミングを定義
 on:
@@ -12,31 +12,32 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  build:
+  build_and_test:
     # 実行環境として最新のUbuntuを使用
     runs-on: ubuntu-latest
 
     steps:
       # 1. リポジトリのソースコードをチェックアウト
+      # これにより、ros_ws/src も含めてファイルが利用可能になります
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # 2. Dockerのビルド環境をセットアップ (Buildx)
-      # Buildxは効率的なビルドを行うためのDockerのプラグインです
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       # 3. Dockerイメージをビルド
-      # docker/build-push-action を使ってビルドを実行します
+      # 上記で変更したDockerfileを使い、ソースコードを含んだイメージが作成されます
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
-          # Dockerfileがある場所 (リポジトリのルート)
           context: .
-          # 使用するDockerfileのパス
           file: ./Dockerfile
-          # push: false にすることで、ビルドのみを実行し、レジストリへのプッシュは行わない
-          # ビルドが通るかのチェックが目的なので false にします
           push: false
-          # ビルドするイメージに一時的なタグを付ける
           tags: ros2-rox-image:latest
+
+      # 4. 【追加】作成したイメージ内で colcon build を実行
+      # このステップで、ROS 2パッケージのビルドが成功するかをテストします
+      - name: Run colcon build check
+        run: |
+          docker run --rm --workdir /root/ros_ws ros2-rox-image:latest /bin/bash -c "source /opt/ros/humble/setup.bash && colcon build"
