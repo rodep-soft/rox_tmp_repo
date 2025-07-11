@@ -1,27 +1,28 @@
 services:
   ros2_rox:
-    image: ros:humble-ros-base
-    # For arm64
-    # ros:humble-ros-base
+    # Instead of 'image', use 'build' to build from your Dockerfile
+    build:
+      context: . # Looks for Dockerfile in the current directory
+      dockerfile: Dockerfile
+
     container_name: ros2_rox_container
     tty: true
     privileged: true
     network_mode: host
-    working_dir: /ros_ws
+    # Update working_dir to match the user's home in Dockerfile
+    working_dir: /root/ros_ws 
+
     environment:
       - ROS_DOMAIN_ID=0
       - DEBIAN_FRONTEND=noninteractive
     volumes:
-      - ~/.ssh:/root/.ssh:ro
-      - ./ros_ws:/ros_ws
+      # Mount host ~/.ssh to the new user's home in container
+      - ~/.ssh:/root/.ssh:ro # <--- REPLACE with your actual host username
+      # Mount your ROS workspace
+      - ./ros_ws:/root/ros_ws # <--- REPLACE with your actual host username
     devices:
       - /dev/*:/dev/* # Allow access to all devices
-    command: >
-      bash -c "
-        echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc &&
-        apt-get update && apt-get upgrade -y &&
-        apt-get install -y git vim less tree fzf fish libboost-system-dev ros-humble-joy python3-pip libgpiod-dev gpiod &&
-        pip install smbus2 &&
-        exec bash
-      "
-
+    # REMOVE THE LONG 'command' BLOCK HERE!
+    # The CMD in the Dockerfile will handle starting bash.
+    # If you need a specific command to run at startup, you can add it here,
+    # but it won't include installations.
