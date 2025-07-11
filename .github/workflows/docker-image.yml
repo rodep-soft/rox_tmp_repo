@@ -35,6 +35,7 @@ jobs:
           file: ./Dockerfile
           push: false
           tags: ros2-rox-image:latest
+          load: true
 
       # 4. 【追加】作成したイメージ内で colcon build を実行
       # このステップで、ROS 2パッケージのビルドが成功するかをテストします
