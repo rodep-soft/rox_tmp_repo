@@ -52,11 +52,27 @@ ros_ws/
 │   │   │   └── joy_driver_node.cpp
 │   │   ├── package.xml
 │   │   └── CMakeLists.txt
-│   └── mecanum_wheel_controller/ # Mecanum wheel kinematics
+│   ├── mecanum_wheel_controller/ # Mecanum wheel kinematics
+│   │   ├── src/
+│   │   │   └── mecanum_wheel_controller_node.cpp
+│   │   ├── config/
+│   │   │   └── mechanum.yaml    # Local config copy
+│   │   ├── package.xml
+│   │   └── CMakeLists.txt
+│   ├── color_sensor/            # Color sensor package
+│   │   ├── src/
+│   │   │   └── color_sensor.py
+│   │   ├── package.xml
+│   │   └── setup.py
+│   ├── imu/                     # IMU sensor package
+│   │   ├── src/
+│   │   │   ├── imu.cpp
+│   │   │   └── imulib.cpp
+│   │   ├── package.xml
+│   │   └── CMakeLists.txt
+│   └── ultrasonic_sensor/       # Ultrasonic sensor package
 │       ├── src/
-│       │   └── mecanum_wheel_controller_node.cpp
-│       ├── config/
-│       │   └── mechanum.yaml    # Local config copy
+│       │   └── ultrasonic_sensor.cpp
 │       ├── package.xml
 │       └── CMakeLists.txt
 ├── launch/
