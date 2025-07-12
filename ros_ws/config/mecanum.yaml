@@ -9,7 +9,7 @@
     angular_axis: 3
 
     # Mecanum Wheel Controller Parameters
-    wheel_radius: 0.1
+    wheel_radius: 0.08
     wheel_base_x: 0.205
     wheel_base_y: 0.195
     serial_port: "/dev/ttyACM1"
