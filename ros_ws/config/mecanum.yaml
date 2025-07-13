@@ -15,3 +15,10 @@
     serial_port: "/dev/ttyACM1"
     baud_rate: 115200
     motor_ids: [1, 2, 3, 4]  # FL, FR, BL, BR
+    
+    # PID Control Parameters for wheel velocity control
+    pid_kp: 1.0      # Proportional gain
+    pid_kd: 0.1      # Derivative gain  
+    pid_ki: 0.0      # Integral gain (set to 0 as per issue suggestion)
+    pid_max_output: 1000.0  # Maximum PID output (RPM)
+    pid_min_output: -1000.0 # Minimum PID output (RPM)

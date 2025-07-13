@@ -13,13 +13,12 @@ RUN apt-get update && apt-get upgrade -y && \
     python3 \
     python3-pip \
     libboost-system-dev \
-    ros-humble-joy \
     libgpiod-dev \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
 
 # --- Install Python Packages ---
-RUN pip install smbus2
+# RUN pip install smbus2
 
 # --- Configure Shell Defaults and ROS 2 setup ---
 # This ensures colcon --symlink-install is default and ROS setup.bash is sourced

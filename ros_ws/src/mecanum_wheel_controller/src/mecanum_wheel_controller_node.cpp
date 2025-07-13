@@ -7,6 +7,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <string>
 #include <vector>
+#include <chrono>
 
 // Deprecated function for CRC8 calculation
 // // A simple CRC8 calculator for motor communication
@@ -48,6 +49,82 @@ uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data) {
   }
   return crc;
 }
+
+// PID Controller class for wheel velocity control
+class PIDController {
+ public:
+  PIDController(double kp = 1.0, double ki = 0.0, double kd = 0.1, 
+                double max_output = 1000.0, double min_output = -1000.0)
+      : kp_(kp), ki_(ki), kd_(kd), max_output_(max_output), min_output_(min_output),
+        previous_error_(0.0), integral_(0.0), 
+        last_time_(std::chrono::steady_clock::now()) {}
+
+  double compute(double setpoint, double measured_value) {
+    auto current_time = std::chrono::steady_clock::now();
+    auto dt = std::chrono::duration<double>(current_time - last_time_).count();
+    
+    // Avoid division by zero or very small dt
+    if (dt <= 0.0 || dt > 1.0) {
+      dt = 0.05; // Default to 50ms if dt is invalid
+    }
+
+    double error = setpoint - measured_value;
+    
+    // Proportional term
+    double proportional = kp_ * error;
+    
+    // Integral term
+    integral_ += error * dt;
+    double integral_term = ki_ * integral_;
+    
+    // Derivative term
+    double derivative = (error - previous_error_) / dt;
+    double derivative_term = kd_ * derivative;
+    
+    // Compute PID output
+    double output = proportional + integral_term + derivative_term;
+    
+    // Apply output limits
+    if (output > max_output_) {
+      output = max_output_;
+      // Anti-windup: prevent integral from growing when output is saturated
+      integral_ -= error * dt;
+    } else if (output < min_output_) {
+      output = min_output_;
+      // Anti-windup: prevent integral from growing when output is saturated  
+      integral_ -= error * dt;
+    }
+    
+    // Update for next iteration
+    previous_error_ = error;
+    last_time_ = current_time;
+    
+    return output;
+  }
+
+  void reset() {
+    previous_error_ = 0.0;
+    integral_ = 0.0;
+    last_time_ = std::chrono::steady_clock::now();
+  }
+
+  void set_gains(double kp, double ki, double kd) {
+    kp_ = kp;
+    ki_ = ki;
+    kd_ = kd;
+  }
+
+  void set_output_limits(double min_output, double max_output) {
+    min_output_ = min_output;
+    max_output_ = max_output;
+  }
+
+ private:
+  double kp_, ki_, kd_;
+  double max_output_, min_output_;
+  double previous_error_, integral_;
+  std::chrono::steady_clock::time_point last_time_;
+};
 
 class MotorController {
  public:
@@ -118,6 +195,17 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     declare_parameters();
     get_parameters();
 
+    // Initialize PID controllers for each wheel (4 wheels)
+    wheel_pid_controllers_.resize(4);
+    current_wheel_velocities_.resize(4);
+    target_wheel_velocities_.resize(4, 0.0);
+    
+    for (size_t i = 0; i < 4; ++i) {
+      wheel_pid_controllers_[i].set_gains(pid_kp_, pid_ki_, pid_kd_);
+      wheel_pid_controllers_[i].set_output_limits(pid_min_output_, pid_max_output_);
+      current_wheel_velocities_[i].store(0.0);
+    }
+
     if (!motor_controller_.init_port(serial_port_, baud_rate_)) {
       rclcpp::shutdown();
       return;
@@ -135,7 +223,8 @@ class MecanumWheelControllerNode : public rclcpp::Node {
         std::chrono::milliseconds(50),
         std::bind(&MecanumWheelControllerNode::timer_send_velocity_callback, this));
 
-    RCLCPP_INFO(this->get_logger(), "Mecanum wheel controller node started.");
+    RCLCPP_INFO(this->get_logger(), "Mecanum wheel controller node started with PID control.");
+    RCLCPP_INFO(this->get_logger(), "PID gains: Kp=%.3f, Ki=%.3f, Kd=%.3f", pid_kp_, pid_ki_, pid_kd_);
   }
 
   ~MecanumWheelControllerNode() override {
@@ -161,6 +250,13 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     this->declare_parameter<int>("baud_rate", 115200);
     this->declare_parameter<std::vector<int64_t>>("motor_ids", {1, 2, 3, 4});
     this->declare_parameter<int>("cmd_vel_timeout_ms", 500);  // Timeout for cmd_vel in ms
+    
+    // PID parameters
+    this->declare_parameter<double>("pid_kp", 1.0);
+    this->declare_parameter<double>("pid_ki", 0.0);
+    this->declare_parameter<double>("pid_kd", 0.1);
+    this->declare_parameter<double>("pid_max_output", 1000.0);
+    this->declare_parameter<double>("pid_min_output", -1000.0);
   }
 
   void get_parameters() {
@@ -173,6 +269,13 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
     auto motor_ids_int64 = this->get_parameter("motor_ids").as_integer_array();
     motor_ids_.assign(motor_ids_int64.begin(), motor_ids_int64.end());
+    
+    // Get PID parameters
+    pid_kp_ = this->get_parameter("pid_kp").as_double();
+    pid_ki_ = this->get_parameter("pid_ki").as_double();
+    pid_kd_ = this->get_parameter("pid_kd").as_double();
+    pid_max_output_ = this->get_parameter("pid_max_output").as_double();
+    pid_min_output_ = this->get_parameter("pid_min_output").as_double();
   }
 
   void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg) {
@@ -198,40 +301,68 @@ class MecanumWheelControllerNode : public rclcpp::Node {
       return;
     }
 
-    // Mecanum wheel kinematics
-    // const double vx = vx_.load();
-    // const double vy = vy_.load();
-    // const double wz = wz_.load();
-
+    // Mecanum wheel kinematics - calculate target wheel velocities
     const double gain = 5.0;  // 必要に応じて調整
     const double vx = std::tanh(gain * vx_.load());
     const double vy = std::tanh(gain * vy_.load());
     const double wz = std::tanh(gain * wz_.load());
 
     const double lxy_sum = wheel_base_x_ + wheel_base_y_;
+
+    // Calculate target wheel velocities in rad/s
+    target_wheel_velocities_[0] = (vx - vy - lxy_sum * wz) / wheel_radius_;  // Front Left
+    target_wheel_velocities_[1] = (vx + vy + lxy_sum * wz) / wheel_radius_;  // Front Right
+    target_wheel_velocities_[2] = (vx + vy - lxy_sum * wz) / wheel_radius_;  // Rear Left  
+    target_wheel_velocities_[3] = (vx - vy + lxy_sum * wz) / wheel_radius_;  // Rear Right
+
+    // Apply PID control for each wheel
     const double rad_to_rpm = 60.0 / (2.0 * M_PI);
+    std::vector<int16_t> rpm_commands(4);
+    
+    for (size_t i = 0; i < 4; ++i) {
+      // Get current wheel velocity (simulated feedback for now)
+      double current_vel = current_wheel_velocities_[i].load();
+      
+      // Compute PID output (in rad/s)
+      double pid_output = wheel_pid_controllers_[i].compute(target_wheel_velocities_[i], current_vel);
+      
+      // Convert PID output to RPM command
+      rpm_commands[i] = static_cast<int16_t>(pid_output * rad_to_rpm);
+      
+      // Apply motor direction corrections (same as before)
+      if (i == 1 || i == 3) {  // Front Right and Rear Right motors
+        rpm_commands[i] *= -1;
+      }
+      
+      // Simple velocity feedback simulation (low-pass filter)
+      // In real implementation, this would come from encoder feedback
+      double alpha = 0.8;  // Filter constant
+      double new_velocity = alpha * current_vel + (1.0 - alpha) * target_wheel_velocities_[i];
+      current_wheel_velocities_[i].store(new_velocity);
+    }
 
-    const double wheel_front_left_vel = (vx - vy - lxy_sum * wz) / wheel_radius_;
-    const double wheel_front_right_vel = (vx + vy + lxy_sum * wz) / wheel_radius_;
-    const double wheel_rear_left_vel = (vx + vy - lxy_sum * wz) / wheel_radius_;
-    const double wheel_rear_right_vel = (vx - vy + lxy_sum * wz) / wheel_radius_;
+    RCLCPP_INFO(this->get_logger(), 
+                "Target vel: [%.2f, %.2f, %.2f, %.2f] rad/s, RPM: [%d, %d, %d, %d]",
+                target_wheel_velocities_[0], target_wheel_velocities_[1], 
+                target_wheel_velocities_[2], target_wheel_velocities_[3],
+                rpm_commands[0], rpm_commands[1], rpm_commands[2], rpm_commands[3]);
 
-    // Convert to RPM and send to motors
-    int16_t rpm_front_left = static_cast<int16_t>(wheel_front_left_vel * rad_to_rpm);
-    int16_t rpm_front_right = static_cast<int16_t>(wheel_front_right_vel * rad_to_rpm * -1);
-    int16_t rpm_rear_left = static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm);
-    int16_t rpm_rear_right = static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm * -1);
-
-    RCLCPP_INFO(this->get_logger(), "RPM values: FL=%d, FR=%d, RL=%d, RR=%d", rpm_front_left,
-                rpm_front_right, rpm_rear_left, rpm_rear_right);
-
-    motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left);
-    motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right);
-    motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left);
-    motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right);
+    // Send RPM commands to motors
+    motor_controller_.send_velocity_command(motor_ids_[0], rpm_commands[0]);  // FL
+    motor_controller_.send_velocity_command(motor_ids_[1], rpm_commands[1]);  // FR
+    motor_controller_.send_velocity_command(motor_ids_[2], rpm_commands[2]);  // RL
+    motor_controller_.send_velocity_command(motor_ids_[3], rpm_commands[3]);  // RR
   }
 
   void stop_all_motors() {
+    // Reset target velocities and PID controllers
+    for (size_t i = 0; i < 4; ++i) {
+      target_wheel_velocities_[i] = 0.0;
+      current_wheel_velocities_[i].store(0.0);
+      wheel_pid_controllers_[i].reset();
+    }
+    
+    // Send zero RPM commands to all motors
     for (const auto& id : motor_ids_) {
       motor_controller_.send_velocity_command(id, 0);
     }
@@ -252,6 +383,19 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   int baud_rate_;
   std::vector<int> motor_ids_;
   int cmd_vel_timeout_ms_;
+
+  // PID control parameters
+  double pid_kp_, pid_ki_, pid_kd_;
+  double pid_max_output_, pid_min_output_;
+  
+  // PID controllers for each wheel (FL, FR, RL, RR)
+  std::vector<PIDController> wheel_pid_controllers_;
+  
+  // Current wheel velocities for feedback (rad/s)
+  std::vector<std::atomic<double>> current_wheel_velocities_;
+  
+  // Target wheel velocities (rad/s)
+  std::vector<double> target_wheel_velocities_;
 
   rclcpp::TimerBase::SharedPtr timer_;
 };
