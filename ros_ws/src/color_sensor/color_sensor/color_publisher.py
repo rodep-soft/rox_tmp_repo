@@ -38,7 +38,9 @@ class ColorPublisher(Node):
         msg.b = b / self.integration_gain_  # Normalize to [0, 1]
         msg.a = c / self.integration_gain_   # Normalize to [0, 1]
         self.publisher_.publish(msg)
-        self.get_logger().info(f"Publishing: R:{msg.r} G:{msg.g} B:{msg.b} C:{msg.a}")
+        self.get_logger().debug(
+            f"Publishing: R:{msg.r} G:{msg.g} B:{msg.b} C:{msg.a}"
+        )
 
     def __del__(self):
         self.TCS34725.disable()
