@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <functional>
 
 // Deprecated function for CRC8 calculation
 // // A simple CRC8 calculator for motor communication
@@ -197,14 +198,18 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
     // Initialize PID controllers for each wheel (4 wheels)
     wheel_pid_controllers_.resize(4);
-    current_wheel_velocities_.resize(4);
     target_wheel_velocities_.resize(4, 0.0);
     
     for (size_t i = 0; i < 4; ++i) {
       wheel_pid_controllers_[i].set_gains(pid_kp_, pid_ki_, pid_kd_);
       wheel_pid_controllers_[i].set_output_limits(pid_min_output_, pid_max_output_);
-      current_wheel_velocities_[i].store(0.0);
     }
+    
+    // Initialize current wheel velocities
+    current_wheel_vel_fl_.store(0.0);
+    current_wheel_vel_fr_.store(0.0);
+    current_wheel_vel_rl_.store(0.0);
+    current_wheel_vel_rr_.store(0.0);
 
     if (!motor_controller_.init_port(serial_port_, baud_rate_)) {
       rclcpp::shutdown();
@@ -318,13 +323,17 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // Apply PID control for each wheel
     const double rad_to_rpm = 60.0 / (2.0 * M_PI);
     std::vector<int16_t> rpm_commands(4);
+    std::vector<double> current_velocities(4);
+    
+    // Get current velocities from individual atomic variables
+    current_velocities[0] = current_wheel_vel_fl_.load();  // FL
+    current_velocities[1] = current_wheel_vel_fr_.load();  // FR
+    current_velocities[2] = current_wheel_vel_rl_.load();  // RL
+    current_velocities[3] = current_wheel_vel_rr_.load();  // RR
     
     for (size_t i = 0; i < 4; ++i) {
-      // Get current wheel velocity (simulated feedback for now)
-      double current_vel = current_wheel_velocities_[i].load();
-      
       // Compute PID output (in rad/s)
-      double pid_output = wheel_pid_controllers_[i].compute(target_wheel_velocities_[i], current_vel);
+      double pid_output = wheel_pid_controllers_[i].compute(target_wheel_velocities_[i], current_velocities[i]);
       
       // Convert PID output to RPM command
       rpm_commands[i] = static_cast<int16_t>(pid_output * rad_to_rpm);
@@ -333,13 +342,15 @@ class MecanumWheelControllerNode : public rclcpp::Node {
       if (i == 1 || i == 3) {  // Front Right and Rear Right motors
         rpm_commands[i] *= -1;
       }
-      
-      // Simple velocity feedback simulation (low-pass filter)
-      // In real implementation, this would come from encoder feedback
-      double alpha = 0.8;  // Filter constant
-      double new_velocity = alpha * current_vel + (1.0 - alpha) * target_wheel_velocities_[i];
-      current_wheel_velocities_[i].store(new_velocity);
     }
+    
+    // Update velocity feedback simulation (low-pass filter)
+    // In real implementation, this would come from encoder feedback
+    double alpha = 0.8;  // Filter constant
+    current_wheel_vel_fl_.store(alpha * current_velocities[0] + (1.0 - alpha) * target_wheel_velocities_[0]);
+    current_wheel_vel_fr_.store(alpha * current_velocities[1] + (1.0 - alpha) * target_wheel_velocities_[1]);
+    current_wheel_vel_rl_.store(alpha * current_velocities[2] + (1.0 - alpha) * target_wheel_velocities_[2]);
+    current_wheel_vel_rr_.store(alpha * current_velocities[3] + (1.0 - alpha) * target_wheel_velocities_[3]);
 
     RCLCPP_INFO(this->get_logger(), 
                 "Target vel: [%.2f, %.2f, %.2f, %.2f] rad/s, RPM: [%d, %d, %d, %d]",
@@ -358,9 +369,14 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // Reset target velocities and PID controllers
     for (size_t i = 0; i < 4; ++i) {
       target_wheel_velocities_[i] = 0.0;
-      current_wheel_velocities_[i].store(0.0);
       wheel_pid_controllers_[i].reset();
     }
+    
+    // Reset current wheel velocities
+    current_wheel_vel_fl_.store(0.0);
+    current_wheel_vel_fr_.store(0.0);
+    current_wheel_vel_rl_.store(0.0);
+    current_wheel_vel_rr_.store(0.0);
     
     // Send zero RPM commands to all motors
     for (const auto& id : motor_ids_) {
@@ -391,8 +407,9 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   // PID controllers for each wheel (FL, FR, RL, RR)
   std::vector<PIDController> wheel_pid_controllers_;
   
-  // Current wheel velocities for feedback (rad/s)
-  std::vector<std::atomic<double>> current_wheel_velocities_;
+  // Current wheel velocities for feedback (rad/s) - individual atomics
+  std::atomic<double> current_wheel_vel_fl_, current_wheel_vel_fr_;
+  std::atomic<double> current_wheel_vel_rl_, current_wheel_vel_rr_;
   
   // Target wheel velocities (rad/s)
   std::vector<double> target_wheel_velocities_;
