@@ -161,6 +161,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     this->declare_parameter<int>("baud_rate", 115200);
     this->declare_parameter<std::vector<int64_t>>("motor_ids", {1, 2, 3, 4});
     this->declare_parameter<int>("cmd_vel_timeout_ms", 500);  // Timeout for cmd_vel in ms
+    this->declare_parameter<bool>("debug_output", false);  // Debug parameter
   }
 
   void get_parameters() {
@@ -170,6 +171,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     serial_port_ = this->get_parameter("serial_port").as_string();
     baud_rate_ = this->get_parameter("baud_rate").as_int();
     cmd_vel_timeout_ms_ = this->get_parameter("cmd_vel_timeout_ms").as_int();
+    debug_output_ = this->get_parameter("debug_output").as_bool();
 
     auto motor_ids_int64 = this->get_parameter("motor_ids").as_integer_array();
     motor_ids_.assign(motor_ids_int64.begin(), motor_ids_int64.end());
@@ -181,8 +183,14 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     wz_.store(msg->angular.z);
 
     last_subscription_time_.store(std::chrono::steady_clock::now());
-    // RCLCPP_INFO(this->get_logger(), "Received cmd_vel: vx=%.2f, vy=%.2f, wz=%.2f", vx_.load(),
-    // vy_.load(), wz_.load());
+    RCLCPP_DEBUG(this->get_logger(), "Received cmd_vel: vx=%.2f, vy=%.2f, wz=%.2f", vx_.load(),
+                 vy_.load(), wz_.load());
+
+    // Optional INFO-level debug output controlled by parameter
+    if (debug_output_) {
+      RCLCPP_INFO(this->get_logger(), "Received cmd_vel: vx=%.2f, vy=%.2f, wz=%.2f", vx_.load(),
+                  vy_.load(), wz_.load());
+    }
   }
 
   void timer_send_velocity_callback() {
@@ -252,6 +260,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   int baud_rate_;
   std::vector<int> motor_ids_;
   int cmd_vel_timeout_ms_;
+  bool debug_output_;  // Debug parameter
 
   rclcpp::TimerBase::SharedPtr timer_;
 };

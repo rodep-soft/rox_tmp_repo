@@ -33,6 +33,7 @@ class JoyDriverNode : public rclcpp::Node {
     this->declare_parameter<int>("linear_x_axis", 1);  // Vertical movement
     this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
     this->declare_parameter<int>("angular_axis", 3);
+    this->declare_parameter<bool>("debug_output", false);  // Debug parameter
   }
 
   void get_parameters() {
@@ -42,6 +43,7 @@ class JoyDriverNode : public rclcpp::Node {
     linear_x_axis_ = this->get_parameter("linear_x_axis").as_int();
     linear_y_axis_ = this->get_parameter("linear_y_axis").as_int();
     angular_axis_ = this->get_parameter("angular_axis").as_int();
+    debug_output_ = this->get_parameter("debug_output").as_bool();
   }
 
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
@@ -58,9 +60,14 @@ class JoyDriverNode : public rclcpp::Node {
     twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
     twist_msg->angular.z = msg->axes[angular_axis_] * angular_scale_;
 
-    // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
-    // angular.z=%.2f",
-    //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
+    RCLCPP_DEBUG(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
+                 twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
+
+    // Optional INFO-level debug output controlled by parameter
+    if (debug_output_) {
+      RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
+                  twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
+    }
 
     // Publish the velocity command
 
@@ -86,6 +93,7 @@ class JoyDriverNode : public rclcpp::Node {
   int linear_x_axis_;
   int linear_y_axis_;
   int angular_axis_;
+  bool debug_output_;  // Debug parameter
 };
 
 int main(int argc, char** argv) {

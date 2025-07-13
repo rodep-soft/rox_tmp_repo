@@ -1,3 +1,6 @@
+# Debug Configuration for Mecanum System
+# Copy this to mecanum.yaml and modify as needed
+
 /**:
   ros__parameters:
     # Joy Driver Parameters
@@ -7,7 +10,7 @@
     linear_x_axis: 1
     linear_y_axis: 0
     angular_axis: 3
-    debug_output: false  # Set to true to enable debug output
+    debug_output: true   # ENABLE debug output for joy driver
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08
@@ -16,4 +19,7 @@
     serial_port: "/dev/ttyACM1"
     baud_rate: 115200
     motor_ids: [1, 2, 3, 4]  # FL, FR, BL, BR
-    debug_output: false  # Set to true to enable debug output
+    debug_output: true   # ENABLE debug output for wheel controller
+    
+    # Timeout settings
+    cmd_vel_timeout_ms: 500
