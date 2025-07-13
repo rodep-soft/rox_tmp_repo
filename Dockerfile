@@ -9,11 +9,14 @@ RUN apt-get update && apt-get upgrade -y && \
     less \
     tree \
     fzf \
+    tmux \
     fish \
+    lsof \
     python3 \
     python3-pip \
     libboost-system-dev \
     ros-humble-joy \
+    ros-humble-demo-nodes-cpp \
     libgpiod-dev \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
