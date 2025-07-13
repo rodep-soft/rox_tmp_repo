@@ -8,6 +8,13 @@
 #include <string>
 #include <vector>
 
+#include "custom_interfaces/msg/mode_status.hpp"
+
+enum class RobotMode : uint8_t {
+  DRIVE = 0,
+  STOP = 1
+};
+
 // Deprecated function for CRC8 calculation
 // // A simple CRC8 calculator for motor communication
 // uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data)
@@ -127,6 +134,12 @@ class MecanumWheelControllerNode : public rclcpp::Node {
         "/cmd_vel", 10,
         std::bind(&MecanumWheelControllerNode::cmd_vel_callback, this, std::placeholders::_1));
 
+    // Subscribe to mode status
+    mode_subscription_ = this->create_subscription<custom_interfaces::msg::ModeStatus>(
+        "/mode_status", 10,
+        std::bind(&MecanumWheelControllerNode::mode_status_callback, this, std::placeholders::_1));
+
+    current_mode_.store(static_cast<uint8_t>(RobotMode::DRIVE));
     vx_.store(0.0);
     vy_.store(0.0);
     wz_.store(0.0);
@@ -185,7 +198,22 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // vy_.load(), wz_.load());
   }
 
+  void mode_status_callback(const custom_interfaces::msg::ModeStatus::SharedPtr msg) {
+    current_mode_.store(msg->current_mode);
+    if (msg->current_mode == static_cast<uint8_t>(RobotMode::STOP)) {
+      RCLCPP_INFO(this->get_logger(), "Mode changed to STOP - motors will be stopped");
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Mode changed to DRIVE - normal operation");
+    }
+  }
+
   void timer_send_velocity_callback() {
+    // Check current mode - if STOP mode, force stop all motors
+    if (current_mode_.load() == static_cast<uint8_t>(RobotMode::STOP)) {
+      stop_all_motors();
+      return;
+    }
+
     // Check if we have received a cmd_vel message in the last 500 milliseconds
     auto now = std::chrono::steady_clock::now();
     auto last_time = last_subscription_time_.load();
@@ -239,6 +267,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
   // ROS 2 components
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
+  rclcpp::Subscription<custom_interfaces::msg::ModeStatus>::SharedPtr mode_subscription_;
   MotorController motor_controller_;
 
   // Parameters
@@ -246,6 +275,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   double wheel_base_x_;
   double wheel_base_y_;
   std::atomic<double> vx_, vy_, wz_;  // Current velocities
+  std::atomic<uint8_t> current_mode_;  // Current robot mode
 
   std::atomic<std::chrono::time_point<std::chrono::steady_clock>> last_subscription_time_;
   std::string serial_port_;

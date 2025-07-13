@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(custom_interfaces REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system)
 
 # Add the executable
@@ -23,6 +24,7 @@ target_compile_features(mecanum_wheel_controller_node PUBLIC cxx_std_17)
 ament_target_dependencies(mecanum_wheel_controller_node
   rclcpp
   geometry_msgs
+  custom_interfaces
 )
 
 target_link_libraries(mecanum_wheel_controller_node

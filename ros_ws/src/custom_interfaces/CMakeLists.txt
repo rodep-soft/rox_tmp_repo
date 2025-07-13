@@ -15,6 +15,8 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CmdDpad.msg"
+  "msg/ModeStatus.msg"
+  "srv/SetMode.srv"
 )
 
 if(BUILD_TESTING)

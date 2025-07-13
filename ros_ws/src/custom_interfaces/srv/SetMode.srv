@@ -1,0 +1,9 @@
+# Service to set robot mode
+# Request
+uint8 mode
+uint8 MODE_DRIVE = 0
+uint8 MODE_STOP = 1
+---
+# Response
+bool success
+string message
