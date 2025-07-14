@@ -76,22 +76,24 @@ class JoyDriverNode : public rclcpp::Node {
     if (Mode::STOP == mode_ && msg->buttons[4] == 1) {
       mode_ = Mode::DRIVE;
       RCLCPP_INFO(this->get_logger(), "Mode: DRIVE");
-    } else if (Mode::DRIVE == mode_ && msg->buttons[6] == 1) {
+    } else if (Mode::DRIVE == mode_ && msg->buttons[5] == 1) {
       mode_ = Mode::STOP;
       RCLCPP_INFO(this->get_logger(), "Mode: STOP");
     }
 
     // Map joystick axes to velocity commands
-    auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
+    auto twist_msg = geometry_msgs::msg::Twist();
 
     if (Mode::STOP == mode_) {
-      twist_msg->linear.x = 0.0;
-      twist_msg->linear.y = 0.0;
-      twist_msg->angular.z = 0.0;
+      twist_msg.linear.x = 0.0;
+      twist_msg.linear.y = 0.0;
+      twist_msg.angular.z = 0.0;
     } else if (Mode::DRIVE == mode_) {
-      twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
-      twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
-      twist_msg->angular.z = msg->axes[angular_axis_] * angular_scale_;
+      // RCLCPP_INFO(this->get_logger(), "For DEBUG");
+      // 貫通はしてない
+      twist_msg.linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
+      twist_msg.linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
+      twist_msg.angular.z = msg->axes[angular_axis_] * angular_scale_;
     }
 
     // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
@@ -108,7 +110,11 @@ class JoyDriverNode : public rclcpp::Node {
 
 
 
-    cmd_vel_publisher_->publish(std::move(twist_msg));
+    //RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
+    //            twist_msg.linear.x, twist_msg.linear.y, twist_msg.angular.z);
+
+
+    cmd_vel_publisher_->publish(twist_msg);
     cmd_dpad_publisher_->publish(std::move(dpad_msg));
   }
 
