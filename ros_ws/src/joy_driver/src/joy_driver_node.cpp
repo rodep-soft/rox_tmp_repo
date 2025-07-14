@@ -2,6 +2,7 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/qos.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <string>
@@ -17,10 +18,10 @@ class JoyDriverNode : public rclcpp::Node {
 
     // Create subscription to the /joy topic
     joy_subscription_ = this->create_subscription<sensor_msgs::msg::Joy>(
-        "joy", 10, std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
+        "joy", reliable_qos, std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
 
     // Create publisher for the /cmd_vel topic
-    cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+    cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", reliable_qos);
 
     brake_client_ = this->create_client<std_srvs::srv::SetBool>("/brake");
     
@@ -132,6 +133,8 @@ class JoyDriverNode : public rclcpp::Node {
   int linear_x_axis_;
   int linear_y_axis_;
   int angular_axis_;
+
+  const rclcpp::QoS reliable_qos = rclcpp::QoS(1).reliable();
 };
 
 int main(int argc, char** argv) {
