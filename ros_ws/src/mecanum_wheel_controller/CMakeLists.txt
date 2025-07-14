@@ -12,6 +12,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system)
+find_package(std_srvs REQUIRED)
 
 # Add the executable
 add_executable(mecanum_wheel_controller_node src/mecanum_wheel_controller_node.cpp)
@@ -23,6 +24,7 @@ target_compile_features(mecanum_wheel_controller_node PUBLIC cxx_std_17)
 ament_target_dependencies(mecanum_wheel_controller_node
   rclcpp
   geometry_msgs
+  std_srvs
 )
 
 target_link_libraries(mecanum_wheel_controller_node
