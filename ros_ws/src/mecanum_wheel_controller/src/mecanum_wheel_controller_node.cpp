@@ -3,6 +3,7 @@
 #include <boost/asio.hpp>
 #include <cmath>
 #include <geometry_msgs/msg/twist.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
@@ -131,6 +132,11 @@ class MecanumWheelControllerNode : public rclcpp::Node {
         "/cmd_vel", 10,
         std::bind(&MecanumWheelControllerNode::cmd_vel_callback, this, std::placeholders::_1));
 
+    brake_service_ = this->create_service<std_srvs::srv::SetBool>(
+        "/brake", std::bind(&MecanumWheelControllerNode::brake_service_callback, this,
+                            std::placeholders::_1, std::placeholders::_2);
+    );
+
     vx_.store(0.0);
     vy_.store(0.0);
     wz_.store(0.0);
@@ -189,6 +195,23 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // vy_.load(), wz_.load());
   }
 
+  // Service callback to handle brake requests
+  void brake_service_callback(const std::shared_ptr<std_srvs::srv::SetBool::Request> request, 
+                              std::shared_ptr<std_srvs::srv::SetBool::Response> response) { 
+    if (request->data) {
+      brake_ = Brake::ENGAGE;
+      response->success = true;
+      response->message = "Brakes engaged";
+    } else {
+      brake_ = Brake::NONE;
+      response->success = false;
+      response->message = "Brakes disengaged";
+    }
+
+    RCLCPP_INFO(this->get_logger(), "Brake service called: %s", response->message.c_str());
+
+  }
+
   void timer_send_velocity_callback() {
     // Check if we have received a cmd_vel message in the last 500 milliseconds
     auto now = std::chrono::steady_clock::now();
@@ -230,10 +253,11 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     RCLCPP_INFO(this->get_logger(), "RPM values: FL=%d, FR=%d, RL=%d, RR=%d", rpm_front_left,
                 rpm_front_right, rpm_rear_left, rpm_rear_right);
 
-    motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left);
-    motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right);
-    motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left);
-    motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right);
+    motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left, brake_);
+    motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right, brake_);
+    motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left, brake_);
+    motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_rightbrake_);
+
   }
 
   void stop_all_motors() {
@@ -244,7 +268,20 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
   // ROS 2 components
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
+
+  rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr brake_service_;
+
+  
+  // Motor controller instance
   MotorController motor_controller_;
+
+  // Brake on or off
+  enum class Brake {
+    NONE = 0, 
+    ENGAGE = 1
+  };
+
+  Brake brake_ = Brake::NONE:
 
   // Parameters
   double wheel_radius_;
@@ -260,6 +297,8 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
   rclcpp::TimerBase::SharedPtr timer_;
 };
+
+
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<MecanumWheelControllerNode>());
