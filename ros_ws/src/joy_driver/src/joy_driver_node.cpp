@@ -3,6 +3,8 @@
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joy.hpp>
+#include <std_srvs/srv/set_bool.hpp>
+#include <string>
 
 #include "custom_interfaces/msg/cmd_dpad.hpp"
 
@@ -19,6 +21,9 @@ class JoyDriverNode : public rclcpp::Node {
 
     // Create publisher for the /cmd_vel topic
     cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+
+    brake_client_ = this->create_client<std_srvs::srv::SetBool>("/brake");
+    
 
     cmd_dpad_publisher_ = this->create_publisher<custom_interfaces::msg::CmdDpad>("cmd_dpad", 10);
 
@@ -111,6 +116,8 @@ class JoyDriverNode : public rclcpp::Node {
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
   rclcpp::Publisher<custom_interfaces::msg::CmdDpad>::SharedPtr cmd_dpad_publisher_;
+  
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr brake_client_;
 
   // Parameters
   double linear_x_scale_;
