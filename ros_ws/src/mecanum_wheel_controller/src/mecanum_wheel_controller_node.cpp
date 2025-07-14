@@ -71,7 +71,7 @@ class MotorController {
     return true;
   }
 
-  void send_velocity_command(uint8_t motor_id, int16_t rpm) {
+  void send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false) {
     // std::vector<uint8_t> command_data = {
     //   motor_id,
     //   0x64, // Command for velocity control
@@ -93,7 +93,11 @@ class MotorController {
     data.push_back(0x00);
     data.push_back(0x00);
     data.push_back(0x00);
-    data.push_back(0x00);
+    if (brake) {
+      data.push_back(0xFF);
+    } else {
+      data.push_back(0x00);
+    }
     data.push_back(0x00);
     data.push_back(calc_crc8_maxim(data));
 
@@ -203,7 +207,8 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // const double vy = vy_.load();
     // const double wz = wz_.load();
 
-    const double gain = 5.0;  // 必要に応じて調整
+    // 感度調整のためハイパボリックタンジェントを使用
+    const double gain = 5.0;  // 必要に応じて調整: 高くするとより敏感になる
     const double vx = std::tanh(gain * vx_.load());
     const double vy = std::tanh(gain * vy_.load());
     const double wz = std::tanh(gain * wz_.load());
