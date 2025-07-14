@@ -134,7 +134,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
     brake_service_ = this->create_service<std_srvs::srv::SetBool>(
         "/brake", std::bind(&MecanumWheelControllerNode::brake_service_callback, this,
-                            std::placeholders::_1, std::placeholders::_2);
+                            std::placeholders::_1, std::placeholders::_2)
     );
 
     vx_.store(0.0);
@@ -281,7 +281,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     ENGAGE = 1
   };
 
-  Brake brake_ = Brake::NONE:
+  Brake brake_ = Brake::NONE;
 
   // Parameters
   double wheel_radius_;
