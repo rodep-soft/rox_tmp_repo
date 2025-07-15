@@ -1,3 +1,4 @@
+set shell := ["bash", "-c"]
 
 default: build
 
@@ -22,6 +23,11 @@ fullbuild:
 launch:
   just source
   ros2 launch launch/launch.py
+
+joylaunch:
+  just source
+  ros2 run joy joy_node &
+  ros2 run joy_driver joy_driver_node &
 
 kill:
   pkill -f ros2
