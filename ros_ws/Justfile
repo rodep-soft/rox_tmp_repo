@@ -3,33 +3,32 @@ set shell := ["bash", "-c"]
 default: build
 
 build:
-  colcon build
-  just source
+    colcon build
+    just source
 
 clean:
-  rm -rf log install build
+    rm -rf log install build
 
 source:
-  source install/setup.bash
+    source install/setup.bash
 
 ros:
-  source /opt/ros/humble/setup.bash
+    source /opt/ros/humble/setup.bash
 
 fullbuild:
-  just clean
-  just build
-  just source
+    just clean
+    just build
+    just source
 
 launch:
-  just source
-  ros2 launch launch/launch.py
+    just source
+    ros2 launch launch/launch.py
 
 joylaunch:
-  just source
-  ros2 run joy joy_node &
-  ros2 run joy_driver joy_driver_node &
+    just source
+    ros2 run joy joy_node &
+    ros2 run joy_driver joy_driver_node &
 
 kill:
-  pkill -f ros2
-  pkill -f ros
-
+    pkill -f ros2
+    pkill -f ros

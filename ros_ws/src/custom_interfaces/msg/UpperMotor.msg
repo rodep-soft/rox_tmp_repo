@@ -1,0 +1,2 @@
+bool drive
+bool stop
