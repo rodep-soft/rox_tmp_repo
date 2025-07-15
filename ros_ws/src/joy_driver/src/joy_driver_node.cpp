@@ -10,6 +10,7 @@
 #include <std_msgs/msg/bool.hpp>
 
 #include "custom_interfaces/msg/cmd_dpad.hpp"
+#include "custom_interfaces/msg/upper_motor.hpp"
 
 class JoyDriverNode : public rclcpp::Node {
  public:
@@ -27,7 +28,7 @@ class JoyDriverNode : public rclcpp::Node {
 
     brake_client_ = this->create_client<std_srvs::srv::SetBool>("/brake");
 
-    upper_publisher_ = this->create_publisher<std_msgs::msg::Bool>("/upper_on", 3);
+    upper_publisher_ = this->create_publisher<custom_interfaces::msg::UpperMotor>("/upper_motor", 3);
     
 
     cmd_dpad_publisher_ = this->create_publisher<custom_interfaces::msg::CmdDpad>("/cmd_dpad", 10);
@@ -114,8 +115,9 @@ class JoyDriverNode : public rclcpp::Node {
     dpad_msg->right = msg->buttons[14];
 
 
-    auto upper_msg = std::make_unique<std_msgs::msg::Bool>();
-    upper_msg->data = msg->buttons[1];
+    auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
+    upper_msg->drive = msg->buttons[1];
+    upper_msg->stop = msg->buttons[2];
 
 
     //RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
@@ -130,7 +132,7 @@ class JoyDriverNode : public rclcpp::Node {
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
   rclcpp::Publisher<custom_interfaces::msg::CmdDpad>::SharedPtr cmd_dpad_publisher_;
-  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr upper_publisher_;
+  rclcpp::Publisher<custom_interfaces::msg::UpperMotor>::SharedPtr upper_publisher_;
   
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr brake_client_;
 
