@@ -3,7 +3,7 @@ set shell := ["bash", "-c"]
 default: build
 
 build:
-    colcon build
+    colcon build  --symlink-install
     just source
 
 clean:
