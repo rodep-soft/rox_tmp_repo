@@ -18,15 +18,15 @@ class JoyDriverNode : public rclcpp::Node {
 
     // Create subscription to the /joy topic
     joy_subscription_ = this->create_subscription<sensor_msgs::msg::Joy>(
-        "joy", reliable_qos, std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
+        "/joy", reliable_qos, std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
 
     // Create publisher for the /cmd_vel topic
-    cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", reliable_qos);
+    cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", reliable_qos);
 
     brake_client_ = this->create_client<std_srvs::srv::SetBool>("/brake");
     
 
-    cmd_dpad_publisher_ = this->create_publisher<custom_interfaces::msg::CmdDpad>("cmd_dpad", 10);
+    cmd_dpad_publisher_ = this->create_publisher<custom_interfaces::msg::CmdDpad>("/cmd_dpad", 10);
 
     RCLCPP_INFO(this->get_logger(), "Joy driver node started.");
   }
