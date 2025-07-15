@@ -1,28 +1,21 @@
+from time import sleep
+
 import rclpy
+from gpiozero import Motor
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 
-from gpiozero import Motor
-from time import sleep
 
 class LiftingMotorNode(Node):
-    
+
     def __init__(self):
-        super().__init__('lifting_motor_node')
-        self.subscription = self.create_subscription(
-            Joy,
-            '/joy',
-            self.joy_callback,
-            3
-        )
+        super().__init__("lifting_motor_node")
+        self.subscription = self.create_subscription(Joy, "/joy", self.joy_callback, 3)
         self.subscription
-    
 
     def joy_callback(self, msg):
         motor = Motor(forward=17, backward=27, enable=18)
         motor.forward(speed=msg)
-
-
 
 
 def main(args=None):
@@ -35,6 +28,6 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     rclpy.init()
     main()
