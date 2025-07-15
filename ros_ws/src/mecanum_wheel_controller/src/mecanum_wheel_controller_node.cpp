@@ -6,6 +6,7 @@
 #include <std_srvs/srv/set_bool.hpp>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/qos.hpp>
 #include <string>
 #include <vector>
 
@@ -128,8 +129,11 @@ class MecanumWheelControllerNode : public rclcpp::Node {
       return;
     }
 
+
+    
     cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>(
-        "/cmd_vel", 10,
+        "/cmd_vel", 
+        reliable_qos,
         std::bind(&MecanumWheelControllerNode::cmd_vel_callback, this, std::placeholders::_1));
 
     brake_service_ = this->create_service<std_srvs::srv::SetBool>(
@@ -296,6 +300,10 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   int cmd_vel_timeout_ms_;
 
   rclcpp::TimerBase::SharedPtr timer_;
+
+  const rclcpp::QoS reliable_qos = rclcpp::QoS(1).reliable();
+  //const rclcpp::QoS best_effort_qos = rclcpp::QoS(1).best_effort();
+
 };
 
 
