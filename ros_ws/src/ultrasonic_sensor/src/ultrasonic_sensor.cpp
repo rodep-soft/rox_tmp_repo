@@ -194,7 +194,7 @@ class UltrasonicSensorNode : public rclcpp::Node {
     }
 
     // publisherの作成
-    publisher_ = this->create_publisher<sensor_msgs::msg::Range>("ultrasonic_sensor_msg", 10);
+    publisher_ = this->create_publisher<sensor_msgs::msg::Range>("/distance", 10);
 
     // タイマーの作成
     timer_ = this->create_wall_timer(std::chrono::milliseconds(CYCLE_MS),
