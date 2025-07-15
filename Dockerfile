@@ -14,12 +14,16 @@ RUN apt-get update && apt-get upgrade -y && \
     lsof \
     python3 \
     python3-pip \
+    python3-gpiozero \
     libboost-system-dev \
     ros-humble-joy \
     ros-humble-demo-nodes-cpp \
     libgpiod-dev \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+RUN cargo install just
 
 # --- Install Python Packages ---
 RUN pip install smbus2
