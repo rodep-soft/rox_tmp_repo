@@ -112,11 +112,11 @@ dmypy.json
 
 # CMake
 CMakeLists.txt.user
-CMakeCache.txt
+# CMakeCache.txt
 CMakeFiles
 CMakeScripts
 Testing
-Makefile
+# Makefile
 cmake_install.cmake
 install_manifest.txt
 compile_commands.json

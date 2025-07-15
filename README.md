@@ -108,4 +108,4 @@ docker/
 
 - **メンテナー**: ROX Development Team
 - **ライセンス**: Apache-2.0
-- **ROS2バージョン**: Humble
+- **ROS2バージョン**: Humble/Jazzy
