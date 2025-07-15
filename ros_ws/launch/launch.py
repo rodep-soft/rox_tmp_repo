@@ -14,7 +14,7 @@ def generate_launch_description():
                 [
                     FindPackageShare("mecanum_wheel_controller"),
                     "config",
-                    "mechanum.yaml",
+                    "mecanum.yaml",
                 ]
             ),
             description="Path to the configuration file.",

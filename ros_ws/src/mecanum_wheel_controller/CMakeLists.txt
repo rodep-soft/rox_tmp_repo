@@ -37,9 +37,9 @@ install(TARGETS mecanum_wheel_controller_node
 )
 
 # Install the config file
-#install(DIRECTORY config
-#  DESTINATION share/${PROJECT_NAME}
-#)
+install(DIRECTORY config
+  DESTINATION share/${PROJECT_NAME}
+)
 
 # Configure linting and testing
 if(BUILD_TESTING)
