@@ -1,4 +1,3 @@
-# Justfile: modern Makefile replacement
 
 # 環境変数（オプション。使いやすくする）
 set dotenv-load := false
