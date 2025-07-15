@@ -35,3 +35,5 @@ git:
 github:
 	xdg-open $(GITHUB_LINK) 2>/dev/null || open $(GITHUB_LINK) || start $(GITHUB_LINK)
 
+update:
+	apt update && apt upgrade -y
