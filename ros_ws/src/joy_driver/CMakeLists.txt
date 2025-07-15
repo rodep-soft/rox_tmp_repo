@@ -13,7 +13,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(custom_interfaces REQUIRED)
 find_package(std_srvs REQUIRED)
-
+find_package(std_msgs REQUIRED)
 
 # Add the executable
 add_executable(joy_driver_node src/joy_driver_node.cpp)
@@ -25,6 +25,7 @@ target_compile_features(joy_driver_node PUBLIC cxx_std_17)
 ament_target_dependencies(joy_driver_node
   rclcpp
   sensor_msgs
+  std_msgs
   geometry_msgs
   custom_interfaces
   std_srvs

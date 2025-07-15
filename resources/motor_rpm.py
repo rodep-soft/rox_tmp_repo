@@ -1,5 +1,6 @@
-from gpiozero import Motor
 from time import sleep
+
+from gpiozero import Motor
 
 # Use pins 17 for forward, 27 for backward, and 18 for PWM enable
 motor = Motor(forward=17, backward=27, enable=18)
