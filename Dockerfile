@@ -29,6 +29,7 @@ RUN cargo install just
 
 ENV CCACHE_DIR=/root/.ccache
 ENV PATH="/usr/lib/ccache:$PATH"
+ENV CCACHE_MAXSIZE=30G
 
 
 # --- Install Python Packages ---
