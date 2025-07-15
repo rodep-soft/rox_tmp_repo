@@ -12,6 +12,7 @@ RUN apt-get update && apt-get upgrade -y && \
     tmux \
     fish \
     lsof \
+    ccache \
     python3 \
     python3-pip \
     python3-gpiozero \
@@ -25,6 +26,11 @@ RUN apt-get update && apt-get upgrade -y && \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo install just
+
+ENV CCACHE_DIR=/root/.ccache
+ENV PATH="/usr/lib/ccache:$PATH"
+ENV CCACHE_MAXSIZE=30G
+
 
 # --- Install Python Packages ---
 RUN pip install smbus2
