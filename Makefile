@@ -37,3 +37,7 @@ github:
 
 update:
 	apt update && apt upgrade -y
+
+pyfmt:
+	black .
+	isort .

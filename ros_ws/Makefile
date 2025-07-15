@@ -23,6 +23,9 @@ launch:
 	$(make) source
 	ros2 launch launch/launch.py
 
+kill:
+	pkill -f ros2
+	pkill -f ros
 
 
 
