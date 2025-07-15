@@ -1,0 +1,29 @@
+
+default: build
+
+build:
+  colcon build
+  just source
+
+clean:
+  rm -rf log install build
+
+source:
+  source install/setup.bash
+
+ros:
+  source /opt/ros/humble/setup.bash
+
+fullbuild:
+  just clean
+  just build
+  just source
+
+launch:
+  just source
+  ros2 launch launch/launch.py
+
+kill:
+  pkill -f ros2
+  pkill -f ros
+
