@@ -26,7 +26,7 @@ add:
     git add .
 
 commit msg="Automated by script":
-    git commit -m {{msg}}
+    git commit -m "{{msg}}"
 
 push branch_name="develop":
     git push origin {{branch_name}}
