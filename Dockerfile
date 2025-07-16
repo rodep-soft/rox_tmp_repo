@@ -4,6 +4,7 @@ FROM ros:humble-ros-base
 # --- Install ROS 2 Packages and System Dependencies ---
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y \
+    gh \
     git \
     vim \
     less \
