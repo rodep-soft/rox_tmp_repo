@@ -3,52 +3,60 @@
 set dotenv-load := false
 set shell := ["bash", "-cu"]  # Fish対策にもなる
 
-# デフォルト（何も指定しなかったら `just up` を実行）
+# just up
 default:
     just up
 
-# Docker 操作
+# docker-compose立ち上げ&入る
 up container_name="ros2_rox_container":
     docker compose up -d
     docker exec -it {{container_name}} bash
 
+# docker-compose down
 down:
     docker compose down
 
+# docker-compose build
 build:
     docker compose build
 
+# docker-compose ps
 ps:
     docker compose ps
 
-# Git 操作
+# git add .
 add:
     git add .
 
+# just commit "messages"
 commit msg="Automated by script":
     git commit -m "{{msg}}"
 
+# just push "branch_name"
 push branch_name="develop":
     git push origin {{branch_name}}
 
+# just git "messages" "branch_name_to_push"
 git msg="Automated by script" branch_name="develop":
     just add
     just commit "{{msg}}"
     just push {{branch_name}}
 
+# just ss "service_name"
 ss service="docker":
     systemctl status {{service}}
 
+# check bluetooth
 blue:
     bluetoothctl
 
 
 
-# システムアップデート
+# system update
 update:
     sudo apt update && sudo apt upgrade -y
 
-# Pythonフォーマット
+# Python format
 pyfmt:
     black .
     isort .
