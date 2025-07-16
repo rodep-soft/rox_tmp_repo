@@ -31,10 +31,17 @@ commit msg="Automated by script":
 push branch_name="develop":
     git push origin {{branch_name}}
 
-git:
+git msg="Automated by script" branch_name="develop":
     just add
-    just commit
-    just push
+    just commit "{{msg}}"
+    just push {{branch_name}}
+
+ss service="docker":
+    systemctl status {{service}}
+
+blue:
+    bluetoothctl
+
 
 
 # システムアップデート
@@ -45,4 +52,12 @@ update:
 pyfmt:
     black .
     isort .
+
+# 補完をきかせるためのsetup
+setup:
+    just --completions fish > ~/.config/fish/completions/just.fish
+    just --completions bash > ~/.just-completion.bash
+    echo 'source ~/.just-completion.bash' >> ~/.bashrc
+    source ~/.bashrc
+
 
