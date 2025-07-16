@@ -8,9 +8,9 @@ default:
     just up
 
 # Docker 操作
-up:
+up container_name="ros2_rox_container":
     docker compose up -d
-    docker exec -it ros2_rox_container bash
+    docker exec -it {{container_name}} bash
 
 down:
     docker compose down
@@ -25,11 +25,11 @@ ps:
 add:
     git add .
 
-commit:
-    git commit -m "Automated by script"
+commit msg="Automated by script":
+    git commit -m {{msg}}
 
-push:
-    git push origin develop
+push branch_name="develop":
+    git push origin {{branch_name}}
 
 git:
     just add
