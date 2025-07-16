@@ -20,7 +20,7 @@ class ColorPublisher(Node):
         self.TCS34725 = TCS34725(1, 0x29)
         self.TCS34725.change_integration_time(integration_time)
         self.integration_gain_ = (256 - integration_time) * 1024.0
-        self.TCS34725.change_gain(0x03)  # Set gain to 16x
+        self.TCS34725.change_gain(0x03)  # Set gain to 60x
         self.TCS34725.enable()
         node_name = f"color_publisher_{tca9548_channel}"
         self.publisher_ = self.create_publisher(ColorRGBA, node_name, 10)
@@ -38,7 +38,7 @@ class ColorPublisher(Node):
         msg.b = b / self.integration_gain_  # Normalize to [0, 1]
         msg.a = c / self.integration_gain_  # Normalize to [0, 1]
         self.publisher_.publish(msg)
-        self.get_logger().debug(f"Publishing: R:{msg.r} G:{msg.g} B:{msg.b} C:{msg.a}")
+        self.get_logger().info(f"Publishing: R:{msg.r} G:{msg.g} B:{msg.b} C:{msg.a}")
 
     def __del__(self):
         self.TCS34725.disable()
@@ -55,6 +55,8 @@ class LineFollower(Node):
         )
         self.publisher_ = self.create_publisher(Twist, "cmd_vel", 10)
         self.timer = self.create_timer(0.1, self.publish_twist)
+        self.before_diff = 0.0
+        self.integral = 0.0
         self.get_logger().info("Line Follower Node has been started.")
 
     def color_callback_0(self, msg):
@@ -66,10 +68,28 @@ class LineFollower(Node):
     def publish_twist(self):
         twist = Twist()
         diff = self.color_0_.a - self.color_1_.a
-        twist.linear.x = 0.0
+        diff_pow = (diff ** 2) * (1 if diff > 0 else -1)
+        derivative = diff - self.before_diff
+        self.integral += diff
+        if abs(diff) < abs(self.before_diff):
+            derivative = 0.0
+
+        
+
+        power = -((60.0 * diff_pow) + (5.0 * derivative) + (0.8 * self.integral))
+        self.get_logger().info("Publishing Twist: power={}".format(power))
+
+        x_power = (0.10 - abs(power)) 
+        if x_power < 0.0:
+            x_power = 0.0
+        
+
+        twist.linear.x = x_power * 2.0
         twist.linear.y = 0.0
-        twist.angular.z = diff * 10.0
+        twist.angular.z = power * 5.0
+        #(80.0 * diff_pow) + (1.0 * derivative) + (0.8 * self.integral)
         self.publisher_.publish(twist)
+        self.before_diff = diff
 
 
 def main(args=None):
