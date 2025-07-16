@@ -56,6 +56,7 @@ class LineFollower(Node):
         self.publisher_ = self.create_publisher(Twist, "cmd_vel", 10)
         self.timer = self.create_timer(0.1, self.publish_twist)
         self.before_diff = 0.0
+        self.integral = 0.0
         self.get_logger().info("Line Follower Node has been started.")
 
     def color_callback_0(self, msg):
@@ -69,13 +70,16 @@ class LineFollower(Node):
         diff = self.color_0_.a - self.color_1_.a
         diff_pow = (diff ** 2) * (1 if diff > 0 else -1)
         derivative = diff - self.before_diff
+        self.integral += diff
         if abs(diff) < abs(self.before_diff):
             derivative = 0.0
 
-        twist.linear.x = 0.00
-        twist.linear.y = 0.0
-        twist.angular.z = (0.0 * diff) + (100.0 * diff_pow) + (0.0 * derivative)
-        #(1.0 * diff) + (1000.0 * diff_pow) +  
+        power = -((80.0 * diff_pow) + (3.0 * derivative) + (0.8 * self.integral))
+
+        twist.linear.x = 0.03
+        twist.linear.y = power * 0.3
+        twist.angular.z = power * 1.2
+        #(80.0 * diff_pow) + (1.0 * derivative) + (0.8 * self.integral)
         self.publisher_.publish(twist)
         self.before_diff = diff
 
