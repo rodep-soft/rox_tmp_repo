@@ -87,6 +87,7 @@ class MotorController {
 
     data.push_back(static_cast<uint8_t>(motor_id & 0xFF));
     data.push_back(0x64);
+    // bit_castは本当にいるのか？
     uint16_t val_u16 = std::bit_cast<uint16_t>(rpm);  // 符号付きを符号なしに変換
 
     data.push_back(static_cast<uint8_t>((val_u16 >> 8) & 0xFF));  // Highバイト
@@ -95,6 +96,7 @@ class MotorController {
     data.push_back(0x00);
     data.push_back(0x00);
     data.push_back(0x00);
+    // ブレーキを設定
     if (brake) {
       data.push_back(0xFF);
     } else {
@@ -109,6 +111,43 @@ class MotorController {
       RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(3));
+
+    // 読み取り
+    if (auto response_opt = read_response()) {
+       const auto& response = *response_opt;
+       uint8_t id = response[0];
+       uint8_t mode = response[1];
+       int16_t current = static_cast<int16_t>((response[2] << 8) | response[3]);
+       int16_t speed = static_cast<int16_t>((response[4] << 8) | response[5]);
+       uint16_t position = static_cast<uint16_t>((response[6] << 8) | response[7]);
+       uint8_t error = response[8];
+
+       RCLCPP_INFO(logger_, "Motor Speed: %d", speed);
+    } else {
+      RCLCPP_WARN(logger_,  "No valid response");
+    }
+  }
+
+  // モーターからのフィードバックを読み取る関数
+  std::optional<std::vector<uint8_t>> read_response() {
+    // Read response from the motor controller
+    // 10バイトの応答を読み取る
+    std::vector<uint8_t> response(10);
+    try {
+      boost::asio::read(serial_port_, boost::asio::buffer(response, response.size()));
+
+      uint8_t crc = calc_crc8_maxim(std::vector<uint8_t>(response.begin(), reaponse.begin() + 9));
+      if (crc != response[9]) {
+        RCLCPP_ERROR(logger_, "CRC mismatch");
+        return std::nullopt;
+      } 
+
+      return response;
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(logger_, "Failed to read from serial port: %s", e.what());
+      return std::nullopt;
+    }
+
   }
 
  private:
