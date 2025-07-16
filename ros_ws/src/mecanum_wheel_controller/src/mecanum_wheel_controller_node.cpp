@@ -235,10 +235,10 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // const double wz = wz_.load();
 
     // 感度調整のためハイパボリックタンジェントを使用
-    const double gain = 5.0;  // 必要に応じて調整: 高くするとより敏感になる
-    const double vx = std::tanh(gain * vx_.load());
-    const double vy = std::tanh(gain * vy_.load());
-    const double wz = std::tanh(gain * wz_.load());
+    const double gain = 1.0;  // 必要に応じて調整: 高くするとより敏感になる
+    const double vx = gain * vx_.load();
+    const double vy = gain * vy_.load();
+    const double wz = gain * wz_.load();
 
     const double lxy_sum = wheel_base_x_ + wheel_base_y_;
     const double rad_to_rpm = 60.0 / (2.0 * M_PI);
@@ -256,6 +256,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
     // RCLCPP_INFO(this->get_logger(), "RPM values: FL=%d, FR=%d, RL=%d, RR=%d", rpm_front_left,
                 // rpm_front_right, rpm_rear_left, rpm_rear_right);
+    
 
     motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left, static_cast<bool>(this->brake_));
     motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right, static_cast<bool>(this->brake_));

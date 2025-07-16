@@ -74,11 +74,19 @@ class LineFollower(Node):
         if abs(diff) < abs(self.before_diff):
             derivative = 0.0
 
-        power = -((80.0 * diff_pow) + (3.0 * derivative) + (0.8 * self.integral))
+        
 
-        twist.linear.x = 0.03
-        twist.linear.y = power * 0.3
-        twist.angular.z = power * 1.2
+        power = -((60.0 * diff_pow) + (5.0 * derivative) + (0.8 * self.integral))
+        self.get_logger().info("Publishing Twist: power={}".format(power))
+
+        x_power = (0.10 - abs(power)) 
+        if x_power < 0.0:
+            x_power = 0.0
+        
+
+        twist.linear.x = x_power * 2.0
+        twist.linear.y = 0.0
+        twist.angular.z = power * 5.0
         #(80.0 * diff_pow) + (1.0 * derivative) + (0.8 * self.integral)
         self.publisher_.publish(twist)
         self.before_diff = diff
