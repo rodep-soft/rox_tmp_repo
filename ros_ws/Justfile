@@ -12,6 +12,12 @@ clean:
 source:
     source install/setup.bash
 
+search:
+    ros2 pkg executables | fzf
+
+find:
+    just search
+
 ros:
     source /opt/ros/humble/setup.bash
 
@@ -29,6 +35,18 @@ joylaunch:
     ros2 run joy joy_node &
     ros2 run joy_driver joy_driver_node &
 
+mecanum:
+    just joylaunch
+    ros2 run mecanum_wheel_controller mecanum_wheel_controller_node 
+
 kill:
     pkill -f ros2
     pkill -f ros
+
+# 補完をきかせるためのsetup
+setup:
+    just --completions fish > ~/.config/fish/completions/just.fish
+    just --completions bash > ~/.just-completion.bash
+    echo 'source ~/.just-completion.bash' >> ~/.bashrc
+    source ~/.bashrc
+

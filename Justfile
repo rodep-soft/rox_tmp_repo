@@ -12,6 +12,10 @@ up container_name="ros2_rox_container":
     docker compose up -d
     docker exec -it {{container_name}} bash
 
+# docker-compose stop
+stop:
+    docker compose stop
+
 # docker-compose down
 down:
     docker compose down
