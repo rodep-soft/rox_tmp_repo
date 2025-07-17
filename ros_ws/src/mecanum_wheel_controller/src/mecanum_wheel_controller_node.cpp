@@ -12,7 +12,7 @@
 #include <custom_interfaces/msg/motor_feedback.hpp>
 #include <optional>
 #include <array>
-#include <template>
+// #include <template>
 
 // Deprecated function for CRC8 calculation
 // // A simple CRC8 calculator for motor communication
@@ -74,7 +74,7 @@ uint8_t calc_crc8_maxim_for_array(const std::array<uint8_t, 9>& data) {
 }
 
 template<typename Container>
-uint8_t calc_crc8_maxim_temp(cosnt Contaienr& data) {
+uint8_t calc_crc8_maxim_temp(const Container& data) {
   uint8_t crc = 0x00;
   const uint8_t reflected_polynomial = 0x8C;
 
@@ -141,7 +141,7 @@ class MotorController {
     // 一旦廃止
     // std::this_thread::sleep_for(std::chrono::milliseconds(3));
 
-        // 読み取り
+      // 読み取り
     if (auto response_opt = read_response()) {
        const auto& response = *response_opt;
       //  uint8_t id = response[0];
@@ -163,7 +163,7 @@ class MotorController {
 
   }
 
-  int16_t send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false) {
+  void send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false) {
 
 
     std::vector<uint8_t> data;
@@ -195,6 +195,8 @@ class MotorController {
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(3));
 
+    /*
+
     // 読み取り
     if (auto response_opt = read_response()) {
        const auto& response = *response_opt;
@@ -213,6 +215,9 @@ class MotorController {
     // else {
     //   RCLCPP_WARN(logger_,  "No valid response");
     // }
+
+
+    */
   }
 
   // モーターからのフィードバックを読み取る関数
@@ -395,23 +400,29 @@ class MecanumWheelControllerNode : public rclcpp::Node {
                 // rpm_front_right, rpm_rear_left, rpm_rear_right);
     
 
-    auto result1 = motor_controller_.send_velocity_command_with_array(motor_ids_[0], rpm_front_left, static_cast<bool>(this->brake_));
-    auto result2 = motor_controller_.send_velocity_command_with_array(motor_ids_[1], rpm_front_right, static_cast<bool>(this->brake_));
-    auto result3 = motor_controller_.send_velocity_command_with_array(motor_ids_[2], rpm_rear_left, static_cast<bool>(this->brake_));
-    auto result4 = motor_controller_.send_velocity_command_with_array(motor_ids_[3], rpm_rear_right, static_cast<bool>(this->brake_));
+    motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left, static_cast<bool>(this->brake_));
+    motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right, static_cast<bool>(this->brake_));
+    motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left, static_cast<bool>(this->brake_));
+    motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right, static_cast<bool>(this->brake_));
+    
 
-    motor1_speed = result1.value_or(-9999);
-    motor2_speed = result2.value_or(-9999);
-    motor3_speed = result3.value_or(-9999);
-    motor4_speed = result4.value_or(-9999);
+    // auto result1 = motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left, static_cast<bool>(this->brake_));
+    // auto result2 = motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right, static_cast<bool>(this->brake_));
+    // auto result3 = motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left, static_cast<bool>(this->brake_));
+    // auto result4 = motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right, static_cast<bool>(this->brake_));
 
-    // Publish motor speeds
-    auto motor_feedback_msg = custom_interfaces::msg::MotorFeedback();
-    motor_feedback_msg.motor1 = motor1_speed;
-    motor_feedback_msg.motor2 = motor2_speed;
-    motor_feedback_msg.motor3 = motor3_speed;
-    motor_feedback_msg.motor4 = motor4_speed;
-    motor_speed_publisher_->publish(motor_feedback_msg);
+    // motor1_speed = result1.value_or(-9999);
+    // motor2_speed = result2.value_or(-9999);
+    // motor3_speed = result3.value_or(-9999);
+    // motor4_speed = result4.value_or(-9999);
+
+    // // Publish motor speeds
+    // auto motor_feedback_msg = custom_interfaces::msg::MotorFeedback();
+    // motor_feedback_msg.motor1 = motor1_speed;
+    // motor_feedback_msg.motor2 = motor2_speed;
+    // motor_feedback_msg.motor3 = motor3_speed;
+    // motor_feedback_msg.motor4 = motor4_speed;
+    // motor_speed_publisher_->publish(motor_feedback_msg);
   }
 
   void stop_all_motors() {
