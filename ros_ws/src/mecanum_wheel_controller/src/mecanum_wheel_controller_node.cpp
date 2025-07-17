@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 #include <custom_interfaces/msg/motor_feedback.hpp>
+#include <optional>
+#include <array>
 
 // Deprecated function for CRC8 calculation
 // // A simple CRC8 calculator for motor communication
@@ -52,6 +54,24 @@ uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data) {
   return crc;
 }
 
+uint8_t calc_crc8_maxim_for_array(const std::array<uint8_t, 9>& data) {
+  uint8_t crc = 0x00;
+  const uint8_t reflected_polynomial = 0x8C;
+
+  for (size_t i = 0; i < data.size(); i++) {
+    crc ^= data[i];
+
+    for (uint8_t bit = 0; bit < 8; bit++) {
+      if (crc & 0x01) {
+        crc = (crc >> 1) ^ reflected_polynomial;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+  return crc;
+}
+
 class MotorController {
  public:
   MotorController(rclcpp::Logger logger) : serial_port_(io_context_), logger_(logger) {}
@@ -74,15 +94,56 @@ class MotorController {
     return true;
   }
 
-  int32_t send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false) {
-    // std::vector<uint8_t> command_data = {
-    //   motor_id,
-    //   0x64, // Command for velocity control
-    //   static_cast<uint8_t>((rpm >> 8) & 0xFF), // High byte of RPM
-    //   static_cast<uint8_t>(rpm & 0xFF),        // Low byte of RPM
-    //   0x00, 0x00, 0x00, 0x00, 0x00 // Reserved bytes
-    // };
-    // command_data.push_back(calc_crc8_maxim(command_data));
+  std::optional<int16_t> send_velocity_command_with_array(uint8_t motor_id, int16_t rpm, bool brake = false) {
+    std::array<uint8_t, 10> data;
+    data[0] = static_cast<uint8_t>(motor_id & 0xFF);
+    data[1] = 0x64;
+    // uint16_t val_u16 = std::bit_cast<uint16_t>(rpm);
+    uint16_t val_u16 = static_cast<uint16_t>(rpm);
+    data[2] = static_cast<uint8_t>((val_u16 >> 8) & 0xFF);
+    data[3] = static_cast<uint8_t>((val_u16) & 0xFF);
+    data[4] = 0x00;
+    data[5] = 0x00;
+    data[6] = 0x00;
+    data[7] = brake ? 0xFF : 0x00;
+    data[8] = 0x00;
+    data[9] = calc_crc8_maxim(std::vector<uint8_t>(data.begin(), data.begin() + 9));
+
+    
+
+    try {
+      boost::asio::write(serial_port_, boost::asio::buffer(data, data.size()));
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
+    }
+
+    // 一旦廃止
+    // std::this_thread::sleep_for(std::chrono::milliseconds(3));
+
+        // 読み取り
+    if (auto response_opt = read_response()) {
+       const auto& response = *response_opt;
+      //  uint8_t id = response[0];
+      //  uint8_t mode = response[1];
+      //  int16_t current = static_cast<int16_t>((response[2] << 8) | response[3]);
+      int16_t speed = static_cast<int16_t>((response[4] << 8) | response[5]);
+      //  uint16_t position = static_cast<uint16_t>((response[6] << 8) | response[7]);
+      //  uint8_t error = response[8];
+
+      //  RCLCPP_INFO(logger_, "Motor Speed: %d", speed);
+      return speed;
+    } else {
+      return std::nullopt; //応答がない場合
+    }
+    // else {
+    //   RCLCPP_WARN(logger_,  "No valid response");
+    // }
+
+
+  }
+
+  int16_t send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false) {
+
 
     std::vector<uint8_t> data;
 
@@ -125,7 +186,9 @@ class MotorController {
 
       //  RCLCPP_INFO(logger_, "Motor Speed: %d", speed);
       return speed;
-    } 
+    }  else {
+      return -1;
+    }
     // else {
     //   RCLCPP_WARN(logger_,  "No valid response");
     // }
@@ -212,11 +275,11 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   }
 
  private:
-  int32_t motor1_speed;
-  int32_t motor2_speed;
-  int32_t motor3_speed;
-  int32_t motor4_speed;
 
+  int16_t motor1_speed;
+  int16_t motor2_speed;
+  int16_t motor3_speed;
+  int16_t motor4_speed;
 
   void declare_parameters() {
     this->declare_parameter<double>("wheel_radius", 0.05);
@@ -311,10 +374,15 @@ class MecanumWheelControllerNode : public rclcpp::Node {
                 // rpm_front_right, rpm_rear_left, rpm_rear_right);
     
 
-    motor1_speed = motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left, static_cast<bool>(this->brake_));
-    motor2_speed = motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right, static_cast<bool>(this->brake_));
-    motor3_speed = motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left, static_cast<bool>(this->brake_));
-    motor4_speed = motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right, static_cast<bool>(this->brake_));
+    auto result1 = motor_controller_.send_velocity_command_with_array(motor_ids_[0], rpm_front_left, static_cast<bool>(this->brake_));
+    auto result2 = motor_controller_.send_velocity_command_with_array(motor_ids_[1], rpm_front_right, static_cast<bool>(this->brake_));
+    auto result3 = motor_controller_.send_velocity_command_with_array(motor_ids_[2], rpm_rear_left, static_cast<bool>(this->brake_));
+    auto result4 = motor_controller_.send_velocity_command_with_array(motor_ids_[3], rpm_rear_right, static_cast<bool>(this->brake_));
+
+    motor1_speed = result1.value_or(-9999);
+    motor2_speed = result2.value_or(-9999);
+    motor3_speed = result3.value_or(-9999);
+    motor4_speed = result4.value_or(-9999);
 
     // Publish motor speeds
     auto motor_feedback_msg = custom_interfaces::msg::MotorFeedback();
