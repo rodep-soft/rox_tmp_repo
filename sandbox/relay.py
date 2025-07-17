@@ -3,7 +3,7 @@ from time import sleep
 
 RELAY_PIN = 9
 
-device = gpiozero.OutputDevice(RELAY_PIN, active_high=True, initial_value=False)
+device = OutputDevice(RELAY_PIN, active_high=True, initial_value=False)
 
 while True:
     device.off()
