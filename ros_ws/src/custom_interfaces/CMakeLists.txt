@@ -16,6 +16,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CmdDpad.msg"
   "msg/UpperMotor.msg"
+  "msg/MotorFeedback.msg"
 )
 
 if(BUILD_TESTING)

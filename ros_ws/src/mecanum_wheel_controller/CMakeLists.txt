@@ -13,6 +13,7 @@ find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system)
 find_package(std_srvs REQUIRED)
+find_package(custom_interfaces REQUIRED)
 
 # Add the executable
 add_executable(mecanum_wheel_controller_node src/mecanum_wheel_controller_node.cpp)
@@ -25,6 +26,7 @@ ament_target_dependencies(mecanum_wheel_controller_node
   rclcpp
   geometry_msgs
   std_srvs
+  custom_interfaces
 )
 
 target_link_libraries(mecanum_wheel_controller_node

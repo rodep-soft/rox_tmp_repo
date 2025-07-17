@@ -9,6 +9,7 @@
 #include <rclcpp/qos.hpp>
 #include <string>
 #include <vector>
+#include <custom_interfaces/msg/motor_feedback.hpp>
 
 // Deprecated function for CRC8 calculation
 // // A simple CRC8 calculator for motor communication
@@ -73,7 +74,7 @@ class MotorController {
     return true;
   }
 
-  void send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false) {
+  int32_t send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false) {
     // std::vector<uint8_t> command_data = {
     //   motor_id,
     //   0x64, // Command for velocity control
@@ -113,7 +114,7 @@ class MotorController {
     std::this_thread::sleep_for(std::chrono::milliseconds(3));
 
     // 読み取り
-    /*if (auto response_opt = read_response()) {
+    if (auto response_opt = read_response()) {
        const auto& response = *response_opt;
        uint8_t id = response[0];
        uint8_t mode = response[1];
@@ -122,10 +123,12 @@ class MotorController {
        uint16_t position = static_cast<uint16_t>((response[6] << 8) | response[7]);
        uint8_t error = response[8];
 
-       RCLCPP_INFO(logger_, "Motor Speed: %d", speed);
-    } else {
-      RCLCPP_WARN(logger_,  "No valid response");
-    }*/
+      //  RCLCPP_INFO(logger_, "Motor Speed: %d", speed);
+      return speed;
+    } 
+    // else {
+    //   RCLCPP_WARN(logger_,  "No valid response");
+    // }
   }
 
   // モーターからのフィードバックを読み取る関数
@@ -175,6 +178,9 @@ class MecanumWheelControllerNode : public rclcpp::Node {
         reliable_qos,
         std::bind(&MecanumWheelControllerNode::cmd_vel_callback, this, std::placeholders::_1));
 
+    motor_speed_publisher_ = this->create_publisher<custom_interfaces::msg::MotorFeedback>(
+        "/motor_feedback", reliable_qos);
+
     brake_service_ = this->create_service<std_srvs::srv::SetBool>(
         "/brake", std::bind(&MecanumWheelControllerNode::brake_service_callback, this,
                             std::placeholders::_1, std::placeholders::_2)
@@ -206,6 +212,12 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   }
 
  private:
+  int32_t motor1_speed;
+  int32_t motor2_speed;
+  int32_t motor3_speed;
+  int32_t motor4_speed;
+
+
   void declare_parameters() {
     this->declare_parameter<double>("wheel_radius", 0.05);
     this->declare_parameter<double>("wheel_base_x", 0.2);
@@ -299,11 +311,18 @@ class MecanumWheelControllerNode : public rclcpp::Node {
                 // rpm_front_right, rpm_rear_left, rpm_rear_right);
     
 
-    motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left, static_cast<bool>(this->brake_));
-    motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right, static_cast<bool>(this->brake_));
-    motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left, static_cast<bool>(this->brake_));
-    motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right, static_cast<bool>(this->brake_));
+    motor1_speed = motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left, static_cast<bool>(this->brake_));
+    motor2_speed = motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right, static_cast<bool>(this->brake_));
+    motor3_speed = motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left, static_cast<bool>(this->brake_));
+    motor4_speed = motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right, static_cast<bool>(this->brake_));
 
+    // Publish motor speeds
+    auto motor_feedback_msg = custom_interfaces::msg::MotorFeedback();
+    motor_feedback_msg.motor1 = motor1_speed;
+    motor_feedback_msg.motor2 = motor2_speed;
+    motor_feedback_msg.motor3 = motor3_speed;
+    motor_feedback_msg.motor4 = motor4_speed;
+    motor_speed_publisher_->publish(motor_feedback_msg);
   }
 
   void stop_all_motors() {
@@ -314,6 +333,8 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
   // ROS 2 components
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
+
+  rclcpp::Publisher<custom_interfaces::msg::MotorFeedback>::SharedPtr motor_speed_publisher_;
 
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr brake_service_;
 
