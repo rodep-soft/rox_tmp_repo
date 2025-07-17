@@ -136,7 +136,7 @@ class MotorController {
     try {
       boost::asio::read(serial_port_, boost::asio::buffer(response, response.size()));
 
-      uint8_t crc = calc_crc8_maxim(std::vector<uint8_t>(response.begin(), reaponse.begin() + 9));
+      uint8_t crc = calc_crc8_maxim(std::vector<uint8_t>(response.begin(), response.begin() + 9));
       if (crc != response[9]) {
         RCLCPP_ERROR(logger_, "CRC mismatch");
         return std::nullopt;
