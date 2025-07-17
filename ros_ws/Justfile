@@ -42,3 +42,11 @@ mecanum:
 kill:
     pkill -f ros2
     pkill -f ros
+
+# 補完をきかせるためのsetup
+setup:
+    just --completions fish > ~/.config/fish/completions/just.fish
+    just --completions bash > ~/.just-completion.bash
+    echo 'source ~/.just-completion.bash' >> ~/.bashrc
+    source ~/.bashrc
+
