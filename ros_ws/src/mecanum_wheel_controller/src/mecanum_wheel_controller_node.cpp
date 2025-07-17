@@ -12,6 +12,7 @@
 #include <custom_interfaces/msg/motor_feedback.hpp>
 #include <optional>
 #include <array>
+#include <template>
 
 // Deprecated function for CRC8 calculation
 // // A simple CRC8 calculator for motor communication
@@ -69,6 +70,26 @@ uint8_t calc_crc8_maxim_for_array(const std::array<uint8_t, 9>& data) {
       }
     }
   }
+  return crc;
+}
+
+template<typename Container>
+uint8_t calc_crc8_maxim_temp(cosnt Contaienr& data) {
+  uint8_t crc = 0x00;
+  const uint8_t reflected_polynomial = 0x8C;
+
+  for (const auto& byte : data) {
+    crc ^= byte;
+
+    for (uint8_t bit = 0; bit < 8; bit++) {
+      if (crc & 0x01) {
+        crc = (crc >> 1) ^ reflected_polynomial;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+
   return crc;
 }
 
