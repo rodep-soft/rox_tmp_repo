@@ -113,7 +113,7 @@ class MotorController {
     std::this_thread::sleep_for(std::chrono::milliseconds(3));
 
     // 読み取り
-    if (auto response_opt = read_response()) {
+    /*if (auto response_opt = read_response()) {
        const auto& response = *response_opt;
        uint8_t id = response[0];
        uint8_t mode = response[1];
@@ -125,7 +125,7 @@ class MotorController {
        RCLCPP_INFO(logger_, "Motor Speed: %d", speed);
     } else {
       RCLCPP_WARN(logger_,  "No valid response");
-    }
+    }*/
   }
 
   // モーターからのフィードバックを読み取る関数
@@ -274,10 +274,12 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // const double wz = wz_.load();
 
     // 感度調整のためハイパボリックタンジェントを使用
-    const double gain = 1.0;  // 必要に応じて調整: 高くするとより敏感になる
-    const double vx = gain * vx_.load();
-    const double vy = gain * vy_.load();
-    const double wz = gain * wz_.load();
+    const double gain = 1.0;  // 必要に応じて調整: 高くする
+    const double linear_scale = 2.5;
+    const double angular_scale = 1.0;
+    const double vx = gain * std::tanh(vx_.load() / linear_scale);
+    const double vy = gain * std::tanh(vy_.load() / linear_scale);
+    const double wz = gain * std::tanh(wz_.load() / angular_scale);
 
     const double lxy_sum = wheel_base_x_ + wheel_base_y_;
     const double rad_to_rpm = 60.0 / (2.0 * M_PI);
