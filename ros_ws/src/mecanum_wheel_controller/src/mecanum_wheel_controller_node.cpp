@@ -376,8 +376,8 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
     // 感度調整のためハイパボリックタンジェントを使用
     const double gain = 1.0;  // 必要に応じて調整: 高くする
-    const double linear_scale = 2.5;
-    const double angular_scale = 1.0;
+    const double linear_scale = 1.0;
+    const double angular_scale = 0.5;
     const double vx = gain * std::tanh(vx_.load() / linear_scale);
     const double vy = gain * std::tanh(vy_.load() / linear_scale);
     const double wz = gain * std::tanh(wz_.load() / angular_scale);
