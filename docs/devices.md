@@ -6,12 +6,17 @@
 次に、ターミナル上で
 ```
 $ bluetoothctl
-> devices
+blue> devices
 Controller... MACADDR(コロンでつながってるやつ)
-> connect MACADDR
+blue> connect MACADDR
 DualSense> exit
 ```
 この時、DualSense>となっていれば接続ok。  
+
+流石にないと思うが、Bluetoothが死んでるっぽいときは
+`sudo systemctl status bluetooth`でactiveになっていることを確認する.
+
+
 
 最後に、`ls /dev/input`でjs0, js1が存在することを確認。  
 /*注意*/ Dockerに入っている時もコンテナの中から必ず確認すること。
