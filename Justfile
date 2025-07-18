@@ -72,4 +72,5 @@ setup:
     echo 'source ~/.just-completion.bash' >> ~/.bashrc
     source ~/.bashrc
 
-
+cache:
+    ccache -s
