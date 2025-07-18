@@ -74,3 +74,6 @@ setup:
 
 cache:
     ccache -s
+
+jot:
+    @bash -c "set +u; mkdir -p ./docs/notes && today=\$\(date +%F\) && file=\"./docs/notes/\$$today.md\" && if [ ! -f \"\$$file\" ]; then echo \"# \$$today note\" > \"\$$file\"; echo \"\" >> \"\$$file\"; echo \"## What happened\" >> \"\$$file\"; echo \"- \" >> \"\$$file\"; echo \"\" >> \"\$$file\"; echo \"## Problem\" >> \"\$$file\"; echo \"- \" >> \"\$$file\"; echo \"\" >> \"\$$file\"; echo \"## Fix / Experiment\" >> \"\$$file\"; echo \"- \" >> \"\$$file\"; echo \"\" >> \"\$$file\"; echo \"Created: \$$file\"; else echo \"Already exists: \$$file\"; fi"
