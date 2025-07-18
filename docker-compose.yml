@@ -15,6 +15,7 @@ services:
     environment:
       - ROS_DOMAIN_ID=0
       - DEBIAN_FRONTEND=noninteractive
+      - ROS_DISCOVERY_SERVER=100.121.25.123:11811
     volumes:
       # Mount host ~/.ssh to the new user's home in container
       - ~/.ssh:/root/.ssh:ro # <--- REPLACE with your actual host username
