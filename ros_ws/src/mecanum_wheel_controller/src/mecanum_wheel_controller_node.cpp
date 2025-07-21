@@ -9,10 +9,6 @@
 #include <rclcpp/qos.hpp>
 #include <string>
 #include <vector>
-#include <custom_interfaces/msg/motor_feedback.hpp>
-#include <optional>
-#include <array>
-// #include <template>
 
 // Deprecated function for CRC8 calculation
 // // A simple CRC8 calculator for motor communication
@@ -55,44 +51,6 @@ uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data) {
   return crc;
 }
 
-uint8_t calc_crc8_maxim_for_array(const std::array<uint8_t, 9>& data) {
-  uint8_t crc = 0x00;
-  const uint8_t reflected_polynomial = 0x8C;
-
-  for (size_t i = 0; i < data.size(); i++) {
-    crc ^= data[i];
-
-    for (uint8_t bit = 0; bit < 8; bit++) {
-      if (crc & 0x01) {
-        crc = (crc >> 1) ^ reflected_polynomial;
-      } else {
-        crc >>= 1;
-      }
-    }
-  }
-  return crc;
-}
-
-template<typename Container>
-uint8_t calc_crc8_maxim_temp(const Container& data) {
-  uint8_t crc = 0x00;
-  const uint8_t reflected_polynomial = 0x8C;
-
-  for (const auto& byte : data) {
-    crc ^= byte;
-
-    for (uint8_t bit = 0; bit < 8; bit++) {
-      if (crc & 0x01) {
-        crc = (crc >> 1) ^ reflected_polynomial;
-      } else {
-        crc >>= 1;
-      }
-    }
-  }
-
-  return crc;
-}
-
 class MotorController {
  public:
   MotorController(rclcpp::Logger logger) : serial_port_(io_context_), logger_(logger) {}
@@ -115,62 +73,20 @@ class MotorController {
     return true;
   }
 
-  std::optional<int16_t> send_velocity_command_with_array(uint8_t motor_id, int16_t rpm, bool brake = false) {
-    std::array<uint8_t, 10> data;
-    data[0] = static_cast<uint8_t>(motor_id & 0xFF);
-    data[1] = 0x64;
-    // uint16_t val_u16 = std::bit_cast<uint16_t>(rpm);
-    uint16_t val_u16 = static_cast<uint16_t>(rpm);
-    data[2] = static_cast<uint8_t>((val_u16 >> 8) & 0xFF);
-    data[3] = static_cast<uint8_t>((val_u16) & 0xFF);
-    data[4] = 0x00;
-    data[5] = 0x00;
-    data[6] = 0x00;
-    data[7] = brake ? 0xFF : 0x00;
-    data[8] = 0x00;
-    data[9] = calc_crc8_maxim(std::vector<uint8_t>(data.begin(), data.begin() + 9));
-
-    
-
-    try {
-      boost::asio::write(serial_port_, boost::asio::buffer(data, data.size()));
-    } catch (const std::exception& e) {
-      RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
-    }
-
-    // 一旦廃止
-    // std::this_thread::sleep_for(std::chrono::milliseconds(3));
-
-      // 読み取り
-    if (auto response_opt = read_response()) {
-       const auto& response = *response_opt;
-      //  uint8_t id = response[0];
-      //  uint8_t mode = response[1];
-      //  int16_t current = static_cast<int16_t>((response[2] << 8) | response[3]);
-      int16_t speed = static_cast<int16_t>((response[4] << 8) | response[5]);
-      //  uint16_t position = static_cast<uint16_t>((response[6] << 8) | response[7]);
-      //  uint8_t error = response[8];
-
-      //  RCLCPP_INFO(logger_, "Motor Speed: %d", speed);
-      return speed;
-    } else {
-      return std::nullopt; //応答がない場合
-    }
-    // else {
-    //   RCLCPP_WARN(logger_,  "No valid response");
-    // }
-
-
-  }
-
   void send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false) {
-
+    // std::vector<uint8_t> command_data = {
+    //   motor_id,
+    //   0x64, // Command for velocity control
+    //   static_cast<uint8_t>((rpm >> 8) & 0xFF), // High byte of RPM
+    //   static_cast<uint8_t>(rpm & 0xFF),        // Low byte of RPM
+    //   0x00, 0x00, 0x00, 0x00, 0x00 // Reserved bytes
+    // };
+    // command_data.push_back(calc_crc8_maxim(command_data));
 
     std::vector<uint8_t> data;
 
     data.push_back(static_cast<uint8_t>(motor_id & 0xFF));
     data.push_back(0x64);
-    // bit_castは本当にいるのか？
     uint16_t val_u16 = std::bit_cast<uint16_t>(rpm);  // 符号付きを符号なしに変換
 
     data.push_back(static_cast<uint8_t>((val_u16 >> 8) & 0xFF));  // Highバイト
@@ -179,7 +95,6 @@ class MotorController {
     data.push_back(0x00);
     data.push_back(0x00);
     data.push_back(0x00);
-    // ブレーキを設定
     if (brake) {
       data.push_back(0xFF);
     } else {
@@ -194,52 +109,6 @@ class MotorController {
       RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(3));
-
-    /*
-
-    // 読み取り
-    if (auto response_opt = read_response()) {
-       const auto& response = *response_opt;
-       uint8_t id = response[0];
-       uint8_t mode = response[1];
-       int16_t current = static_cast<int16_t>((response[2] << 8) | response[3]);
-       int16_t speed = static_cast<int16_t>((response[4] << 8) | response[5]);
-       uint16_t position = static_cast<uint16_t>((response[6] << 8) | response[7]);
-       uint8_t error = response[8];
-
-      //  RCLCPP_INFO(logger_, "Motor Speed: %d", speed);
-      return speed;
-    }  else {
-      return -1;
-    }
-    // else {
-    //   RCLCPP_WARN(logger_,  "No valid response");
-    // }
-
-
-    */
-  }
-
-  // モーターからのフィードバックを読み取る関数
-  std::optional<std::vector<uint8_t>> read_response() {
-    // Read response from the motor controller
-    // 10バイトの応答を読み取る
-    std::vector<uint8_t> response(10);
-    try {
-      boost::asio::read(serial_port_, boost::asio::buffer(response, response.size()));
-
-      uint8_t crc = calc_crc8_maxim(std::vector<uint8_t>(response.begin(), response.begin() + 9));
-      if (crc != response[9]) {
-        RCLCPP_ERROR(logger_, "CRC mismatch");
-        return std::nullopt;
-      } 
-
-      return response;
-    } catch (const std::exception& e) {
-      RCLCPP_ERROR(logger_, "Failed to read from serial port: %s", e.what());
-      return std::nullopt;
-    }
-
   }
 
  private:
@@ -266,9 +135,6 @@ class MecanumWheelControllerNode : public rclcpp::Node {
         "/cmd_vel", 
         reliable_qos,
         std::bind(&MecanumWheelControllerNode::cmd_vel_callback, this, std::placeholders::_1));
-
-    motor_speed_publisher_ = this->create_publisher<custom_interfaces::msg::MotorFeedback>(
-        "/motor_feedback", reliable_qos);
 
     brake_service_ = this->create_service<std_srvs::srv::SetBool>(
         "/brake", std::bind(&MecanumWheelControllerNode::brake_service_callback, this,
@@ -301,12 +167,6 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   }
 
  private:
-
-  int16_t motor1_speed;
-  int16_t motor2_speed;
-  int16_t motor3_speed;
-  int16_t motor4_speed;
-
   void declare_parameters() {
     this->declare_parameter<double>("wheel_radius", 0.05);
     this->declare_parameter<double>("wheel_base_x", 0.2);
@@ -375,12 +235,10 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // const double wz = wz_.load();
 
     // 感度調整のためハイパボリックタンジェントを使用
-    const double gain = 1.0;  // 必要に応じて調整: 高くする
-    const double linear_scale = 1.0;
-    const double angular_scale = 0.5;
-    const double vx = gain * std::tanh(vx_.load() / linear_scale);
-    const double vy = gain * std::tanh(vy_.load() / linear_scale);
-    const double wz = gain * std::tanh(wz_.load() / angular_scale);
+    const double gain = 1.0;  // 必要に応じて調整: 高くするとより敏感になる
+    const double vx = gain * vx_.load();
+    const double vy = gain * vy_.load();
+    const double wz = gain * wz_.load();
 
     const double lxy_sum = wheel_base_x_ + wheel_base_y_;
     const double rad_to_rpm = 60.0 / (2.0 * M_PI);
@@ -404,25 +262,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right, static_cast<bool>(this->brake_));
     motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left, static_cast<bool>(this->brake_));
     motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right, static_cast<bool>(this->brake_));
-    
 
-    // auto result1 = motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left, static_cast<bool>(this->brake_));
-    // auto result2 = motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right, static_cast<bool>(this->brake_));
-    // auto result3 = motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left, static_cast<bool>(this->brake_));
-    // auto result4 = motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right, static_cast<bool>(this->brake_));
-
-    // motor1_speed = result1.value_or(-9999);
-    // motor2_speed = result2.value_or(-9999);
-    // motor3_speed = result3.value_or(-9999);
-    // motor4_speed = result4.value_or(-9999);
-
-    // // Publish motor speeds
-    // auto motor_feedback_msg = custom_interfaces::msg::MotorFeedback();
-    // motor_feedback_msg.motor1 = motor1_speed;
-    // motor_feedback_msg.motor2 = motor2_speed;
-    // motor_feedback_msg.motor3 = motor3_speed;
-    // motor_feedback_msg.motor4 = motor4_speed;
-    // motor_speed_publisher_->publish(motor_feedback_msg);
   }
 
   void stop_all_motors() {
@@ -433,8 +273,6 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
   // ROS 2 components
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
-
-  rclcpp::Publisher<custom_interfaces::msg::MotorFeedback>::SharedPtr motor_speed_publisher_;
 
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr brake_service_;
 
