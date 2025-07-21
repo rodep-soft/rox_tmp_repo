@@ -25,7 +25,7 @@ class ColorPublisher(Node):
         node_name = f"color_publisher_{tca9548_channel}"
         self.publisher_ = self.create_publisher(ColorRGBA, node_name, 10)
 
-        timer_period = 0.1  # seconds
+        timer_period = 0.01  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
         self.get_logger().info("Color Publisher Node has been started.")
 
@@ -54,7 +54,7 @@ class LineFollower(Node):
             ColorRGBA, "color_publisher_1", self.color_callback_1, 10
         )
         self.publisher_ = self.create_publisher(Twist, "cmd_vel", 10)
-        self.timer = self.create_timer(0.1, self.publish_twist)
+        self.timer = self.create_timer(0.05, self.publish_twist)
         self.before_diff = 0.0
         self.integral = 0.0
         self.get_logger().info("Line Follower Node has been started.")
@@ -76,17 +76,17 @@ class LineFollower(Node):
 
         
 
-        power = -((60.0 * diff_pow) + (5.0 * derivative) + (0.8 * self.integral))
+        power = -((16.0 * diff) + (3.0 * derivative) + (0.8 * self.integral))
         self.get_logger().info("Publishing Twist: power={}".format(power))
 
-        x_power = (0.10 - abs(power)) 
+        x_power = 0.30 - (abs(power) * 0.5)
         if x_power < 0.0:
             x_power = 0.0
         
-
-        twist.linear.x = x_power * 2.0
-        twist.linear.y = 0.0
-        twist.angular.z = power * 5.0
+        #1.5 : 10
+        twist.linear.x = x_power
+        twist.linear.y = power * -1.0 * 0.2
+        twist.angular.z = power
         #(80.0 * diff_pow) + (1.0 * derivative) + (0.8 * self.integral)
         self.publisher_.publish(twist)
         self.before_diff = diff
