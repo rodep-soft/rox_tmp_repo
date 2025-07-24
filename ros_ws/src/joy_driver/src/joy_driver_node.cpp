@@ -80,13 +80,13 @@ class JoyDriverNode : public rclcpp::Node {
       return;
     }
 
-    if (Mode::STOP == mode_ && msg->buttons[4] == 1) {
+    if ((Mode::STOP == mode_ || Mode::DPAD == mode_) && msg->buttons[4] == 1) {
       mode_ = Mode::JOY;
       RCLCPP_INFO(this->get_logger(), "Mode: JOY");
-    } else if (Mode::JOY == mode_ && msg->buttons[5] == 1) {
+    } else if ((Mode::JOY == mode_ || Mode::DPAD == mode_) && msg->buttons[5] == 1) {
       mode_ = Mode::STOP;
       RCLCPP_INFO(this->get_logger(), "Mode: STOP");
-    } else if(Mode::DPAD == mode_ && msg->buttons[6] == 1){
+    } else if((Mode::JOY == mode_ || Mode::STOP == mode_) && msg->buttons[6] == 1){
       mode_ = Mode::DPAD;
       RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
     }
@@ -110,7 +110,6 @@ class JoyDriverNode : public rclcpp::Node {
       twist_msg.linear.y = (msg->buttons[14] - msg->buttons[13]) * linear_y_scale_ / 2.0;
       twist_msg.angular.z = 0.0;
     }
-
     // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
     // angular.z=%.2f",
     //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
@@ -127,7 +126,6 @@ class JoyDriverNode : public rclcpp::Node {
     auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
     upper_msg->drive = msg->buttons[1];
     upper_msg->stop = msg->buttons[2];
-
 
     //RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
     //            twist_msg.linear.x, twist_msg.linear.y, twist_msg.angular.z);
