@@ -128,6 +128,15 @@ class JoyDriverNode : public rclcpp::Node {
     upper_msg->drive = msg->buttons[1];
     upper_msg->stop = msg->buttons[2];
 
+    //押さないボタンが0.90以上の時にangular_axis_に値が取れるようにすることで
+    //挙動がおかしくならないようにした
+    if(msg->msg->axes[5] >= 0.90){
+    this->angular_axis_ =  (msg->axes[4]-1)/2.0;// L2の右旋回
+    } else if(msg->axes[4] >= 0.90){
+    this->angular_axis_ = -(msg->axes[5]-1)/2.0;// R2の左旋回
+    }
+
+
 
     //RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
     //            twist_msg.linear.x, twist_msg.linear.y, twist_msg.angular.z);
