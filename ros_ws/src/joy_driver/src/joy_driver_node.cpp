@@ -131,8 +131,8 @@ class JoyDriverNode : public rclcpp::Node {
 
 
 
-    //RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
-    //            twist_msg.linear.x, twist_msg.linear.y, twist_msg.angular.z);
+    RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
+               twist_msg.linear.x, twist_msg.linear.y, twist_msg.angular.z);
 
     upper_publisher_->publish(std::move(upper_msg));
     cmd_vel_publisher_->publish(std::move(twist_msg));
