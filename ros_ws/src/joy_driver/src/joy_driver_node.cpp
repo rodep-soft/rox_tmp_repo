@@ -132,7 +132,7 @@ class JoyDriverNode : public rclcpp::Node {
 
 
     RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
-               twist_msg.linear.x, twist_msg.linear.y, twist_msg.angular.z);
+               twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
 
     upper_publisher_->publish(std::move(upper_msg));
     cmd_vel_publisher_->publish(std::move(twist_msg));
@@ -140,7 +140,7 @@ class JoyDriverNode : public rclcpp::Node {
   }
 
   // Function to set velocity based on current mode and input
-  std::make_unique<geometry_msgs::msg::Twist> set_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
+  std::unique_ptr<geometry_msgs::msg::Twist> set_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
     auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
     // Initialize all values to zero
     twist_msg->linear.x = 0.0;
