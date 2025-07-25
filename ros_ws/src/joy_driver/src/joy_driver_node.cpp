@@ -93,28 +93,7 @@ class JoyDriverNode : public rclcpp::Node {
 
     // Map joystick axes to velocity commands
     auto twist_msg = geometry_msgs::msg::Twist();
-
-    if (Mode::STOP == mode_) {
-      twist_msg.linear.x = 0.0;
-      twist_msg.linear.y = 0.0;
-      twist_msg.angular.z = 0.0;
-    } else if (Mode::JOY == mode_) {
-      // RCLCPP_INFO(this->get_logger(), "For DEBUG");
-      // 貫通はしてない
-      if(msg->axes[4] >= 0.95 || msg->axes[5] >= 0.95){
-        twist_msg.linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
-        twist_msg.linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
-        twist_msg.angular.z = msg->axes[angular_axis_] * angular_scale_;
-      }
-      joy_rotation(twist_msg, msg);
-    } else if(Mode::DPAD == mode_){
-      if((msg->axes[4] >= 0.95) || (msg->axes[5] >= 0.95)) {
-        twist_msg.linear.x = (msg->buttons[11] - msg->buttons[12] ) * linear_x_scale_ / 2.0;
-        twist_msg.linear.y = (msg->buttons[14] - msg->buttons[13]) * linear_y_scale_ / 2.0;
-        twist_msg.angular.z = 0.0;
-      }
-      joy_rotation(twist_msg, msg);
-    }
+    set_velocity(twist_msg, msg);
     // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
     // angular.z=%.2f",
     //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
@@ -161,19 +140,41 @@ class JoyDriverNode : public rclcpp::Node {
     cmd_dpad_publisher_->publish(std::move(dpad_msg));
   }
 
-  // Function to handle rotation based on joystick axes
-  void joy_rotation(geometry_msgs::msg::Twist& twist_msg, const sensor_msgs::msg::Joy::SharedPtr& msg) {
-      if(msg->axes[5] >= 0.95){
-        // L2の右旋回
-        twist_msg.linear.x = 0.0;
-        twist_msg.linear.y = 0.0;
-        twist_msg.angular.z =  (msg->axes[4]-1)/2.0;
-      } else if(msg->axes[4] >= 0.95){
-        // R2の左旋回
-        twist_msg.linear.x = 0.0;
-        twist_msg.linear.y = 0.0;
-        twist_msg.angular.z = -(msg->axes[5]-1)/2.0;
+  // Function to set velocity based on current mode and input
+  void set_velocity(geometry_msgs::msg::Twist& twist_msg, const sensor_msgs::msg::Joy::SharedPtr& msg) {
+    // Initialize all values to zero
+    twist_msg.linear.x = 0.0;
+    twist_msg.linear.y = 0.0;
+    twist_msg.angular.z = 0.0;
+
+    // Check if triggers are pressed (rotation mode)
+    const double TRIGGER_THRESHOLD = 0.95;
+    bool l2_pressed = msg->axes[5] < TRIGGER_THRESHOLD;  // L2 trigger
+    bool r2_pressed = msg->axes[4] < TRIGGER_THRESHOLD;  // R2 trigger
+    
+    if (l2_pressed && !r2_pressed) {
+      // L2: rotate right
+      twist_msg.angular.z = (msg->axes[5] - 1) / 2.0;
+    } else if (r2_pressed && !l2_pressed) {
+      // R2: rotate left  
+      twist_msg.angular.z = -(msg->axes[4] - 1) / 2.0;
+    } else if (!l2_pressed && !r2_pressed) {
+      // No triggers pressed: linear movement based on mode
+      switch (mode_) {
+        case Mode::JOY:
+          twist_msg.linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
+          twist_msg.linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
+          break;
+        case Mode::DPAD:
+          twist_msg.linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
+          twist_msg.linear.y = (msg->buttons[14] - msg->buttons[13]) * linear_y_scale_ / 2.0;
+          break;
+        case Mode::STOP:
+          // Values already set to zero
+          break;
       }
+    }
+    // If both triggers pressed: do nothing (stay at zero)
   }
 
   // ROS 2 components
