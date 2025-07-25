@@ -6,7 +6,7 @@ name: Docker and Colcon Build Check
 on:
   # mainブランチへのpush時に実行
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "dev/zyodan" ]
   # mainブランチに対するpull request時に実行
   pull_request:
     branches: [ "main", "master" ]
