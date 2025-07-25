@@ -24,7 +24,7 @@ class JoyDriverNode : public rclcpp::Node {
         "/joy", best_effort_qos, std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
 
     // Create publisher for the /cmd_vel topic
-    cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", reliable_qos);
+    cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", best_effort_qos);
 
     brake_client_ = this->create_client<std_srvs::srv::SetBool>("/brake");
 
