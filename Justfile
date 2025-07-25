@@ -3,46 +3,77 @@
 set dotenv-load := false
 set shell := ["bash", "-cu"]  # Fish対策にもなる
 
-# デフォルト（何も指定しなかったら `just up` を実行）
+# just up
 default:
     just up
 
-# Docker 操作
-up:
+# docker-compose立ち上げ&入る
+up container_name="ros2_rox_container":
     docker compose up -d
-    docker exec -it ros2_rox_container bash
+    docker exec -it {{container_name}} bash
 
+# docker-compose stop
+stop:
+    docker compose stop
+
+# docker-compose down
 down:
     docker compose down
 
+# docker-compose build
 build:
     docker compose build
 
+# docker-compose ps
 ps:
     docker compose ps
 
-# Git 操作
+# git add .
 add:
     git add .
 
-commit:
-    git commit -m "Automated by script"
+# just commit "messages"
+commit msg="Automated by script":
+    git commit -m "{{msg}}"
 
-push:
-    git push origin develop
+# just push "branch_name"
+push branch_name="develop":
+    git push origin {{branch_name}}
 
-git:
+# just git "messages" "branch_name_to_push"
+git msg="Automated by script" branch_name="develop":
     just add
-    just commit
-    just push
+    just commit "{{msg}}"
+    just push {{branch_name}}
+
+# just ss "service_name"
+ss service="docker":
+    systemctl status {{service}}
+
+# check bluetooth
+blue:
+    bluetoothctl
 
 
-# システムアップデート
+
+# system update
 update:
     sudo apt update && sudo apt upgrade -y
 
-# Pythonフォーマット
+# Python format
 pyfmt:
     black .
     isort .
 
+# 補完をきかせるためのsetup
+setup:
+    just --completions fish > ~/.config/fish/completions/just.fish
+    just --completions bash > ~/.just-completion.bash
+    echo 'source ~/.just-completion.bash' >> ~/.bashrc
+    source ~/.bashrc
+
+cache:
+    ccache -s
+
+jot:
+    @bash -c "set +u; mkdir -p ./docs/notes && today=\$\(date +%F\) && file=\"./docs/notes/\$$today.md\" && if [ ! -f \"\$$file\" ]; then echo \"# \$$today note\" > \"\$$file\"; echo \"\" >> \"\$$file\"; echo \"## What happened\" >> \"\$$file\"; echo \"- \" >> \"\$$file\"; echo \"\" >> \"\$$file\"; echo \"## Problem\" >> \"\$$file\"; echo \"- \" >> \"\$$file\"; echo \"\" >> \"\$$file\"; echo \"## Fix / Experiment\" >> \"\$$file\"; echo \"- \" >> \"\$$file\"; echo \"\" >> \"\$$file\"; echo \"Created: \$$file\"; else echo \"Already exists: \$$file\"; fi"

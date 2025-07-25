@@ -4,6 +4,7 @@ FROM ros:humble-ros-base
 # --- Install ROS 2 Packages and System Dependencies ---
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y \
+    gh \
     git \
     vim \
     less \
@@ -12,14 +13,25 @@ RUN apt-get update && apt-get upgrade -y && \
     tmux \
     fish \
     lsof \
+    ccache \
     python3 \
     python3-pip \
+    python3-gpiozero \
     libboost-system-dev \
     ros-humble-joy \
     ros-humble-demo-nodes-cpp \
     libgpiod-dev \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN cargo install just
+
+ENV CCACHE_DIR=/root/.ccache
+ENV PATH="/usr/lib/ccache:$PATH"
+ENV CCACHE_MAXSIZE=30G
+
 
 # --- Install Python Packages ---
 RUN pip install smbus2

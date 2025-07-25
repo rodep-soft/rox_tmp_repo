@@ -93,7 +93,6 @@ int main(void) {
   data2.push_back(crc8_maxim(data2));
 
   boost::asio::write(port, boost::asio::buffer(data2, data2.size()));
-
   // コマンドを送る
 
   // // 受信バッファを準備（10バイト）

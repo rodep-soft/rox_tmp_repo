@@ -15,13 +15,16 @@ services:
     environment:
       - ROS_DOMAIN_ID=0
       - DEBIAN_FRONTEND=noninteractive
+      # - ROS_DISCOVERY_SERVER=100.121.25.123:11811 # unicast用
     volumes:
       # Mount host ~/.ssh to the new user's home in container
       - ~/.ssh:/root/.ssh:ro # <--- REPLACE with your actual host username
       # Mount your ROS workspace
       - ./ros_ws:/root/ros_ws # <--- REPLACE with your actual host username
+      - ~/.ccache:/root/.ccache
     devices:
-      - /dev/*:/dev/* # Allow access to all devices
+      # - /dev/*:/dev/* # Allow access to all devices
+      - /dev:/dev
     # REMOVE THE LONG 'command' BLOCK HERE!
     # The CMD in the Dockerfile will handle starting bash.
     # If you need a specific command to run at startup, you can add it here,
