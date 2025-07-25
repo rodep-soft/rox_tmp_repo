@@ -131,8 +131,7 @@ class JoyDriverNode : public rclcpp::Node {
     auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
     upper_msg->drive = msg->buttons[1];
     upper_msg->stop = msg->buttons[2];
-
-    }
+   
 
     // Deprecated
     // void joy_rotation(){
