@@ -131,20 +131,21 @@ class JoyDriverNode : public rclcpp::Node {
 
     }
 
-    void joy_rotation(){
-      if(msg->axes[5] >= 0.95){
-        // L2の右旋回
-        twist_msg.linear.x = 0.0;
-        twist_msg.linear.y = 0.0;
-        msg->axes[5] = 1.0;
-        this->twist_msg.angular.z =  (msg->axes[4]-1)/2.0;
-      } else if(msg->axes[4] >= 0.95){
-        // R2の左旋回
-        twist_msg.linear.x = 0.0;
-        twist_msg.linear.y = 0.0;
-        msg->axes[4] = 1.0;
-        this->twist_msg.angular.z = -(msg->axes[5]-1)/2.0;
-      }
+    // Deprecated
+    // void joy_rotation(){
+    //   if(msg->axes[5] >= 0.95){
+    //     // L2の右旋回
+    //     twist_msg.linear.x = 0.0;
+    //     twist_msg.linear.y = 0.0;
+    //     msg->axes[5] = 1.0;
+    //     this->twist_msg.angular.z =  (msg->axes[4]-1)/2.0;
+    //   } else if(msg->axes[4] >= 0.95){
+    //     // R2の左旋回
+    //     twist_msg.linear.x = 0.0;
+    //     twist_msg.linear.y = 0.0;
+    //     msg->axes[4] = 1.0;
+    //     this->twist_msg.angular.z = -(msg->axes[5]-1)/2.0;
+    //   }
 
 
 
