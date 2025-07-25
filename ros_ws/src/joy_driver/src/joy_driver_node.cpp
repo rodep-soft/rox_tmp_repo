@@ -92,8 +92,7 @@ class JoyDriverNode : public rclcpp::Node {
     }
 
     // Map joystick axes to velocity commands
-    auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
-    set_velocity(*twist_msg, msg);
+    auto twist_msg = set_velocity(msg);
     // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
     // angular.z=%.2f",
     //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
@@ -141,11 +140,12 @@ class JoyDriverNode : public rclcpp::Node {
   }
 
   // Function to set velocity based on current mode and input
-  void set_velocity(auto& twist_msg, const sensor_msgs::msg::Joy::SharedPtr& msg) {
+  void set_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
+    auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
     // Initialize all values to zero
-    twist_msg.linear.x = 0.0;
-    twist_msg.linear.y = 0.0;
-    twist_msg.angular.z = 0.0;
+    twist_msg->linear.x = 0.0;
+    twist_msg->linear.y = 0.0;
+    twist_msg->angular.z = 0.0;
 
     // Check if triggers are pressed (rotation mode)
     const double TRIGGER_THRESHOLD = 0.95;
@@ -154,27 +154,29 @@ class JoyDriverNode : public rclcpp::Node {
     
     if (l2_pressed && !r2_pressed) {
       // L2: rotate right
-      twist_msg.angular.z = (msg->axes[5] - 1) / 2.0;
+      twist_msg->angular.z = (msg->axes[5] - 1) / 2.0;
     } else if (r2_pressed && !l2_pressed) {
-      // R2: rotate left  
-      twist_msg.angular.z = -(msg->axes[4] - 1) / 2.0;
+      // R2: rotate left
+      twist_msg->angular.z = -(msg->axes[4] - 1) / 2.0;
     } else if (!l2_pressed && !r2_pressed) {
       // No triggers pressed: linear movement based on mode
       switch (mode_) {
         case Mode::JOY:
-          twist_msg.linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
-          twist_msg.linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
+          twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
+          twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
           break;
         case Mode::DPAD:
-          twist_msg.linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
-          twist_msg.linear.y = (msg->buttons[14] - msg->buttons[13]) * linear_y_scale_ / 2.0;
+          twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
+          twist_msg->linear.y = (msg->buttons[14] - msg->buttons[13]) * linear_y_scale_ / 2.0;
           break;
         case Mode::STOP:
-          twist_msg.angular.z = 0.0;
+          twist_msg->angular.z = 0.0;
           break;
       }
     }
     // If both triggers pressed: do nothing (stay at zero)
+
+    return twist_msg;  // Return the constructed message
   }
 
   // ROS 2 components
@@ -194,7 +196,7 @@ class JoyDriverNode : public rclcpp::Node {
   int angular_axis_;
 
   const rclcpp::QoS reliable_qos = rclcpp::QoS(1).reliable();
-  const rclcpp::QoS best_effort_qos = rclcpp::QoS(1).best_effort();
+  const rclcpp::QoS best_effort_qos = rclcpp::QoS(10).best_effort();
 };
 
 int main(int argc, char** argv) {
