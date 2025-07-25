@@ -21,7 +21,7 @@ class JoyDriverNode : public rclcpp::Node {
 
     // Create subscription to the /joy topic
     joy_subscription_ = this->create_subscription<sensor_msgs::msg::Joy>(
-        "/joy", reliable_qos, std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
+        "/joy", best_effort_qos, std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
 
     // Create publisher for the /cmd_vel topic
     cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", reliable_qos);
@@ -92,8 +92,8 @@ class JoyDriverNode : public rclcpp::Node {
     }
 
     // Map joystick axes to velocity commands
-    auto twist_msg = geometry_msgs::msg::Twist();
-    set_velocity(twist_msg, msg);
+    auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
+    set_velocity(*twist_msg, msg);
     // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
     // angular.z=%.2f",
     //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
@@ -136,12 +136,12 @@ class JoyDriverNode : public rclcpp::Node {
     //            twist_msg.linear.x, twist_msg.linear.y, twist_msg.angular.z);
 
     upper_publisher_->publish(std::move(upper_msg));
-    cmd_vel_publisher_->publish(twist_msg);
+    cmd_vel_publisher_->publish(std::move(twist_msg));
     cmd_dpad_publisher_->publish(std::move(dpad_msg));
   }
 
   // Function to set velocity based on current mode and input
-  void set_velocity(geometry_msgs::msg::Twist& twist_msg, const sensor_msgs::msg::Joy::SharedPtr& msg) {
+  void set_velocity(auto& twist_msg, const sensor_msgs::msg::Joy::SharedPtr& msg) {
     // Initialize all values to zero
     twist_msg.linear.x = 0.0;
     twist_msg.linear.y = 0.0;
@@ -194,6 +194,7 @@ class JoyDriverNode : public rclcpp::Node {
   int angular_axis_;
 
   const rclcpp::QoS reliable_qos = rclcpp::QoS(1).reliable();
+  const rclcpp::QoS best_effort_qos = rclcpp::QoS(1).best_effort();
 };
 
 int main(int argc, char** argv) {
