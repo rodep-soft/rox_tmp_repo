@@ -51,9 +51,9 @@ setup:
     source ~/.bashrc
 
 # Discovery ServerでUnicastをするためのコマンド
-server ip_addr="0":
-    fastdds discovery --server-id 0 
-    export ROS_DISCOVERY_SERVER=100.121.25.123:11811
+#server ip_addr="0":
+#    fastdds discovery --server-id 0 
+#    export ROS_DISCOVERY_SERVER=100.121.25.123:11811
 
-setclient:    
-    export ROS_DISCOVERY_SERVER=100.121.25.123:11811
+#setclient:    
+#    export ROS_DISCOVERY_SERVER=100.121.25.123:11811
