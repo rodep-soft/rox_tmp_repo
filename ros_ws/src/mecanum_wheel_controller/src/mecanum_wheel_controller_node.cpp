@@ -133,7 +133,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     
     cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>(
         "/cmd_vel", 
-        reliable_qos,
+        best_effort_qos,
         std::bind(&MecanumWheelControllerNode::cmd_vel_callback, this, std::placeholders::_1));
 
     brake_service_ = this->create_service<std_srvs::srv::SetBool>(
@@ -303,7 +303,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   rclcpp::TimerBase::SharedPtr timer_;
 
   const rclcpp::QoS reliable_qos = rclcpp::QoS(1).reliable();
-  //const rclcpp::QoS best_effort_qos = rclcpp::QoS(1).best_effort();
+  const rclcpp::QoS best_effort_qos = rclcpp::QoS(10).best_effort();
 
 };
 
