@@ -262,7 +262,7 @@ class JoyDriverNode : public rclcpp::Node {
   int angular_axis_;
 
   const rclcpp::QoS reliable_qos = rclcpp::QoS(1).reliable();
-        const rclcpp::QoS best_effort_qos = rclcpp::QoS(10).best_effort();
+  const rclcpp::QoS best_effort_qos = rclcpp::QoS(10).best_effort();
 };
 
 int main(int argc, char** argv) {
