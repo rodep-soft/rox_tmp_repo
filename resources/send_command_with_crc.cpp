@@ -29,7 +29,7 @@ uint8_t crc8_maxim(const std::vector<uint8_t>& data) {
 
     // 各バイトの8ビットを処理 (LSB First)
     for (uint8_t bit = 0; bit < 8; bit++) {
-      if (crc & 0x01) {                           // 最下位ビットが1の場合
+      if (crc & 0x01) {  // 最下位ビットが1の場合
         crc = (crc >> 1) ^ reflected_polynomial;  // 右シフトして多項式とXOR
       } else {
         crc >>= 1;  // 最下位ビットが0の場合、単に右シフト
@@ -83,7 +83,7 @@ int main(void) {
   uint16_t val_u16_2 = static_cast<uint16_t>(0);  // 符号付きを符号なしに変換
 
   data2.push_back(static_cast<uint8_t>((val_u16_2 >> 8) & 0xFF));  // Highバイト
-  data2.push_back(static_cast<uint8_t>(val_u16_2 & 0xFF));         // Lowバイト
+  data2.push_back(static_cast<uint8_t>(val_u16_2 & 0xFF));  // Lowバイト
 
   data2.push_back(0x00);
   data2.push_back(0x00);
