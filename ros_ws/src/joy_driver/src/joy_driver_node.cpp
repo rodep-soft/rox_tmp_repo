@@ -73,6 +73,9 @@ class JoyDriverNode : public rclcpp::Node {
   }
 
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
+
+    auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
+
     // Ensure the message has enough axes to prevent a crash
     if (msg->axes.size() <=
         static_cast<size_t>(std::max({linear_x_axis_, linear_y_axis_, angular_axis_}))) {
@@ -91,15 +94,14 @@ class JoyDriverNode : public rclcpp::Node {
       RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
     }
 
-    
 
+    bool l2_pressed = msg->axes[4] < TRIGGER_THRESHOLD;  // L2 trigger
+    bool r2_pressed = msg->axes[5] < TRIGGER_THRESHOLD;  // R2 trigger
+
+    // Initialize the twist message
     twist_msg->linear.x = 0.0;
     twist_msg->linear.y = 0.0;
     twist_msg->angular.z = 0.0;
-
-    const double TRIGGER_THRESHOLD = 0.95;
-    bool l2_pressed = msg->axes[5] < TRIGGER_THRESHOLD;  // L2 trigger
-    bool r2_pressed = msg->axes[4] < TRIGGER_THRESHOLD;  // R2 trigger
 
     // if (r2_pressed && !l2_pressed) {
     //       // R2: rotate left
@@ -112,11 +114,11 @@ class JoyDriverNode : public rclcpp::Node {
     switch (mode_){
       case Mode::JOY:
         if(!l2_pressed && !r2_pressed) {
-          twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_axis_;
-          twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_axis_;
-          twist_msg->angular.z = msg->axes[angular_axis_] * angular_scale_;
+          twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
+          twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
+          twist_msg->angular.z = 0.0;
         } else {
-          set_angular_velocity(msg);
+          set_angular_velocity(msg, twist_msg);
         }
         break;
       case Mode::DPAD:
@@ -125,7 +127,7 @@ class JoyDriverNode : public rclcpp::Node {
           twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
           twist_msg->angular.z = 0.0;  // No angular movement in DPAD mode
         } else {
-          set_angular_velocity(msg);
+          set_angular_velocity(msg, twist_msg);
         }
         break;
       case Mode::STOP:
@@ -187,24 +189,21 @@ class JoyDriverNode : public rclcpp::Node {
   }
 
 
-  std::make_unique<geometry_msgs::msg::Twist> set_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
-    auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
-
-    if(msg->axes[4] > 0.95 && msg->axes[5] < 0.95) {
+  void set_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg, 
+                           std::unique_ptr<geometry_msgs::msg::Twist>& twist_msg) {
+    if(msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
       // R2: rotate right
-      twist_msg->angular.z = -(msg->axes[5] - 1) / 2.0;
-    } else if(msg->axes[5] > 0.95 && msg->axes[4] < 0.95) {
+      twist_msg->angular.z = -(msg->axes[4] - 1) / 2.0;
+    } else if(msg->axes[5] < TRIGGER_THRESHOLD && msg->axes[4] >= TRIGGER_THRESHOLD) {
       // L2: rotate left
-      twist_msg->angular.z = (msg->axes[4] - 1) / 2.0;
+      twist_msg->angular.z = (msg->axes[5] - 1) / 2.0;
     } else {
       twist_msg->angular.z = 0.0;
     }
-
-    return twist_msg;  // Return the constructed message
   }
   
 
-
+  const double TRIGGER_THRESHOLD = 0.95;
 
   // ROS 2 components
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
