@@ -8,7 +8,7 @@ def generate_launch_description():
             package="joy",
             executable="joy_node",
             name="joy_node",
-            namespace="joy",
+            namespace="",
         ),
 
         Node(
