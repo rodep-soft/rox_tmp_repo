@@ -1,13 +1,12 @@
 #include <algorithm>
 #include <geometry_msgs/msg/twist.hpp>
 #include <memory>
-#include <rclcpp/rclcpp.hpp>
 #include <rclcpp/qos.hpp>
+#include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joy.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <string>
-
-#include <std_msgs/msg/bool.hpp>
 
 #include "custom_interfaces/msg/cmd_dpad.hpp"
 #include "custom_interfaces/msg/upper_motor.hpp"
@@ -21,15 +20,17 @@ class JoyDriverNode : public rclcpp::Node {
 
     // Create subscription to the /joy topic
     joy_subscription_ = this->create_subscription<sensor_msgs::msg::Joy>(
-        "/joy", reliable_qos, std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
+        "/joy", best_effort_qos,
+        std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
 
     // Create publisher for the /cmd_vel topic
-    cmd_vel_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", reliable_qos);
+    cmd_vel_publisher_ =
+        this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", best_effort_qos);
 
     brake_client_ = this->create_client<std_srvs::srv::SetBool>("/brake");
 
-    upper_publisher_ = this->create_publisher<custom_interfaces::msg::UpperMotor>("/upper_motor", 3);
-    
+    upper_publisher_ =
+        this->create_publisher<custom_interfaces::msg::UpperMotor>("/upper_motor", 3);
 
     cmd_dpad_publisher_ = this->create_publisher<custom_interfaces::msg::CmdDpad>("/cmd_dpad", 10);
 
@@ -37,12 +38,8 @@ class JoyDriverNode : public rclcpp::Node {
   }
 
  private:
-
   // Define the mode of operation for the robot
-  enum class Mode {
-    STOP,
-    DRIVE
-  };
+  enum class Mode { STOP, JOY, DPAD };
 
   Mode mode_ = Mode::STOP;
 
@@ -52,7 +49,7 @@ class JoyDriverNode : public rclcpp::Node {
 
   // share buttons[4]
   // option buttons[6]
- 
+
   void declare_parameters() {
     this->declare_parameter<double>("linear_x_scale", 1.0);
     this->declare_parameter<double>("linear_y_scale", 1.0);
@@ -72,6 +69,8 @@ class JoyDriverNode : public rclcpp::Node {
   }
 
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
+    auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
+
     // Ensure the message has enough axes to prevent a crash
     if (msg->axes.size() <=
         static_cast<size_t>(std::max({linear_x_axis_, linear_y_axis_, angular_axis_}))) {
@@ -79,28 +78,89 @@ class JoyDriverNode : public rclcpp::Node {
       return;
     }
 
-    if (Mode::STOP == mode_ && msg->buttons[4] == 1) {
-      mode_ = Mode::DRIVE;
-      RCLCPP_INFO(this->get_logger(), "Mode: DRIVE");
-    } else if (Mode::DRIVE == mode_ && msg->buttons[5] == 1) {
+    if ((Mode::STOP == mode_ || Mode::DPAD == mode_) && msg->buttons[4] == 1) {
+      mode_ = Mode::JOY;
+      RCLCPP_INFO(this->get_logger(), "Mode: JOY");
+    } else if ((Mode::JOY == mode_ || Mode::DPAD == mode_) && msg->buttons[5] == 1) {
       mode_ = Mode::STOP;
       RCLCPP_INFO(this->get_logger(), "Mode: STOP");
+    } else if ((Mode::JOY == mode_ || Mode::STOP == mode_) && msg->buttons[6] == 1) {
+      mode_ = Mode::DPAD;
+      RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
+    }
+
+    bool l2_pressed = msg->axes[4] < TRIGGER_THRESHOLD;  // L2 trigger
+    bool r2_pressed = msg->axes[5] < TRIGGER_THRESHOLD;  // R2 trigger
+
+    // Initialize the twist message
+    twist_msg->linear.x = 0.0;
+    twist_msg->linear.y = 0.0;
+    twist_msg->angular.z = 0.0;
+
+    // if (r2_pressed && !l2_pressed) {
+    //       // R2: rotate left
+    //       twist_msg->angular.z = -(msg->axes[4] - 1) / 2.0;
+    //     } else if (l2_pressed && !r2_pressed) {
+    //       // L2: rotate right
+    //       twist_msg->angular.z = (msg->axes[5] - 1) / 2.0;
+    //     }
+
+    // switch (mode_){
+    //   case Mode::JOY:
+    //     if(!l2_pressed && !r2_pressed) {
+    //       twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
+    //       twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
+    //       twist_msg->angular.z = 0.0;
+    //     } else {
+    //       set_angular_velocity(msg, twist_msg);
+    //     }
+    //     break;
+    //   case Mode::DPAD:
+    //     if(!l2_pressed && !r2_pressed) {
+    //       twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
+    //       twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
+    //       twist_msg->angular.z = 0.0;  // No angular movement in DPAD mode
+    //     } else {
+    //       set_angular_velocity(msg, twist_msg);
+    //     }
+    //     break;
+    //   case Mode::STOP:
+    //     twist_msg->linear.x = 0.0;
+    //     twist_msg->linear.y = 0.0;
+    //     twist_msg->angular.z = 0.0;  // No movement in STOP mode
+    //     break;
+    //   default:
+    // }
+
+    switch (mode_) {
+      case Mode::STOP:
+        twist_msg->linear.x = 0.0;
+        twist_msg->linear.y = 0.0;
+        twist_msg->angular.z = 0.0;
+        break;
+      case Mode::JOY:
+        if (!l2_pressed && !r2_pressed) {  // When neither L2 nor R2 are pressed
+          twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
+          twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
+          twist_msg->angular.z = 0.0;
+        } else {  // When either L2 or R2 is pressed
+          twist_msg->angular.z = get_angular_velocity(msg);
+        }
+        break;
+      case Mode::DPAD:
+        if (!l2_pressed && !r2_pressed) {
+          twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
+          twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
+          twist_msg->angular.z = 0.0;
+        } else {
+          twist_msg->angular.z = get_angular_velocity(msg);
+        }
+        break;
     }
 
     // Map joystick axes to velocity commands
-    auto twist_msg = geometry_msgs::msg::Twist();
-
-    if (Mode::STOP == mode_) {
-      twist_msg.linear.x = 0.0;
-      twist_msg.linear.y = 0.0;
-      twist_msg.angular.z = 0.0;
-    } else if (Mode::DRIVE == mode_) {
-      // RCLCPP_INFO(this->get_logger(), "For DEBUG");
-      // 貫通はしてない
-      twist_msg.linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
-      twist_msg.linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
-      twist_msg.angular.z = msg->axes[angular_axis_] * angular_scale_;
-    }
+    // auto twist_msg = set_velocity(msg);
+    // auto twist_msg = set_angular_velocity(msg);
 
     // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
     // angular.z=%.2f",
@@ -114,26 +174,69 @@ class JoyDriverNode : public rclcpp::Node {
     dpad_msg->left = msg->buttons[13];
     dpad_msg->right = msg->buttons[14];
 
-
     auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
     upper_msg->drive = msg->buttons[1];
     upper_msg->stop = msg->buttons[2];
 
+    // Deprecated
+    // void joy_rotation(){
+    //   if(msg->axes[5] >= 0.95){
+    //     // L2の右旋回
+    //     twist_msg.linear.x = 0.0;
+    //     twist_msg.linear.y = 0.0;
+    //     msg->axes[5] = 1.0;
+    //     this->twist_msg.angular.z =  (msg->axes[4]-1)/2.0;
+    //   } else if(msg->axes[4] >= 0.95){
+    //     // R2の左旋回
+    //     twist_msg.linear.x = 0.0;
+    //     twist_msg.linear.y = 0.0;
+    //     msg->axes[4] = 1.0;
+    //     this->twist_msg.angular.z = -(msg->axes[5]-1)/2.0;
+    //   }
 
-    //RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
-    //            twist_msg.linear.x, twist_msg.linear.y, twist_msg.angular.z);
+    // RCLCPP_INFOでのポインタアクセスエラー
+    // twist_msg.linear.x → twist_msg->linear.x に修正ってＡＩに言われた
+    RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
+                twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
 
     upper_publisher_->publish(std::move(upper_msg));
-    cmd_vel_publisher_->publish(twist_msg);
+    cmd_vel_publisher_->publish(std::move(twist_msg));
     cmd_dpad_publisher_->publish(std::move(dpad_msg));
   }
+
+  // void set_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg,
+  //                          std::unique_ptr<geometry_msgs::msg::Twist>& twist_msg) {
+  //   if(msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
+  //     // R2: rotate right
+  //     twist_msg->angular.z = -(msg->axes[4] - 1) / 2.0;
+  //   } else if(msg->axes[5] < TRIGGER_THRESHOLD && msg->axes[4] >= TRIGGER_THRESHOLD) {
+  //     // L2: rotate left
+  //     twist_msg->angular.z = (msg->axes[5] - 1) / 2.0;
+  //   } else {
+  //     twist_msg->angular.z = 0.0;
+  //   }
+  // }
+
+  double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
+    if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
+      // R2: rotate right
+      return -(msg->axes[4] - 1) / 2.0;
+    } else if (msg->axes[5] < TRIGGER_THRESHOLD && msg->axes[4] >= TRIGGER_THRESHOLD) {
+      // L2: rotate left
+      return (msg->axes[5] - 1) / 2.0;
+    } else {
+      return 0.0;
+    }
+  }
+
+  const double TRIGGER_THRESHOLD = 0.95;
 
   // ROS 2 components
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
   rclcpp::Publisher<custom_interfaces::msg::CmdDpad>::SharedPtr cmd_dpad_publisher_;
   rclcpp::Publisher<custom_interfaces::msg::UpperMotor>::SharedPtr upper_publisher_;
-  
+
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr brake_client_;
 
   // Parameters
@@ -145,6 +248,7 @@ class JoyDriverNode : public rclcpp::Node {
   int angular_axis_;
 
   const rclcpp::QoS reliable_qos = rclcpp::QoS(1).reliable();
+  const rclcpp::QoS best_effort_qos = rclcpp::QoS(10).best_effort();
 };
 
 int main(int argc, char** argv) {

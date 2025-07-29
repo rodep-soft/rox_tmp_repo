@@ -12,6 +12,6 @@
     wheel_radius: 0.08
     wheel_base_x: 0.148
     wheel_base_y: 0.200
-    serial_port: "/dev/macanum"
+    serial_port: "/dev/ttyACM0"
     baud_rate: 115200
     motor_ids: [1, 2, 3, 4]  # FL, FR, BL, BR
