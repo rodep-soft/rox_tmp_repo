@@ -32,7 +32,6 @@ class JoyDriverNode : public rclcpp::Node {
     upper_publisher_ =
         this->create_publisher<custom_interfaces::msg::UpperMotor>("/upper_motor", 3);
 
-    cmd_dpad_publisher_ = this->create_publisher<custom_interfaces::msg::CmdDpad>("/cmd_dpad", 10);
 
     linetrace_publisher_ = this->create_publisher<std_msgs::msg::Bool>("/is_linetrace", 10);
 
@@ -47,6 +46,10 @@ class JoyDriverNode : public rclcpp::Node {
   
   // Previous button states for toggle functionality
   bool prev_linetrace_buttons_ = false;
+
+  bool prev_throwing_on = false;
+  bool prev_ejection_on = false;
+  bool prev_elevation_on = false;
 
   // static float applyDeadzone(double val, double threshold) {
   //   return (std::abs(val) < threshold) ? 0.0f : val;
@@ -215,15 +218,39 @@ class JoyDriverNode : public rclcpp::Node {
 
     // Publish the velocity command
 
-    auto dpad_msg = std::make_unique<custom_interfaces::msg::CmdDpad>();
-    dpad_msg->up = msg->buttons[11];
-    dpad_msg->down = msg->buttons[12];
-    dpad_msg->left = msg->buttons[13];
-    dpad_msg->right = msg->buttons[14];
+    // auto dpad_msg = std::make_unique<custom_interfaces::msg::CmdDpad>();
+    // dpad_msg->up = msg->buttons[11];
+    // dpad_msg->down = msg->buttons[12];
+    // dpad_msg->left = msg->buttons[13];
+    // dpad_msg->right = msg->buttons[14];
 
     auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
-    upper_msg->drive = msg->buttons[1];
-    upper_msg->stop = msg->buttons[2];
+
+    // Check for state changes
+    if (msg->buttons[1] == 1 && prev_throwing_on == false) {
+        prev_throwing_on = true;
+        RCLCPP_INFO(this->get_logger(), "Throwing on");
+    } else if (msg->buttons[3] == 1 && prev_throwing_on == true) {
+        prev_throwing_on = false;
+        RCLCPP_INFO(this->get_logger(), "Throwing off");
+    } else if (msg->buttons[0] == 1 && prev_ejection_on == false) {
+      prev_ejection_on = true;
+      RCLCPP_INFO(this->get_logger(), "Ejection on");
+    } else if (msg->buttons[2] == 1 && prev_ejection_on == true) {
+      prev_ejection_on = false;
+      RCLCPP_INFO(this->get_logger(), "Ejection off");
+    } else if (msg->buttons[10] == 1 && prev_elevation_on == false) {
+      prev_elevation_on = true;
+      RCLCPP_INFO(this->get_logger(), "Elevation on");
+    } else if (msg->buttons[9] == 1 && prev_elevation_on == true) {
+      prev_elevation_on = false;
+      RCLCPP_INFO(this->get_logger(), "Elevation off");
+    }
+
+    // Always set current state to the message
+    upper_msg->is_throwing_on = prev_throwing_on;
+    upper_msg->is_ejection_on = prev_ejection_on;
+    upper_msg->is_elevation_on = prev_elevation_on;
 
     // Deprecated
     // void joy_rotation(){
@@ -238,6 +265,11 @@ class JoyDriverNode : public rclcpp::Node {
     //     twist_msg.linear.x = 0.0;
     //     twist_msg.linear.y = 0.0;
     //     msg->axes[4] = 1.0;
+    // auto dpad_msg = std::make_unique<custom_interfaces::msg::CmdDpad>();
+    // dpad_msg->up = msg->buttons[11];
+    // dpad_msg->down = msg->buttons[12];
+    // dpad_msg->left = msg->buttons[13];
+    // dpad_msg->right = msg->buttons[14];
     //     this->twist_msg.angular.z = -(msg->axes[5]-1)/2.0;
     //   }
 
@@ -246,8 +278,9 @@ class JoyDriverNode : public rclcpp::Node {
     // RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
     //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
 
+    // Always publish current state
     upper_publisher_->publish(std::move(upper_msg));
-    cmd_dpad_publisher_->publish(std::move(dpad_msg));
+    // cmd_dpad_publisher_->publish(std::move(dpad_msg));
 
     if (mode_ == Mode::LINETRACE) {
       linetrace_msg->data = true;
@@ -290,7 +323,6 @@ class JoyDriverNode : public rclcpp::Node {
   // ROS 2 components
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
-  rclcpp::Publisher<custom_interfaces::msg::CmdDpad>::SharedPtr cmd_dpad_publisher_;
   rclcpp::Publisher<custom_interfaces::msg::UpperMotor>::SharedPtr upper_publisher_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr linetrace_publisher_;
 
