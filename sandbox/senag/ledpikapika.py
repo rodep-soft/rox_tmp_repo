@@ -1,0 +1,22 @@
+# import necessary libraries
+# 
+# pip install adafruit-circuitpython-neopixel
+
+
+import board
+import neopixel
+import time
+
+pixels = neopixel.NeoPixel(board.D18, 30, brightness=0.5, auto_write=False, pixel_order=neopixel.RGB)
+
+while True:
+    pixels.fill((255, 0, 0))  # 赤
+    pixels.show()
+    time.sleep(1)
+    pixels.fill((0, 255, 0))  # 緑
+    pixels.show()
+    time.sleep(1)
+    pixels.fill((0, 0, 255))  # 青
+    pixels.show()
+    time.sleep(1)
+    print("LED test completed.")
