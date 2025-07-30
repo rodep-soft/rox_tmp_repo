@@ -34,14 +34,19 @@ class JoyDriverNode : public rclcpp::Node {
 
     cmd_dpad_publisher_ = this->create_publisher<custom_interfaces::msg::CmdDpad>("/cmd_dpad", 10);
 
+    linetrace_publisher_ = this->create_publisher<std_msgs::msg::Bool>("/is_linetrace", 10);
+
     RCLCPP_INFO(this->get_logger(), "Joy driver node started.");
   }
 
  private:
   // Define the mode of operation for the robot
-  enum class Mode { STOP, JOY, DPAD };
+  enum class Mode { STOP, JOY, DPAD, LINETRACE };
 
   Mode mode_ = Mode::STOP;
+  
+  // Previous button states for toggle functionality
+  bool prev_linetrace_buttons_ = false;
 
   // static float applyDeadzone(double val, double threshold) {
   //   return (std::abs(val) < threshold) ? 0.0f : val;
@@ -50,6 +55,8 @@ class JoyDriverNode : public rclcpp::Node {
   // share buttons[4]
   // option buttons[6]
 
+  // ROS2パラメータ
+  // config/mecanum.yamlを変更することで再ビルドかけずにパラメータの変更が可能
   void declare_parameters() {
     this->declare_parameter<double>("linear_x_scale", 1.0);
     this->declare_parameter<double>("linear_y_scale", 1.0);
@@ -59,6 +66,7 @@ class JoyDriverNode : public rclcpp::Node {
     this->declare_parameter<int>("angular_axis", 3);
   }
 
+  // パラメータを取得する関数
   void get_parameters() {
     linear_x_scale_ = this->get_parameter("linear_x_scale").as_double();
     linear_y_scale_ = this->get_parameter("linear_y_scale").as_double();
@@ -68,8 +76,15 @@ class JoyDriverNode : public rclcpp::Node {
     angular_axis_ = this->get_parameter("angular_axis").as_int();
   }
 
+  // ----- メインのコールバック関数 -----
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
     auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
+
+    auto linetrace_msg = std::make_unique<std_msgs::msg::Bool>();
+
+    // だめぽ
+    // linetrace_msg->data = false;
+
 
     // Ensure the message has enough axes to prevent a crash
     if (msg->axes.size() <=
@@ -78,16 +93,37 @@ class JoyDriverNode : public rclcpp::Node {
       return;
     }
 
-    if ((Mode::STOP == mode_ || Mode::DPAD == mode_) && msg->buttons[4] == 1) {
+    // buttons[11] == 1 && buttons[12] == 1 
+    // linetrace_msg->data = 1
+    // 
+
+    
+    // Mode switching logic
+    bool current_linetrace_buttons = (msg->buttons[7] == 1 && msg->buttons[8] == 1);
+    
+    if (msg->buttons[4] == 1 && mode_ != Mode::JOY) {
       mode_ = Mode::JOY;
       RCLCPP_INFO(this->get_logger(), "Mode: JOY");
-    } else if ((Mode::JOY == mode_ || Mode::DPAD == mode_) && msg->buttons[5] == 1) {
+    } else if (msg->buttons[5] == 1 && mode_ != Mode::STOP) {
       mode_ = Mode::STOP;
       RCLCPP_INFO(this->get_logger(), "Mode: STOP");
-    } else if ((Mode::JOY == mode_ || Mode::STOP == mode_) && msg->buttons[6] == 1) {
+    } else if (msg->buttons[6] == 1 && mode_ != Mode::DPAD) {
       mode_ = Mode::DPAD;
       RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
+    } else if (current_linetrace_buttons && !prev_linetrace_buttons_) {
+      // Toggle LINETRACE mode only on button press (not hold)
+      if (mode_ == Mode::LINETRACE) {
+        mode_ = Mode::STOP;
+        RCLCPP_INFO(this->get_logger(), "Mode: STOP (from LINETRACE)");
+      } else {
+        mode_ = Mode::LINETRACE;
+        RCLCPP_INFO(this->get_logger(), "Mode: LINETRACE");
+      }
     }
+    
+    // Update previous button state
+    prev_linetrace_buttons_ = current_linetrace_buttons;
+
 
     bool l2_pressed = msg->axes[4] < TRIGGER_THRESHOLD;  // L2 trigger
     bool r2_pressed = msg->axes[5] < TRIGGER_THRESHOLD;  // R2 trigger
@@ -156,7 +192,18 @@ class JoyDriverNode : public rclcpp::Node {
           twist_msg->angular.z = get_angular_velocity(msg);
         }
         break;
+      case Mode::LINETRACE:
+        break;
+      default:
+        RCLCPP_WARN(this->get_logger(), "Unknown mode: %d", static_cast<int>(mode_));
     }
+
+
+    // cmd_velのpublish
+    if (mode_ != Mode::LINETRACE) {
+      cmd_vel_publisher_->publish(std::move(twist_msg));
+    } 
+
 
     // Map joystick axes to velocity commands
     // auto twist_msg = set_velocity(msg);
@@ -195,13 +242,22 @@ class JoyDriverNode : public rclcpp::Node {
     //   }
 
     // RCLCPP_INFOでのポインタアクセスエラー
-    // twist_msg.linear.x → twist_msg->linear.x に修正ってＡＩに言われた
-    RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
-                twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
+    // // twist_msg.linear.x → twist_msg->linear.x に修正ってＡＩに言われた
+    // RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
+    //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
 
     upper_publisher_->publish(std::move(upper_msg));
-    cmd_vel_publisher_->publish(std::move(twist_msg));
     cmd_dpad_publisher_->publish(std::move(dpad_msg));
+
+    if (mode_ == Mode::LINETRACE) {
+      linetrace_msg->data = true;
+    } else {
+      linetrace_msg->data = false;
+    }
+
+    linetrace_publisher_->publish(std::move(linetrace_msg));
+
+
   }
 
   // void set_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg,
@@ -236,6 +292,7 @@ class JoyDriverNode : public rclcpp::Node {
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
   rclcpp::Publisher<custom_interfaces::msg::CmdDpad>::SharedPtr cmd_dpad_publisher_;
   rclcpp::Publisher<custom_interfaces::msg::UpperMotor>::SharedPtr upper_publisher_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr linetrace_publisher_;
 
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr brake_client_;
 

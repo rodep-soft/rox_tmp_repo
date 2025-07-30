@@ -26,9 +26,15 @@ def generate_launch_description():
         ),
 
         Node(
-            package="lifting_motor",
-            executable="lifting_motor",
-            name="lifting_motor_node",
-            parameters=[]
+            package='color_sensor',
+            executable='color_publisher',
+            name='color_sensor_publisher_node'
         )
+
+        # Node(
+        #     package="lifting_motor",
+        #     executable="lifting_motor",
+        #     name="lifting_motor_node",
+        #     parameters=[]
+        # )
     ])
