@@ -104,16 +104,9 @@ class JoyDriverNode : public rclcpp::Node {
     // Mode switching logic
     bool current_linetrace_buttons = (msg->buttons[7] == 1 && msg->buttons[8] == 1);
     
-    if (msg->buttons[4] == 1 && mode_ != Mode::JOY) {
-      mode_ = Mode::JOY;
-      RCLCPP_INFO(this->get_logger(), "Mode: JOY");
-    } else if (msg->buttons[5] == 1 && mode_ != Mode::STOP) {
-      mode_ = Mode::STOP;
-      RCLCPP_INFO(this->get_logger(), "Mode: STOP");
-    } else if (msg->buttons[6] == 1 && mode_ != Mode::DPAD) {
-      mode_ = Mode::DPAD;
-      RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
-    } else if (current_linetrace_buttons && !prev_linetrace_buttons_) {
+    
+    // ライントレースモードかどうかを変える
+    if (current_linetrace_buttons && !prev_linetrace_buttons_) {
       // Toggle LINETRACE mode only on button press (not hold)
       if (mode_ == Mode::LINETRACE) {
         mode_ = Mode::STOP;
@@ -122,6 +115,20 @@ class JoyDriverNode : public rclcpp::Node {
         mode_ = Mode::LINETRACE;
         RCLCPP_INFO(this->get_logger(), "Mode: LINETRACE");
       }
+    }
+
+    // もしライントレースモードでなければ、他のモードに切り替えることができる
+    if (mode_ != Mode::LINETRACE) {
+      if (msg->buttons[4] == 1 && mode_ != Mode::JOY) {
+        mode_ = Mode::JOY;
+        RCLCPP_INFO(this->get_logger(), "Mode: JOY");
+      } else if (msg->buttons[5] == 1 && mode_ != Mode::STOP) {
+        mode_ = Mode::STOP;
+        RCLCPP_INFO(this->get_logger(), "Mode: STOP");
+      } else if (msg->buttons[6] == 1 && mode_ != Mode::DPAD) {
+        mode_ = Mode::DPAD;
+        RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
+      } 
     }
     
     // Update previous button state
