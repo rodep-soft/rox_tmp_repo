@@ -5,6 +5,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <string>
 
@@ -36,8 +37,9 @@ class JoyDriverNode : public rclcpp::Node {
     upper_publisher_ =
         this->create_publisher<custom_interfaces::msg::UpperMotor>("/upper_motor", 3);
 
-
     linetrace_publisher_ = this->create_publisher<std_msgs::msg::Bool>("/is_linetrace", 10);
+
+    mode_publisher_ = this->create_publisher<std_msgs::msg::String>("/mode", 10);
 
     RCLCPP_INFO(this->get_logger(), "Joy driver node started.");
   }
@@ -47,7 +49,7 @@ class JoyDriverNode : public rclcpp::Node {
   enum class Mode { STOP, JOY, DPAD, LINETRACE };
 
   Mode mode_ = Mode::STOP;
-  
+
   // Previous button states for toggle functionality
   bool prev_linetrace_buttons_ = false;
 
@@ -72,7 +74,7 @@ class JoyDriverNode : public rclcpp::Node {
     this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
     this->declare_parameter<int>("angular_axis", 3);
 
-    this->declare_parameter<double>("Kp", 1.0); // DPADモードのずれを補正する比例ゲイン
+    this->declare_parameter<double>("Kp", 1.0);  // DPADモードのずれを補正する比例ゲイン
   }
 
   // パラメータを取得する関数
@@ -84,7 +86,7 @@ class JoyDriverNode : public rclcpp::Node {
     linear_y_axis_ = this->get_parameter("linear_y_axis").as_int();
     angular_axis_ = this->get_parameter("angular_axis").as_int();
 
-    Kp = this->get_parameter("Kp").as_double(); // 比例ゲイン
+    Kp = this->get_parameter("Kp").as_double();  // 比例ゲイン
   }
 
   // ----- メインのコールバック関数 -----
@@ -93,9 +95,10 @@ class JoyDriverNode : public rclcpp::Node {
 
     auto linetrace_msg = std::make_unique<std_msgs::msg::Bool>();
 
+    auto mode_msg = std::make_unique<std_msgs::msg::String>();
+
     // だめぽ
     // linetrace_msg->data = false;
-
 
     // Ensure the message has enough axes to prevent a crash
     if (msg->axes.size() <=
@@ -104,21 +107,19 @@ class JoyDriverNode : public rclcpp::Node {
       return;
     }
 
-    // buttons[11] == 1 && buttons[12] == 1 
+    // buttons[11] == 1 && buttons[12] == 1
     // linetrace_msg->data = 1
-    // 
+    //
 
-    
     // Mode switching logic
     bool current_linetrace_buttons = (msg->buttons[7] == 1 && msg->buttons[8] == 1);
-    
-    
+
     // ライントレースモードかどうかを変える
     if (current_linetrace_buttons && !prev_linetrace_buttons_) {
       // Toggle LINETRACE mode only on button press (not hold)
       if (mode_ == Mode::LINETRACE) {
-        mode_ = Mode::STOP;
-        RCLCPP_INFO(this->get_logger(), "Mode: STOP (from LINETRACE)");
+        mode_ = Mode::JOY;
+        RCLCPP_INFO(this->get_logger(), "Mode: JOY (from LINETRACE)");
       } else {
         mode_ = Mode::LINETRACE;
         RCLCPP_INFO(this->get_logger(), "Mode: LINETRACE");
@@ -137,12 +138,11 @@ class JoyDriverNode : public rclcpp::Node {
         mode_ = Mode::DPAD;
         init_yaw_ = yaw_;
         RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
-      } 
+      }
     }
-    
+
     // Update previous button state
     prev_linetrace_buttons_ = current_linetrace_buttons;
-
 
     bool l2_pressed = msg->axes[4] < TRIGGER_THRESHOLD;  // L2 trigger
     bool r2_pressed = msg->axes[5] < TRIGGER_THRESHOLD;  // R2 trigger
@@ -225,12 +225,10 @@ class JoyDriverNode : public rclcpp::Node {
         RCLCPP_WARN(this->get_logger(), "Unknown mode: %d", static_cast<int>(mode_));
     }
 
-
     // cmd_velのpublish
     if (mode_ != Mode::LINETRACE) {
       cmd_vel_publisher_->publish(std::move(twist_msg));
-    } 
-
+    }
 
     // Map joystick axes to velocity commands
     // auto twist_msg = set_velocity(msg);
@@ -252,11 +250,11 @@ class JoyDriverNode : public rclcpp::Node {
 
     // Check for state changes
     if (msg->buttons[1] == 1 && prev_throwing_on == false) {
-        prev_throwing_on = true;
-        RCLCPP_INFO(this->get_logger(), "Throwing on");
+      prev_throwing_on = true;
+      RCLCPP_INFO(this->get_logger(), "Throwing on");
     } else if (msg->buttons[3] == 1 && prev_throwing_on == true) {
-        prev_throwing_on = false;
-        RCLCPP_INFO(this->get_logger(), "Throwing off");
+      prev_throwing_on = false;
+      RCLCPP_INFO(this->get_logger(), "Throwing off");
     } else if (msg->buttons[0] == 1 && prev_ejection_on == false) {
       prev_ejection_on = true;
       RCLCPP_INFO(this->get_logger(), "Ejection on");
@@ -314,17 +312,32 @@ class JoyDriverNode : public rclcpp::Node {
 
     linetrace_publisher_->publish(std::move(linetrace_msg));
 
+    mode_msg->data = mode_to_string(mode_);
+    mode_publisher_->publish(std::move(mode_msg));
+  }
 
+  // モードを文字列に変換する関数
+  std::string mode_to_string(Mode mode) {
+    switch (mode) {
+      case Mode::STOP:
+        return "STOP";
+      case Mode::JOY:
+        return "JOY";
+      case Mode::DPAD:
+        return "DPAD";
+      case Mode::LINETRACE:
+        return "LINETRACE";
+      default:
+        return "UNKNOWN";
+    }
   }
 
   // オイラー角を受信するためのコールバック関数
   void rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg) {
     roll_ = msg->x;
     pitch_ = msg->y;
-    yaw_ = msg->z; // current yaw value
-
+    yaw_ = msg->z;  // current yaw value
   }
-
 
   // void set_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg,
   //                          std::unique_ptr<geometry_msgs::msg::Twist>& twist_msg) {
@@ -340,7 +353,6 @@ class JoyDriverNode : public rclcpp::Node {
   // }
 
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
-
     if (mode_ == Mode::DPAD) {
       // 基準値を変更する
       init_yaw_ = yaw_;
@@ -361,12 +373,13 @@ class JoyDriverNode : public rclcpp::Node {
 
   // ROS 2 components
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
-  rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr rpy_subscription_; // オイラー角を受信するためのsubscription
-
+  rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr
+      rpy_subscription_;  // オイラー角を受信するためのsubscription
 
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
   rclcpp::Publisher<custom_interfaces::msg::UpperMotor>::SharedPtr upper_publisher_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr linetrace_publisher_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr mode_publisher_;
 
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr brake_client_;
 
@@ -390,9 +403,7 @@ class JoyDriverNode : public rclcpp::Node {
   // これはロボットの初期姿勢を基準にするための値
   // これを用いてDPADモードでの直線移動での回転方向のズレを補正する
   // L2, R2を押した時も値を更新する
-  double init_yaw_ = 0.0;  
-
-
+  double init_yaw_ = 0.0;
 
   const rclcpp::QoS reliable_qos = rclcpp::QoS(1).reliable();
   const rclcpp::QoS best_effort_qos = rclcpp::QoS(10).best_effort();
