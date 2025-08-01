@@ -202,10 +202,13 @@ class JoyDriverNode : public rclcpp::Node {
           twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
           twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
           // twist_msg->angular.z = 0.0;
-          if ((yaw_ - init_yaw_) > 0) {
+          // 要検討
+          if ((yaw_ - init_yaw_) > 0.1) {
             twist_msg->angular.z = 0.5;
-          } else if ((yaw_ - init_yaw_) < 0) {
+          } else if ((yaw_ - init_yaw_) < -0.1) {
             twist_msg->angular.z = -0.5;
+          } else {
+            twist_msg->angular.z = 0.0;
           }
         } else {
           twist_msg->angular.z = get_angular_velocity(msg);
@@ -332,7 +335,7 @@ class JoyDriverNode : public rclcpp::Node {
 
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
     init_yaw_ = yaw_; // init_yaw_を更新し、基準となる姿勢を変更する
-    
+
     if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
       // R2: rotate right
       return -(msg->axes[4] - 1) / 2.0;
