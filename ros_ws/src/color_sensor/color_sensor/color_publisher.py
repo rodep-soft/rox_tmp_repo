@@ -52,7 +52,7 @@ class LineFollower(Node):
             ColorRGBA, "color_publisher_0", self.color_callback_0, 10
         )
         self.color_1_subscription = self.create_subscription(
-            ColorRGBA, "color_publisher_1", self.color_callback_1, 10
+            ColorRGBA, "color_publisher_2", self.color_callback_1, 10
         )
         self.is_enable_subscription = self.create_subscription(
             Bool, "is_linetrace", self.is_enable_callback, 10
@@ -77,6 +77,8 @@ class LineFollower(Node):
     def publish_twist(self):
         if not self.is_enable:
             self.get_logger().info("Line trace is disabled, not publishing Twist.")
+            before_diff = None
+            self.integral = 0.0
             return
         
         twist = Twist()
@@ -89,7 +91,7 @@ class LineFollower(Node):
             derivative = 0.0
 
         if abs(diff + self.integral) < abs(self.integral):
-            self.integral = self.integral * 0.9
+            self.integral = self.integral * 0.5
 
         self.integral += diff
 
@@ -99,22 +101,20 @@ class LineFollower(Node):
         
 
         x_power = 0.4 - (abs(power) * 0.1)
-
-        
         
         #1.5 : 10
-        twist.linear.x = x_power
+        twist.linear.x = -x_power
         twist.linear.y = power * -1.0 * 0.1
         twist.angular.z = power * 1.0
         #(80.0 * diff_pow) + (1.0 * derivative) + (0.8 * self.integral)
-        self.publisher_.publish(twist)
+        self.cmd_vel_publisher_.publish(twist)
         self.before_diff = diff
 
 
 def main(args=None):
     rclpy.init(args=args)
     color_publisher_1 = ColorPublisher(0, 0xFC)
-    color_publisher_2 = ColorPublisher(1, 0xFC)
+    color_publisher_2 = ColorPublisher(2, 0xFC)
     twist_publisher = LineFollower()
 
     executors = rclpy.executors.SingleThreadedExecutor()
