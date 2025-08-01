@@ -23,16 +23,19 @@ class LedControlNode(Node):
         mode = msg.data
         if mode == "STOP":
             self.pixels.fill((255, 0, 0))
+            self.pixels.show()
         elif mode == "JOY":
             self.pixels.fill((0, 255, 0))
+            self.pixels.show()
         elif mode == "DPAD":
             self.pixels.fill((0, 0, 255))
+            self.pixels.show()
         elif mode == "LINETRACE":
             self.pixels.fill((255, 255, 255))
+            self.pixels.show()
         else:
             self.pixels.fill((0, 0, 0))
-
-
+            self.pixels.show()  
 
 
 def main(args=None):
