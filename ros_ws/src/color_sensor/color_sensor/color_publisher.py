@@ -47,16 +47,21 @@ class ColorPublisher(Node):
 class LineFollower(Node):
     def __init__(self):
         super().__init__("line_follower")
-        self.subscription = self.create_subscription(
+        self.color_0_subscription = self.create_subscription(
             ColorRGBA, "color_publisher_0", self.color_callback_0, 10
         )
-        self.subscription = self.create_subscription(
+        self.color_1_subscription = self.create_subscription(
             ColorRGBA, "color_publisher_1", self.color_callback_1, 10
         )
-        self.publisher_ = self.create_publisher(Twist, "cmd_vel", 10)
+        self.is_enable_subscription = self.create_subscription(
+            ColorRGBA, "is_linetrace", self.is_enable_callback, 10
+        )
+        self.cmd_vel_publisher_ = self.create_publisher(Twist, "cmd_vel", 10)
+
         self.timer = self.create_timer(0.05, self.publish_twist)
         self.before_diff = None
         self.integral = 0.0
+        self.is_enable = False
         self.get_logger().info("Line Follower Node has been started.")
 
     def color_callback_0(self, msg):
@@ -64,6 +69,9 @@ class LineFollower(Node):
 
     def color_callback_1(self, msg):
         self.color_1_ = msg
+    
+    def is_enable_callback(self, msg):
+        self.is_enable = msg.data
 
     def publish_twist(self):
         twist = Twist()
