@@ -40,24 +40,30 @@ class IMUNode : public rclcpp::Node {
   void timer_accel_and_gyro_callback() {
     auto imu_accel_and_gyro_msg = sensor_msgs::msg::Imu();
 
-    Quaternion quat = imu_sensor_.getQuat();
+    // Quaternion quat = imu_sensor_.getQuat();
 
-    imu_accel_and_gyro_msg.orientation.x = quat.x();
-    imu_accel_and_gyro_msg.orientation.y = quat.y();
-    imu_accel_and_gyro_msg.orientation.z = quat.z();
-    imu_accel_and_gyro_msg.orientation.w = quat.w();
+    // imu_accel_and_gyro_msg.orientation.x = quat.x();
+    // imu_accel_and_gyro_msg.orientation.y = quat.y();
+    // imu_accel_and_gyro_msg.orientation.z = quat.z();
+    // imu_accel_and_gyro_msg.orientation.w = quat.w();
+
+    Vector<3> euler = imu_sensor_.getVector(VECTOR_EULER);
+
+    imu_accel_and_gyro_msg.orientation.x = euler[0];
+    imu_accel_and_gyro_msg.orientation.y = euler[1];
+    imu_accel_and_gyro_msg.orientation.z = euler[2];
 
     Vector<3> accel = imu_sensor_.getVector(VECTOR_ACCELEROMETER);
 
-    imu_accel_and_gyro_msg.linear_acceleration.x = accel.x();
-    imu_accel_and_gyro_msg.linear_acceleration.y = accel.y();
-    imu_accel_and_gyro_msg.linear_acceleration.z = accel.z();
+    imu_accel_and_gyro_msg.linear_acceleration.x = accel[0];
+    imu_accel_and_gyro_msg.linear_acceleration.y = accel[1];
+    imu_accel_and_gyro_msg.linear_acceleration.z = accel[2];
 
     Vector<3> gyro = imu_sensor_.getVector(VECTOR_GYROSCOPE);
 
-    imu_accel_and_gyro_msg.angular_velocity.x = gyro.x();
-    imu_accel_and_gyro_msg.angular_velocity.y = gyro.y();
-    imu_accel_and_gyro_msg.angular_velocity.z = gyro.z();
+    imu_accel_and_gyro_msg.angular_velocity.x = gyro[0];
+    imu_accel_and_gyro_msg.angular_velocity.y = gyro[1];
+    imu_accel_and_gyro_msg.angular_velocity.z = gyro[2];
 
     imu_publisher_->publish(imu_accel_and_gyro_msg);
   }
@@ -67,9 +73,9 @@ class IMUNode : public rclcpp::Node {
 
     Vector<3> mag = imu_sensor_.getVector(VECTOR_MAGNETOMETER);
 
-    mag_msg.magnetic_field.x = mag.x();
-    mag_msg.magnetic_field.y = mag.y();
-    mag_msg.magnetic_field.z = mag.z();
+    mag_msg.magnetic_field.x = mag[0];
+    mag_msg.magnetic_field.y = mag[1];
+    mag_msg.magnetic_field.z = mag[2];
 
     mag_publisher_->publish(mag_msg);
   }
