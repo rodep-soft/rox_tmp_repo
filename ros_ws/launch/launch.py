@@ -29,6 +29,12 @@ def generate_launch_description():
             package='color_sensor',
             executable='color_publisher',
             name='color_sensor_publisher_node'
+        ),
+
+        Node(
+            package='imu',
+            executable='imu_node',
+            name='imu_node'
         )
 
         # Node(
