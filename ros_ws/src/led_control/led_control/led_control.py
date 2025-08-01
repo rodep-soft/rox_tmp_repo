@@ -17,7 +17,7 @@ class LedControlNode(Node):
             10
         )
 
-    pixels = neopixel.NeoPixel(board.D18, 30, brightness=0.5, auto_write=False, pixel_order=neopixel.RGB)
+        self.pixels = neopixel.NeoPixel(board.D18, 30, brightness=0.5, auto_write=False, pixel_order=neopixel.RGB)
 
     def mode_callback(self, msg):
         mode = msg.data
@@ -47,6 +47,5 @@ def main(args=None):
     rclpy.shutdown()
 
 if __name__ == "__main__":
-    rclpy.init()
     main()
 
