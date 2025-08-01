@@ -76,8 +76,8 @@ class LineFollower(Node):
 
     def publish_twist(self):
         if not self.is_enable:
-            self.get_logger().info("Line trace is disabled, not publishing Twist.")
-            before_diff = None
+            #self.get_logger().info("Line trace is disabled, not publishing Twist.")
+            self.before_diff = None
             self.integral = 0.0
             return
         
