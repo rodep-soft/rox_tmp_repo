@@ -1,2 +1,3 @@
-bool drive
-bool stop
+bool is_throwing_on
+bool is_ejection_on
+bool is_elevation_on
