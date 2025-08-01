@@ -131,6 +131,7 @@ class JoyDriverNode : public rclcpp::Node {
         RCLCPP_INFO(this->get_logger(), "Mode: STOP");
       } else if (msg->buttons[6] == 1 && mode_ != Mode::DPAD) {
         mode_ = Mode::DPAD;
+        init_yaw_ = yaw_;
         RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
       } 
     }
@@ -335,7 +336,11 @@ class JoyDriverNode : public rclcpp::Node {
   // }
 
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
-    init_yaw_ = yaw_; // init_yaw_を更新し、基準となる姿勢を変更する
+
+    if (mode_ == Mode::DPAD) {
+      // 基準値を変更する
+      init_yaw_ = yaw_;
+    }
 
     if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
       // R2: rotate right
