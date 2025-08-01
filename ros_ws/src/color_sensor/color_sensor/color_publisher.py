@@ -2,6 +2,7 @@
 import rclpy
 from color_sensor.tca9548a import TCS9548A
 from color_sensor.tcs34725 import TCS34725
+from std_msgs.msg import Bool
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from std_msgs.msg import ColorRGBA
@@ -54,7 +55,7 @@ class LineFollower(Node):
             ColorRGBA, "color_publisher_1", self.color_callback_1, 10
         )
         self.is_enable_subscription = self.create_subscription(
-            ColorRGBA, "is_linetrace", self.is_enable_callback, 10
+            Bool, "is_linetrace", self.is_enable_callback, 10
         )
         self.cmd_vel_publisher_ = self.create_publisher(Twist, "cmd_vel", 10)
 
