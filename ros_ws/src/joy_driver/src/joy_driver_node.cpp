@@ -182,6 +182,8 @@ class JoyDriverNode : public rclcpp::Node {
     //   default:
     // }
 
+    double error = yaw_ - init_yaw_;
+
     switch (mode_) {
       case Mode::STOP:
         twist_msg->linear.x = 0.0;
@@ -203,12 +205,10 @@ class JoyDriverNode : public rclcpp::Node {
           twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
           // twist_msg->angular.z = 0.0;
           // 要検討
-          if ((yaw_ - init_yaw_) > 0.1) {
-            twist_msg->angular.z = 0.5;
-          } else if ((yaw_ - init_yaw_) < -0.1) {
-            twist_msg->angular.z = -0.5;
-          } else {
+          if (error < 0.05 || error > -0.05) {
             twist_msg->angular.z = 0.0;
+          } else {
+            twist_msg->angular.z = error * Kp;
           }
         } else {
           twist_msg->angular.z = get_angular_velocity(msg);
@@ -320,6 +320,7 @@ class JoyDriverNode : public rclcpp::Node {
 
   }
 
+
   // void set_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg,
   //                          std::unique_ptr<geometry_msgs::msg::Twist>& twist_msg) {
   //   if(msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
@@ -367,6 +368,9 @@ class JoyDriverNode : public rclcpp::Node {
   int linear_x_axis_;
   int linear_y_axis_;
   int angular_axis_;
+
+  // PID制御のゲイン
+  const double Kp = 1.0;  // 比例ゲイン
 
   // オイラー角
   double pitch_ = 0.0;
