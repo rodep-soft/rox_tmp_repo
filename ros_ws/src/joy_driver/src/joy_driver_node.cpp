@@ -208,7 +208,7 @@ class JoyDriverNode : public rclcpp::Node {
           if (error < 0.05 || error > -0.05) {
             twist_msg->angular.z = 0.0;
           } else {
-            twist_msg->angular.z = error * Kp;
+            twist_msg->angular.z = std::clamp(error * Kp, -0.5, 0.5);
           }
         } else {
           twist_msg->angular.z = get_angular_velocity(msg);
