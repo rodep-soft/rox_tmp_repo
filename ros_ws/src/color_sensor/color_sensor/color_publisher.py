@@ -74,6 +74,10 @@ class LineFollower(Node):
         self.is_enable = msg.data
 
     def publish_twist(self):
+        if not self.is_enable:
+            self.get_logger().info("Line trace is disabled, not publishing Twist.")
+            return
+        
         twist = Twist()
         diff = (self.color_0_.a - self.color_1_.a) / (self.color_0_.a + self.color_1_.a)
 
