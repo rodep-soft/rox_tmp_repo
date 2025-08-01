@@ -117,8 +117,8 @@ class JoyDriverNode : public rclcpp::Node {
     if (current_linetrace_buttons && !prev_linetrace_buttons_) {
       // Toggle LINETRACE mode only on button press (not hold)
       if (mode_ == Mode::LINETRACE) {
-        mode_ = Mode::STOP;
-        RCLCPP_INFO(this->get_logger(), "Mode: STOP (from LINETRACE)");
+        mode_ = Mode::JOY;
+        RCLCPP_INFO(this->get_logger(), "Mode: JOY (from LINETRACE)");
       } else {
         mode_ = Mode::LINETRACE;
         RCLCPP_INFO(this->get_logger(), "Mode: LINETRACE");
