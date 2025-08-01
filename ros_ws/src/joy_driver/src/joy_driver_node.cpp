@@ -5,6 +5,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <string>
 
@@ -38,6 +39,8 @@ class JoyDriverNode : public rclcpp::Node {
 
 
     linetrace_publisher_ = this->create_publisher<std_msgs::msg::Bool>("/is_linetrace", 10);
+
+    mode_publisher_ = this->create_publisher<std_msgs::msg::String>("/mode", 10);
 
     RCLCPP_INFO(this->get_logger(), "Joy driver node started.");
   }
@@ -92,6 +95,8 @@ class JoyDriverNode : public rclcpp::Node {
     auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
 
     auto linetrace_msg = std::make_unique<std_msgs::msg::Bool>();
+
+    auto mode_msg = std::make_unique<std_msgs::msg::String>();
 
     // だめぽ
     // linetrace_msg->data = false;
@@ -314,7 +319,26 @@ class JoyDriverNode : public rclcpp::Node {
 
     linetrace_publisher_->publish(std::move(linetrace_msg));
 
+    mode_msg->data = mode_to_string(mode_);
+    mode_publisher_->publish(std::move(mode_msg));
 
+
+  }
+
+  // モードを文字列に変換する関数
+  std::string mode_to_string(Mode mode) {
+    switch (mode) {
+      case Mode::STOP:
+        return "STOP";
+      case Mode::JOY:
+        return "JOY";
+      case Mode::DPAD:
+        return "DPAD";
+      case Mode::LINETRACE:
+        return "LINETRACE";
+      default:
+        return "UNKNOWN";
+    }
   }
 
   // オイラー角を受信するためのコールバック関数
@@ -367,6 +391,7 @@ class JoyDriverNode : public rclcpp::Node {
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
   rclcpp::Publisher<custom_interfaces::msg::UpperMotor>::SharedPtr upper_publisher_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr linetrace_publisher_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr mode_publisher_;
 
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr brake_client_;
 
