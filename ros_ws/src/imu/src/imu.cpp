@@ -4,6 +4,7 @@
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <geometry_msgs/msg/vector3.hpp>
 #include <sensor_msgs/msg/magnetic_field.hpp>
 #include <thread>
 #include <vector>
@@ -21,6 +22,7 @@ class IMUNode : public rclcpp::Node {
     // Publishers
     imu_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("/imu/data", 10);
     mag_publisher_ = this->create_publisher<sensor_msgs::msg::MagneticField>("/imu/mag", 10);
+    rpy_publisher_ = this->create_publisher<geometry_msgs::msg::Vector3>("/imu/rpy", 10);
 
     accel_and_gyro_timer_ = this->create_wall_timer(std::chrono::milliseconds(10),
                                     std::bind(&IMUNode::timer_accel_and_gyro_callback, this));
@@ -32,26 +34,35 @@ class IMUNode : public rclcpp::Node {
  private:
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher_;
   rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr mag_publisher_;
+  rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr rpy_publisher_;
   rclcpp::TimerBase::SharedPtr accel_and_gyro_timer_;
   rclcpp::TimerBase::SharedPtr mag_timer_;
 
   BNO055 imu_sensor_;  // Example sensor ID
 
   void timer_accel_and_gyro_callback() {
-    auto imu_accel_and_gyro_msg = sensor_msgs::msg::Imu();
 
-    // Quaternion quat = imu_sensor_.getQuat();
+    // --- オイラー角取得 ---
 
-    // imu_accel_and_gyro_msg.orientation.x = quat.x();
-    // imu_accel_and_gyro_msg.orientation.y = quat.y();
-    // imu_accel_and_gyro_msg.orientation.z = quat.z();
-    // imu_accel_and_gyro_msg.orientation.w = quat.w();
+    auto rpy_msg = geometry_msgs::msg::Vector3();
 
     Vector<3> euler = imu_sensor_.getVector(VECTOR_EULER);
 
-    imu_accel_and_gyro_msg.orientation.x = euler[0];
-    imu_accel_and_gyro_msg.orientation.y = euler[1];
-    imu_accel_and_gyro_msg.orientation.z = euler[2];
+    rpy_msg.x = euler[0];
+    rpy_msg.y = euler[1];
+    rpy_msg.z = euler[2];
+
+
+    // --- ここからImuメッセージ ---
+
+    auto imu_accel_and_gyro_msg = sensor_msgs::msg::Imu();
+
+    Quaternion quat = imu_sensor_.getQuat();
+
+    imu_accel_and_gyro_msg.orientation.x = quat.x();
+    imu_accel_and_gyro_msg.orientation.y = quat.y();
+    imu_accel_and_gyro_msg.orientation.z = quat.z();
+    imu_accel_and_gyro_msg.orientation.w = quat.w();
 
     Vector<3> accel = imu_sensor_.getVector(VECTOR_ACCELEROMETER);
 
@@ -66,6 +77,8 @@ class IMUNode : public rclcpp::Node {
     imu_accel_and_gyro_msg.angular_velocity.z = gyro[2];
 
     imu_publisher_->publish(imu_accel_and_gyro_msg);
+    rpy_publisher_->publish(rpy_msg);
+
   }
 
   void timer_mag_callback() {
