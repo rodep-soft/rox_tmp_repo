@@ -9,12 +9,14 @@ def generate_launch_description():
             executable="joy_node",
             name="joy_node",
             namespace="",
+            output='screen'
         ),
 
         Node(
             package="joy_driver",
             executable="joy_driver_node",
             name="joy_driver_node",
+            output='screen',
             parameters=["config/config.yaml"]
         ),
 
@@ -22,19 +24,22 @@ def generate_launch_description():
             package="mecanum_wheel_controller",
             executable="mecanum_wheel_controller_node",
             name="mecanum_wheel_controller_node",
+            output='screen',
             parameters=["config/config.yaml"]
         ),
 
         Node(
             package='color_sensor',
             executable='color_publisher',
-            name='color_sensor_publisher_node'
+            name='color_sensor_publisher_node',
+            output='screen'
         ),
 
         Node(
             package='imu',
             executable='imu_node',
-            name='imu_node'
+            name='imu_node',
+            output='screen'
         )
 
         # Node(

@@ -371,15 +371,15 @@ class JoyDriverNode : public rclcpp::Node {
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr brake_client_;
 
   // Parameters
-  const double linear_x_scale_;
-  const double linear_y_scale_;
-  const double angular_scale_;
-  const int linear_x_axis_;
-  const int linear_y_axis_;
-  const int angular_axis_;
+  double linear_x_scale_;
+  double linear_y_scale_;
+  double angular_scale_;
+  int linear_x_axis_;
+  int linear_y_axis_;
+  int angular_axis_;
 
   // PID制御のゲイン
-  const double Kp;  // 比例ゲイン
+  double Kp;  // 比例ゲイン
 
   // オイラー角
   double pitch_ = 0.0;
