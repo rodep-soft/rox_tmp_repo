@@ -71,6 +71,8 @@ class JoyDriverNode : public rclcpp::Node {
     this->declare_parameter<int>("linear_x_axis", 1);  // Vertical movement
     this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
     this->declare_parameter<int>("angular_axis", 3);
+
+    this->declare_parameter<double>("Kp", 1.0); // DPADモードのずれを補正する比例ゲイン
   }
 
   // パラメータを取得する関数
@@ -81,6 +83,8 @@ class JoyDriverNode : public rclcpp::Node {
     linear_x_axis_ = this->get_parameter("linear_x_axis").as_int();
     linear_y_axis_ = this->get_parameter("linear_y_axis").as_int();
     angular_axis_ = this->get_parameter("angular_axis").as_int();
+
+    Kp = this->get_parameter("Kp").as_double(); // 比例ゲイン
   }
 
   // ----- メインのコールバック関数 -----
@@ -367,15 +371,15 @@ class JoyDriverNode : public rclcpp::Node {
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr brake_client_;
 
   // Parameters
-  double linear_x_scale_;
-  double linear_y_scale_;
-  double angular_scale_;
-  int linear_x_axis_;
-  int linear_y_axis_;
-  int angular_axis_;
+  const double linear_x_scale_;
+  const double linear_y_scale_;
+  const double angular_scale_;
+  const int linear_x_axis_;
+  const int linear_y_axis_;
+  const int angular_axis_;
 
   // PID制御のゲイン
-  const double Kp = 1.0;  // 比例ゲイン
+  const double Kp;  // 比例ゲイン
 
   // オイラー角
   double pitch_ = 0.0;
