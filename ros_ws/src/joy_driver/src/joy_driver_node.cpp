@@ -23,6 +23,10 @@ class JoyDriverNode : public rclcpp::Node {
         "/joy", best_effort_qos,
         std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
 
+    rpy_subscription_ = this->create_subscription<geometry_msgs::msg::Vector3>(
+        "/imu/rpy", best_effort_qos,
+        std::bind(&JoyDriverNode::rpy_callback, this, std::placeholders::_1));
+
     // Create publisher for the /cmd_vel topic
     cmd_vel_publisher_ =
         this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", best_effort_qos);
@@ -197,7 +201,12 @@ class JoyDriverNode : public rclcpp::Node {
         if (!l2_pressed && !r2_pressed) {
           twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
           twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
-          twist_msg->angular.z = 0.0;
+          // twist_msg->angular.z = 0.0;
+          if ((yaw_ - init_yaw_) > 0) {
+            twist_msg->angular.z = 0.5;
+          } else if ((yaw_ - init_yaw_) < 0) {
+            twist_msg->angular.z = -0.5;
+          }
         } else {
           twist_msg->angular.z = get_angular_velocity(msg);
         }
@@ -300,6 +309,14 @@ class JoyDriverNode : public rclcpp::Node {
 
   }
 
+  // オイラー角を受信するためのコールバック関数
+  void rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg) {
+    roll_ = msg->x;
+    pitch_ = msg->y;
+    yaw_ = msg->z; // current yaw value
+
+  }
+
   // void set_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg,
   //                          std::unique_ptr<geometry_msgs::msg::Twist>& twist_msg) {
   //   if(msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
@@ -314,6 +331,8 @@ class JoyDriverNode : public rclcpp::Node {
   // }
 
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
+    init_yaw_ = yaw_; // init_yaw_を更新し、基準となる姿勢を変更する
+    
     if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
       // R2: rotate right
       return -(msg->axes[4] - 1) / 2.0;
@@ -329,6 +348,9 @@ class JoyDriverNode : public rclcpp::Node {
 
   // ROS 2 components
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
+  rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr rpy_subscription_; // オイラー角を受信するためのsubscription
+
+
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
   rclcpp::Publisher<custom_interfaces::msg::UpperMotor>::SharedPtr upper_publisher_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr linetrace_publisher_;
@@ -342,6 +364,19 @@ class JoyDriverNode : public rclcpp::Node {
   int linear_x_axis_;
   int linear_y_axis_;
   int angular_axis_;
+
+  // オイラー角
+  double pitch_ = 0.0;
+  double roll_ = 0.0;
+  double yaw_ = 0.0;
+
+  // 初期化時のyaw値
+  // これはロボットの初期姿勢を基準にするための値
+  // これを用いてDPADモードでの直線移動での回転方向のズレを補正する
+  // L2, R2を押した時も値を更新する
+  double init_yaw_ = 0.0;  
+
+
 
   const rclcpp::QoS reliable_qos = rclcpp::QoS(1).reliable();
   const rclcpp::QoS best_effort_qos = rclcpp::QoS(10).best_effort();
