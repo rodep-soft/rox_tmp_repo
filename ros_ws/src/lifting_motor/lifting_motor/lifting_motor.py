@@ -1,4 +1,4 @@
-from time import sleep
+# from time import sleep
 from enum import Enum # Enumを使うために必要
 
 import rclpy
@@ -63,6 +63,11 @@ class LiftingMotorNode(Node):
         self.is_ejection_motor_on = False
         self.is_elevation_motor_on = False
 
+        # 前回の状態を保持するための変数
+        self.prev_throwing_cmd = False
+        self.prev_ejection_cmd = False
+        # self.prev_elevation_cmd = False
+
 
     # Callback function for UpperMotor messages
     # ここでモーターの制御を行う
@@ -89,34 +94,34 @@ class LiftingMotorNode(Node):
 
 
         # 状態遷移のロジック
-        if self.current_state == self.State.INIT and \
+        if self.current_state == State.INIT and \
            msg.something_on == True: # これは本当の名前に置き換える
-            self.current_state = self.State.STOPPED
-        elif self.current_state == self.State.STOPPED and \
+            self.current_state = State.STOPPED
+        elif self.current_state == State.STOPPED and \
            self.is_throwing_motor_on == True and \
            self.is_elevation_minlim_on == True and \
            msg.is_ejection_on == True:
             # 射出モーターがONで、昇降が完全に下がっていて、押し出しがONになったとき遷移
-            self.current_state = self.State.TO_MAX #状態遷移
-        elif self.current_state == self.State.TO_MAX and \
+            self.current_state = State.TO_MAX #状態遷移
+        elif self.current_state == State.TO_MAX and \
             self.is_ejection_maxlim_on == True:
             # 押し出しが最大まで伸び切ってリミットスイッチを押したとき、遷移
-            self.current_state = self.State.RETURN_TO_MIN #状態遷移
+            self.current_state = State.RETURN_TO_MIN #状態遷移
             # Action:
             self.throwing_motor.off() # 押し出しが完了したらリレーをオフにする     
-        elif self.current_state == self.State.RETURN_TO_MIN and \
+        elif self.current_state == State.RETURN_TO_MIN and \
             self.is_ejection_minlim_on == True:
             # 押し出しが完全に引っ込んで最小リミットスイッチを押したら遷移
-            self.current_state = self.State.STOPPED #状態遷移
+            self.current_state = State.STOPPED #状態遷移
 
         # 押出モーターの実際の動作
-        if self.current_state == self.State.STOPPED:
+        if self.current_state == State.STOPPED:
             if self.is_ejection_motor_on == True:
                 self.ejection_motor.stop()
             self.relay_on(msg)
-        elif self.current_state == self.State.TO_MAX:
+        elif self.current_state == State.TO_MAX:
             self.ejection_motor.forward(speed=1.0)
-        elif self.current_state == self.State.RETURN_TO_MIN:
+        elif self.current_state == State.RETURN_TO_MIN:
             self.ejection_motor.backward(speed=1.0)
             self.relay_on(msg)
 
@@ -131,37 +136,28 @@ class LiftingMotorNode(Node):
 
     # リミットスイッチの状態を検出するメソッド
     def detect_sw_state(self):
-        if self.ejection_maxlim.is_pressed:
-            self.get_logger().info("Ejection Max Limit Switch is pressed")
-            self.is_ejection_maxlim_on = True
-        
-        if self.ejection_minlim.is_pressed:
-            self.get_logger().info("Ejection Min Limit Switch is pressed")
-            self.is_ejection_minlim_on = True
-
-        if self.elevation_maxlim.is_pressed:
-            self.get_logger().info("Elevation Max Limit Switch is pressed")
-            self.is_elevation_maxlim_on = True
-        
-        if self.elevation_minlim.is_pressed:
-            self.get_logger().info("Elevation Min Limit Switch is pressed")
-            self.is_elevation_minlim_on = True
+        self.is_ejection_maxlim_on = self.ejection_maxlim.is_pressed
+        self.is_ejection_minlim_on = self.ejection_minlim.is_pressed
+        self.is_elevation_maxlim_on = self.elevation_maxlim.is_pressed
+        self.is_elevation_minlim_on = self.elevation_minlim.is_pressed
 
 
     # モーターの状態を検出するメソッド
     # モーターが動作しているかどうかを確認する　
     def detect_motor_state(self):
-        if self.throwing_motor.is_active == True:
-            self.is_throwing_motor_on = True
+        self.is_throwing_motor_on = self.throwing_motor.is_active
+        self.is_ejection_motor_on = self.ejection_motor.is_active
+        self.is_elevation_motor_on = self.elevation_motor.is_active
+
+    def detect_edge_and_control_motor(self, msg):
+        if (not self.prev_throwing_cmd) and msg.is_throwing_on:
+            self.throwing_motor.on()
+            self.prev_throwing_cmd = True
+
+        if (not self.prev_ejection_cmd) and msg.is_ejection_on:
+            self.ejection_motor.forward(speed=1.0)
+            self.prev_ejection_cmd = True
         
-        # は？
-        if self.ejection_motor.is_active == True:
-            self.is_ejection_motor_on = True
-
-        # は??
-        if self.elevation_motor.is_active == True:
-            self.is_elevation_motor_on = True
-
 
 
 
@@ -177,5 +173,4 @@ def main(args=None):
 
 
 if __name__ == "__main__":
-    rclpy.init()
     main()
