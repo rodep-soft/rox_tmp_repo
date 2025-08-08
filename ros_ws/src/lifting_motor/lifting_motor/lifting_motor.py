@@ -1,5 +1,5 @@
 from time import sleep
-from enum import Enum
+from enum import Enum # Enumを使うために必要
 
 import rclpy
 from gpiozero import Motor, OutputDevice, Button
@@ -13,8 +13,23 @@ class LiftingMotorNode(Node):
         # UpperMotor msgのsubscription
         self.subscription = self.create_subscription(UpperMotor, "/upper_motor", self.motor_callback, 1)
         
-        # GPIOピンの設定
+        # -----GPIOピンの設定-----
+
+        # リレーのピン番号
+        # ピン番号は仮
         self.relay_pin = 9 # Relay pin number
+
+        # 押出しモーターのピン番号
+        # ピン番号は仮である
+        self.ejection_motor_forward_pin = 17
+        self.ejection_motor_backward_pin = 27
+        self.ejection_motor_enable_pin = 18
+
+        # 昇降モーターのピン番号
+        # ピン番号は仮
+        self.elevation_motor_forward_pin = 22
+        self.elevation_motor_backward_pin = 23
+        self.elevation_motor_enable_pin = 24
 
         # リミットスイッチ
         # ピン番号は仮であるため、実際には書き換える必要がある
@@ -24,8 +39,8 @@ class LiftingMotorNode(Node):
         self.elevation_minlim = Button(8)
 
         # モーターの初期化
-        self.elevation_motor = Motor(forward=17, backward=27, enable=18)
-        self.ejection_motor = Motor(forward=22, backward=23, enable=24) # これは仮のピン番号
+        self.ejection_motor = Motor(forward=self.ejection_motor_forward_pin, backward=self.ejection_motor_backward_pin, enable=self.ejection_motor_enable_pin)
+        self.elevation_motor = Motor(forward=self.elevation_motor_forward_pin, backward=self.elevation_motor_backward_pin, enable=self.elevation_motor_enable_pin)
         self.relay_motor = OutputDevice(self.relay_pin, active_high=True, initial_value=False)
 
         # 押出の状態を定義
@@ -38,10 +53,19 @@ class LiftingMotorNode(Node):
         # 初期状態はINIT
         self.current_state = State.INIT
 
+        # リミットスイッチの状態管理用のフラグ
+        self.is_ejection_maxlim_on = False
+        self.is_ejection_minlim_on = False
+        self.is_elevation_maxlim_on = False
+        self.is_elevation_minlim_on = False
+
 
     # Callback function for UpperMotor messages
     # ここでモーターの制御を行う
     def motor_callback(self, msg):
+
+        self.detect_sw_state() # 全リミットスイッチの状態を検出
+
         # 射出モーター (リレー駆動)
         if msg.is_throwing_on == 1:
             self.device.on()
@@ -93,12 +117,23 @@ class LiftingMotorNode(Node):
         # else:
         #     self.relay_motor.off()
 
-
-
-
+    # リミットスイッチの状態を検出するメソッド
+    def detect_sw_state(self):
+        if self.ejection_maxlim.is_pressed:
+            self.get_logger().info("Ejection Max Limit Switch is pressed")
+            self.is_ejection_maxlim_on = True
         
+        if self.ejection_minlim.is_pressed:
+            self.get_logger().info("Ejection Min Limit Switch is pressed")
+            self.is_ejection_minlim_on = True
 
-            
+        if self.elevation_maxlim.is_pressed:
+            self.get_logger().info("Elevation Max Limit Switch is pressed")
+            self.is_elevation_maxlim_on = True
+        
+        if self.elevation_minlim.is_pressed:
+            self.get_logger().info("Elevation Min Limit Switch is pressed")
+            self.is_elevation_minlim_on = True
 
 
 
