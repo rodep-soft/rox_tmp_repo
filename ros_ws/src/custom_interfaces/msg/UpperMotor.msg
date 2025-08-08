@@ -4,12 +4,8 @@ bool is_throwing_on
 # 押したときだけTrueになり、on()になるという話
 
 bool is_ejection_on
-bool is_ejection_maxlim_on
-bool is_ejection_minlim_on
 
 uint8_t elevation_mode 
 # 0 -> 下
 # 1 -> 上
 # 2 -> STOP
-bool is_elevation_maxlim_on
-bool is_elevation_minlim_on

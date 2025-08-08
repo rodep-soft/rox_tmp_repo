@@ -2,7 +2,7 @@ from time import sleep
 from enum import Enum
 
 import rclpy
-from gpiozero import Motor, OutputDevice
+from gpiozero import Motor, OutputDevice, Button
 from rclpy.node import Node
 from custom_interfaces.msg import UpperMotor
 
@@ -10,8 +10,20 @@ class LiftingMotorNode(Node):
 
     def __init__(self):
         super().__init__("lifting_motor_node")
+        # UpperMotor msgのsubscription
         self.subscription = self.create_subscription(UpperMotor, "/upper_motor", self.motor_callback, 1)
+        
+        # GPIOピンの設定
         self.relay_pin = 9 # Relay pin number
+
+        # リミットスイッチ
+        # ピン番号は仮であるため、実際には書き換える必要がある
+        self.ejection_maxlim = Button(5)
+        self.ejection_minlim = Button(6)
+        self.elevation_maxlim = Button(7)
+        self.elevation_minlim = Button(8)
+
+        # モーターの初期化
         self.elevation_motor = Motor(forward=17, backward=27, enable=18)
         self.ejection_motor = Motor(forward=22, backward=23, enable=24) # これは仮のピン番号
         self.relay_motor = OutputDevice(self.relay_pin, active_high=True, initial_value=False)
@@ -27,7 +39,8 @@ class LiftingMotorNode(Node):
         self.current_state = State.INIT
 
 
-
+    # Callback function for UpperMotor messages
+    # ここでモーターの制御を行う
     def motor_callback(self, msg):
         # 射出モーター (リレー駆動)
         if msg.is_throwing_on == 1:

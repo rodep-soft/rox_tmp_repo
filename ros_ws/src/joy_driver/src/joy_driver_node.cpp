@@ -247,58 +247,50 @@ class JoyDriverNode : public rclcpp::Node {
     // dpad_msg->right = msg->buttons[14];
 
     auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
+    // UpperMotor.msgのフィールド設定
 
-    // Check for state changes
-    if (msg->buttons[1] == 1 && prev_throwing_on == false) {
-      prev_throwing_on = true;
-      RCLCPP_INFO(this->get_logger(), "Throwing on");
-    } else if (msg->buttons[3] == 1 && prev_throwing_on == true) {
-      prev_throwing_on = false;
-      RCLCPP_INFO(this->get_logger(), "Throwing off");
-    } else if (msg->buttons[0] == 1 && prev_ejection_on == false) {
-      prev_ejection_on = true;
-      RCLCPP_INFO(this->get_logger(), "Ejection on");
-    } else if (msg->buttons[2] == 1 && prev_ejection_on == true) {
-      prev_ejection_on = false;
-      RCLCPP_INFO(this->get_logger(), "Ejection off");
-    } else if (msg->buttons[10] == 1 && prev_elevation_on == false) {
-      prev_elevation_on = true;
-      RCLCPP_INFO(this->get_logger(), "Elevation on");
-    } else if (msg->buttons[9] == 1 && prev_elevation_on == true) {
-      prev_elevation_on = false;
-      RCLCPP_INFO(this->get_logger(), "Elevation off");
+    // circle button
+    if (msg->buttons[1] == 1) {
+      upper_msg->is_throwing_on = true;
+    } else {
+      upper_msg->is_throwing_on = false;
     }
 
-    // Always set current state to the message
-    upper_msg->is_throwing_on = prev_throwing_on;
-    upper_msg->is_ejection_on = prev_ejection_on;
-    upper_msg->is_elevation_on = prev_elevation_on;
+    // square button
+    if (msg->buttons[2] == 1) {
+      upper_msg->is_ejection_on = true;
+    } else {
+      upper_msg->is_ejection_on = false;
+    }
 
-    // Deprecated
-    // void joy_rotation(){
-    //   if(msg->axes[5] >= 0.95){
-    //     // L2の右旋回
-    //     twist_msg.linear.x = 0.0;
-    //     twist_msg.linear.y = 0.0;
-    //     msg->axes[5] = 1.0;
-    //     this->twist_msg.angular.z =  (msg->axes[4]-1)/2.0;
-    //   } else if(msg->axes[4] >= 0.95){
-    //     // R2の左旋回
-    //     twist_msg.linear.x = 0.0;
-    //     twist_msg.linear.y = 0.0;
-    //     msg->axes[4] = 1.0;
-    // auto dpad_msg = std::make_unique<custom_interfaces::msg::CmdDpad>();
-    // dpad_msg->up = msg->buttons[11];
-    // dpad_msg->down = msg->buttons[12];
-    // dpad_msg->left = msg->buttons[13];
-    // dpad_msg->right = msg->buttons[14];
-    //     this->twist_msg.angular.z = -(msg->axes[5]-1)/2.0;
-    //   }
 
-    // RCLCPP_INFOでのポインタアクセスエラー
-    // // twist_msg.linear.x → twist_msg->linear.x に修正ってＡＩに言われた
-    // RCLCPP_INFO(this->get_logger(), "linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
-    //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
+
+    //  一旦廃止
+    // // Check for state changes
+    // if (msg->buttons[1] == 1 && prev_throwing_on == false) {
+    //   prev_throwing_on = true;
+    //   RCLCPP_INFO(this->get_logger(), "Throwing on");
+    // } else if (msg->buttons[3] == 1 && prev_throwing_on == true) {
+    //   prev_throwing_on = false;
+    //   RCLCPP_INFO(this->get_logger(), "Throwing off");
+    // } else if (msg->buttons[0] == 1 && prev_ejection_on == false) {
+    //   prev_ejection_on = true;
+    //   RCLCPP_INFO(this->get_logger(), "Ejection on");
+    // } else if (msg->buttons[2] == 1 && prev_ejection_on == true) {
+    //   prev_ejection_on = false;
+    //   RCLCPP_INFO(this->get_logger(), "Ejection off");
+    // } else if (msg->buttons[10] == 1 && prev_elevation_on == false) {
+    //   prev_elevation_on = true;
+    //   RCLCPP_INFO(this->get_logger(), "Elevation on");
+    // } else if (msg->buttons[9] == 1 && prev_elevation_on == true) {
+    //   prev_elevation_on = false;
+    //   RCLCPP_INFO(this->get_logger(), "Elevation off");
+    // }
+
+    // // Always set current state to the message
+    // upper_msg->is_throwing_on = prev_throwing_on;
+    // upper_msg->is_ejection_on = prev_ejection_on;
+    // upper_msg->is_elevation_on = prev_elevation_on;
 
     // Always publish current state
     upper_publisher_->publish(std::move(upper_msg));
