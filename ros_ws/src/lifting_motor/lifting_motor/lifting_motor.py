@@ -11,13 +11,13 @@ class LiftingMotorNode(Node):
     def __init__(self):
         super().__init__("lifting_motor_node")
         # UpperMotor msgのsubscription
-        self.subscription = self.create_subscription(UpperMotor, "/upper_motor", self.motor_callback, 1)
+        self.subscription = self.create_subscription(UpperMotor, "/upper_motor", self.motor_callback, 10)
         
         # -----GPIOピンの設定-----
 
         # リレーのピン番号
         # ピン番号は仮
-        self.relay_pin = 9 # Relay pin number
+        self.relay_pin = 9 # 射出用モーターを駆動するためのリレーのGPIOピン番号
 
         # 押出しモーターのピン番号
         # ピン番号は仮である
@@ -41,7 +41,7 @@ class LiftingMotorNode(Node):
         # モーターの初期化
         self.ejection_motor = Motor(forward=self.ejection_motor_forward_pin, backward=self.ejection_motor_backward_pin, enable=self.ejection_motor_enable_pin)
         self.elevation_motor = Motor(forward=self.elevation_motor_forward_pin, backward=self.elevation_motor_backward_pin, enable=self.elevation_motor_enable_pin)
-        self.relay_motor = OutputDevice(self.relay_pin, active_high=True, initial_value=False)
+        self.throwing_motor = OutputDevice(self.relay_pin, active_high=True, initial_value=False)
 
         # 押出の状態を定義
         class State(Enum):
@@ -59,6 +59,11 @@ class LiftingMotorNode(Node):
         self.is_elevation_maxlim_on = False
         self.is_elevation_minlim_on = False
 
+        # モーターの状態管理用のフラグ
+        self.is_throwing_on = False
+        self.is_ejection_on = False
+        self.is_elevation_on = False
+
 
     # Callback function for UpperMotor messages
     # ここでモーターの制御を行う
@@ -66,21 +71,21 @@ class LiftingMotorNode(Node):
 
         self.detect_sw_state() # 全リミットスイッチの状態を検出
 
-        # 射出モーター (リレー駆動)
-        if msg.is_throwing_on == 1:
-            self.device.on()
-            self.get_logger().info("Relay: ON")
-        else:
-            self.device.off()
-            self.get_logger().info("Relay: OFF")
+        # # 射出モーター (リレー駆動)
+        # if msg.is_throwing_on == 1:
+        #     self.device.on()
+        #     self.get_logger().info("Relay: ON")
+        # else:
+        #     self.device.off()
+        #     self.get_logger().info("Relay: OFF")
 
-        # 昇降モーター (MD駆動)
-        if msg.elevation_mode == 1:
-            self.elevation_motor.forward(speed=1.0) # 逆かも
-        elif msg.elevation_mode == 0:
-            self.elevation_motor.backward(speed=1.0)
-        else:
-            self.elevation_motor.stop()
+        # # 昇降モーター (MD駆動)
+        # if msg.elevation_mode == 1:
+        #     self.elevation_motor.forward(speed=1.0) # 逆かも
+        # elif msg.elevation_mode == 0:
+        #     self.elevation_motor.backward(speed=1.0)
+        # else:
+        #     self.elevation_motor.stop()
 
         # 状態遷移のロジック
         if self.current_state == self.State.INIT and \
@@ -88,8 +93,8 @@ class LiftingMotorNode(Node):
             self.current_state == self.State.STOPPED
         elif self.current_state == self.State.STOPPED and \
            msg.is_throwing_on == True and \
-           msg.is_elevation_minlim_on == True and \
-           msg.is_ejection_on == True:
+           self.is_elevation_minlim_on == True and \
+           self.is_ejection_on == True:
             self.current_state = self.State.TO_MAX #状態遷移
         elif self.current_state == self.State.TO_MAX and \
             msg.is_ejection_maxmlim_on == True:
@@ -134,6 +139,19 @@ class LiftingMotorNode(Node):
         if self.elevation_minlim.is_pressed:
             self.get_logger().info("Elevation Min Limit Switch is pressed")
             self.is_elevation_minlim_on = True
+
+    # モーターの状態を検出するメソッド
+    # モーターが動作しているかどうかを確認する　
+    def detect_motor_state(self):
+        if self.throwing_motor.is_active == True:
+            self.is_throwing_on = True
+        
+        if self.ejection_motor.is_active == True:
+            self.is_ejection_on = True
+
+        if self.elevation_motor.is_active == True:
+            self.is_elevation_on = True
+
 
 
 

@@ -4,6 +4,7 @@ bool is_throwing_on
 # 押したときだけTrueになり、on()になるという話
 
 bool is_ejection_on
+# これも動作については上のis_throwing_onと同じ挙動
 
 uint8_t elevation_mode 
 # 0 -> 下
