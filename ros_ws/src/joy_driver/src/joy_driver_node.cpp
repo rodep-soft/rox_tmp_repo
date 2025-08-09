@@ -249,18 +249,31 @@ class JoyDriverNode : public rclcpp::Node {
     auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
     // UpperMotor.msgのフィールド設定
 
-    // circle button
-    if (msg->buttons[1] == 1) {
+    // システム準備状態（例：SELECT + STARTボタン同時押し）
+    // これはどうするか迷い中
+    upper_msg->is_system_ready = (msg->buttons[4] == 1 && msg->buttons[6] == 1);
+
+    // square button (射出)
+    if (msg->buttons[2] == 1) {
       upper_msg->is_throwing_on = true;
     } else {
       upper_msg->is_throwing_on = false;
     }
 
-    // square button
-    if (msg->buttons[2] == 1) {
+    // circle button (押出)
+    if (msg->buttons[1] == 1) {
       upper_msg->is_ejection_on = true;
     } else {
       upper_msg->is_ejection_on = false;
+    }
+
+    // 昇降制御（方向パッド）
+    if (msg->buttons[3] == 1) {        // triangle
+      upper_msg->elevation_mode = 1;    // 上昇
+    } else if (msg->buttons[12] == 1) { // x
+      upper_msg->elevation_mode = 0;    // 下降
+    } else {
+      upper_msg->elevation_mode = 2;    // 停止
     }
 
 
