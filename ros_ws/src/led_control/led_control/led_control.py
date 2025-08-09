@@ -17,7 +17,8 @@ class LedControlNode(Node):
             10
         )
 
-        self.pixels = neopixel.NeoPixel(board.D18, 30, brightness=0.5, auto_write=False, pixel_order=neopixel.RGB)
+        self.pixels = neopixel.NeoPixel(board.D23, 30, brightness=0.5, auto_write=False, pixel_order=neopixel.RGB)
+
 
     def mode_callback(self, msg):
         mode = msg.data
