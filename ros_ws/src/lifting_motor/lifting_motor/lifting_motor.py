@@ -5,6 +5,10 @@ from custom_interfaces.msg import UpperMotor
 from state_machine import State, StateMachine
 from motor_driver import MotorDriver
 
+# lifting_motorノードのメインのプログラム
+# state_machine.pyに状態とその遷移のロジックが,
+# motor_driver.pyにモーターの制御ロジックが含まれる
+
 class LiftingMotorNode(Node):
 
     def __init__(self):
@@ -16,7 +20,12 @@ class LiftingMotorNode(Node):
         self.state_machine = StateMachine()
         self.motor_driver = MotorDriver()
         
+        # エッジ検出用の前回値保持
+        self.prev_throwing_on = False
+        self.prev_ejection_on = False
+        
         # ハードウェア検証
+        # リミットスイッチとモーターの状態の読み取りが可能か確認する
         if not self.motor_driver.validate_hardware():
             self.get_logger().error("ハードウェアの初期化に失敗しました")
         else:
@@ -29,12 +38,20 @@ class LiftingMotorNode(Node):
             # スイッチの状態を取得
             sw = self.motor_driver.get_switch_states()
 
+            # エッジ検出（モーメンタリボタン用）
+            throwing_edge = msg.is_throwing_on and not self.prev_throwing_on
+            ejection_edge = msg.is_ejection_on and not self.prev_ejection_on
+            
+            # 前回値を更新
+            self.prev_throwing_on = msg.is_throwing_on
+            self.prev_ejection_on = msg.is_ejection_on
+
             # 状態遷移の更新用
             inputs = {
-                "is_system_ready": msg.something_on,  # INIT<-->STOPPED (要修正: 適切なフィールド名に変更)
-                "is_throwing_motor_on": msg.is_throwing_on,
+                "is_system_ready": msg.is_system_ready,
+                "is_throwing_motor_on": self.motor_driver.get_motor_states()["is_throwing_motor_running"],
                 "is_elevation_minlim_on": sw["elevation_min"],
-                "is_ejection_on": msg.is_ejection_on,
+                "is_ejection_on": ejection_edge,  # エッジ検出結果を使用
                 "is_ejection_maxlim_on": sw["ejection_max"],
                 "is_ejection_minlim_on": sw["ejection_min"],
                 "safety_reset_button": False,  # TODO: 実際のボタン状態に置き換え
@@ -54,22 +71,45 @@ class LiftingMotorNode(Node):
                 self.motor_driver.throwing_off()  # リレー停止（一度だけ）
                 self.get_logger().info("TO_MAX遷移: リレーを停止しました")
 
-            # 状態に応じたモーター制御等の処理
+            # 射出用リレーのモーメンタリ制御（STOPPEDまたはRETURN_TO_MIN状態でのみ）
+            if current_state in [State.STOPPED, State.RETURN_TO_MIN] and throwing_edge:
+                self.motor_driver.throwing_on()
+                self.get_logger().info("射出リレーをONにしました")
+
+            # 状態に応じた押出モーター制御
             if current_state == State.STOPPED:
                 self.motor_driver.ejection_stop()
             elif current_state == State.TO_MAX:
                 self.motor_driver.ejection_forward()  # 射出駆動
             elif current_state == State.RETURN_TO_MIN:
                 self.motor_driver.ejection_backward()
+
+            # 昇降モーター制御（状態に関係なく独立動作）
+            self.elevation_control(msg.elevation_mode, sw)
                 
         except Exception as e:
             self.get_logger().error(f"Motor callback error: {e}")
             # エラー時は安全のため全モーター停止
             try:
-                self.motor_driver.ejection_stop()
-                self.motor_driver.throwing_off()
+                self.motor_driver.stop_all_motors()
             except:
                 pass
+
+    def elevation_control(self, elevation_mode, switch_states):
+        """昇降モーター制御（独立動作）"""
+        try:
+            if elevation_mode == 1 and not switch_states["elevation_max"]:
+                # 上昇（最大リミットに達していない場合のみ）
+                self.motor_driver.elevation_forward()
+            elif elevation_mode == 0 and not switch_states["elevation_min"]:
+                # 下降（最小リミットに達していない場合のみ）
+                self.motor_driver.elevation_backward()
+            else:
+                # 停止（mode=2 または リミットスイッチ押下時）
+                self.motor_driver.elevation_stop()
+        except Exception as e:
+            self.get_logger().error(f"Elevation control error: {e}")
+            self.motor_driver.elevation_stop()
 
 
     # # モーターの立ち上がりエッジを検出して制御する
