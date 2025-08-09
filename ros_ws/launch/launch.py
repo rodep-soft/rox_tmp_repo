@@ -35,19 +35,19 @@ def generate_launch_description():
             output='screen'
         ),
 
-        Node(
-            package='imu',
-            executable='imu_node',
-            name='imu_node',
-            output='screen'
-        ),
+        # Node(
+        #     package='imu',
+        #     executable='imu_node',
+        #     name='imu_node',
+        #     output='screen'
+        # ),
 
-        Node(
-            package="led_control",
-            executable="led_control_node",
-            name="led_control_node",
-            output="screen"
-        )
+        # Node(
+        #     package="led_control",
+        #     executable="led_control_node",
+        #     name="led_control_node",
+        #     output="screen"
+        # )
 
         # Node(
         #     package="lifting_motor",
