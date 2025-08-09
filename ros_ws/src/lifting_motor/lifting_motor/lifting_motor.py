@@ -32,12 +32,15 @@ class LiftingMotorNode(Node):
             "eject_min": sw["eject_min"],
         }
 
+        # 状態遷移の更新
         new_state = self.state_machine.update_state(inputs)
         self.get_logger().info(f"Current State: {self.state_machine.get_state_name()}")
 
 
         # 状態遷移後の実際のモーター制御
-        if new_state == State.TO_MAX:
+        if new_state == State.STOPPED:
+            self.motor_driver.ejection_stop()
+        elif new_state == State.TO_MAX:
             self.motor_driver.ejection_forward()
         elif new_state == State.RETURN_TO_MIN:
             self.motor_driver.ejection_backward()
@@ -55,14 +58,14 @@ class LiftingMotorNode(Node):
             self.prev_ejection_cmd = True
 
         
+
+        
 # ========================
 # This code is a ROS2 node that controls a lifting motor using GPIO pins.
 # Don't change
 def main(args=None):
     rclpy.init(args=args)
-
     node = LiftingMotorNode()
-
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

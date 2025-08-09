@@ -8,6 +8,7 @@ class State(Enum):
 
 class StateMachine:
     def __init__(self):
+        # 初期状態の設定(INIT)
         self.state = State.INIT
 
     def update_state(self, inputs):
