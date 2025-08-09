@@ -23,6 +23,7 @@ class LiftingMotorNode(Node):
         # エッジ検出用の前回値保持
         self.prev_throwing_on = False
         self.prev_ejection_on = False
+        self.elevation_warning_logged = False  # 昇降警告ログのフラグ
         
         # ハードウェア検証
         # リミットスイッチとモーターの状態の読み取りが可能か確認する
@@ -38,7 +39,7 @@ class LiftingMotorNode(Node):
             # スイッチの状態を取得
             sw = self.motor_driver.get_switch_states()
 
-            # エッジ検出（モーメンタリボタン用）
+            # エッジ検出
             throwing_edge = msg.is_throwing_on and not self.prev_throwing_on
             ejection_edge = msg.is_ejection_on and not self.prev_ejection_on
             
@@ -84,8 +85,14 @@ class LiftingMotorNode(Node):
             elif current_state == State.RETURN_TO_MIN:
                 self.motor_driver.ejection_backward()
 
-            # 昇降モーター制御（状態に関係なく独立動作）
-            self.elevation_control(msg.elevation_mode, sw)
+            # 昇降モーター制御（motor_driverに委譲）
+            force_descending = self.motor_driver.elevation_control(msg.elevation_mode, current_state)
+            if force_descending and not self.elevation_warning_logged:
+                self.get_logger().warning(f"非INIT状態({current_state.name})のため昇降を強制的に下降位置へ移動中")
+                self.elevation_warning_logged = True
+            elif not force_descending and current_state == State.INIT:
+                self.elevation_warning_logged = False  # INIT状態になったら警告フラグをリセット
+
                 
         except Exception as e:
             self.get_logger().error(f"Motor callback error: {e}")
@@ -94,22 +101,6 @@ class LiftingMotorNode(Node):
                 self.motor_driver.stop_all_motors()
             except:
                 pass
-
-    def elevation_control(self, elevation_mode, switch_states):
-        """昇降モーター制御（独立動作）"""
-        try:
-            if elevation_mode == 1 and not switch_states["elevation_max"]:
-                # 上昇（最大リミットに達していない場合のみ）
-                self.motor_driver.elevation_forward()
-            elif elevation_mode == 0 and not switch_states["elevation_min"]:
-                # 下降（最小リミットに達していない場合のみ）
-                self.motor_driver.elevation_backward()
-            else:
-                # 停止（mode=2 または リミットスイッチ押下時）
-                self.motor_driver.elevation_stop()
-        except Exception as e:
-            self.get_logger().error(f"Elevation control error: {e}")
-            self.motor_driver.elevation_stop()
 
 
     # # モーターの立ち上がりエッジを検出して制御する
