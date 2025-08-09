@@ -25,7 +25,8 @@ RUN apt-get update && apt-get upgrade -y && \
     ros-humble-demo-nodes-cpp \
     ros-humble-foxglove-bridge \
     libgpiod-dev \
-    gpiod && \
+    gpiod \
+    ros-$ROS_DISTRO-foxglove-bridge && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
 
     
