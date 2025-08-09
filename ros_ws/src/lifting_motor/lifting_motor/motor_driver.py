@@ -56,7 +56,20 @@ class MotorDriver:
             "is_elevation_motor_running": self.elevation_motor.is_active,
             "is_throwing_motor_running": self.throwing_motor.is_active
         }
+    
+    # API functions for motor controller
 
+    def throwing_on(self):
+        self.throwing_motor.on()
+
+    def throwing_off(self):
+        self.throwing_motor.off()
+
+    def ejection_forward(self, speed=1.0):
+        self.ejection_motor.forward(speed=speed)
+
+    def ejection_backward(self, speed=1.0):
+        self.ejection_motor.backward(speed=speed)
 
 
 

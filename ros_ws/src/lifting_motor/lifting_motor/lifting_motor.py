@@ -1,11 +1,9 @@
-# from time import sleep
-from enum import Enum # Enumを使うために必要
 
 import rclpy
-from gpiozero import Motor, OutputDevice, Button
 from rclpy.node import Node
 from custom_interfaces.msg import UpperMotor
-
+from state_machine import State, StateMachine
+from motor_driver import MotorDriver
 
 class LiftingMotorNode(Node):
 
@@ -14,43 +12,35 @@ class LiftingMotorNode(Node):
         # UpperMotor msgのsubscription
         self.subscription = self.create_subscription(UpperMotor, "/upper_motor", self.motor_callback, 10)
         
-
-        # リミットスイッチの状態管理用のフラグ
-        self.is_ejection_maxlim_on = False
-        self.is_ejection_minlim_on = False
-        self.is_elevation_maxlim_on = False
-        self.is_elevation_minlim_on = False
-
-        # モーターの状態管理用のフラグ
-        self.is_throwing_motor_on = False
-        self.is_ejection_motor_on = False
-        self.is_elevation_motor_on = False
-
-        # 前回の状態を保持するための変数
-        self.prev_throwing_cmd = False
-        self.prev_ejection_cmd = False
-        # self.prev_elevation_cmd = False
-
+        # State and MotorDriver initialization
+        self.state_machine = StateMachine()
+        self.motor_driver = MotorDriver()
 
     # Callback function for UpperMotor messages
     # ここでモーターの制御を行う
     def motor_callback(self, msg):
+        # スイッチの状態を取得
+        sw = self.motor_driver.get_switch_states()
 
-        self.detect_sw_state() # 全リミットスイッチの状態を検出
-        self.detect_motor_state() # 全モーターの状態を検出
+        # 状態遷移の更新用
+        inputs = {
+            "start": msg.something_on, # INIT<-->STOPPED
+            "throwing_on": msg.is_throwing_on,
+            "elev_min": sw["elev_min"],
+            "eject_on": msg.is_ejection_on,
+            "eject_max": sw["eject_max"],
+            "eject_min": sw["eject_min"],
+        }
+
+        new_state = self.state_machine.update_state(inputs)
+        self.get_logger().info(f"Current State: {self.state_machine.get_state_name()}")
 
 
-        # 押出モーターの実際の動作
-        if self.current_state == State.STOPPED:
-            if self.is_ejection_motor_on == True:
-                self.ejection_motor.stop()
-            self.relay_on(msg)
-        elif self.current_state == State.TO_MAX:
-            self.ejection_motor.forward(speed=1.0)
-            # self.detect_edge_and_control_motor(msg)
-        elif self.current_state == State.RETURN_TO_MIN:
-            self.ejection_motor.backward(speed=1.0)
-            self.relay_on(msg)
+        # 状態遷移後の実際のモーター制御
+        if new_state == State.TO_MAX:
+            self.motor_driver.ejection_forward()
+        elif new_state == State.RETURN_TO_MIN:
+            self.motor_driver.ejection_backward()
 
 
     # モーターの立ち上がりエッジを検出して制御する
@@ -65,7 +55,7 @@ class LiftingMotorNode(Node):
             self.prev_ejection_cmd = True
 
         
-
+# ========================
 # This code is a ROS2 node that controls a lifting motor using GPIO pins.
 # Don't change
 def main(args=None):
