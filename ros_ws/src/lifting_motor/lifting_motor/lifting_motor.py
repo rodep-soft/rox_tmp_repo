@@ -15,52 +15,73 @@ class LiftingMotorNode(Node):
         # State and MotorDriver initialization
         self.state_machine = StateMachine()
         self.motor_driver = MotorDriver()
+        
+        # ハードウェア検証
+        if not self.motor_driver.validate_hardware():
+            self.get_logger().error("ハードウェアの初期化に失敗しました")
+        else:
+            self.get_logger().info("ハードウェアの初期化が完了しました")
 
     # Callback function for UpperMotor messages
     # ここでモーターの制御を行う
     def motor_callback(self, msg):
-        # スイッチの状態を取得
-        sw = self.motor_driver.get_switch_states()
+        try:
+            # スイッチの状態を取得
+            sw = self.motor_driver.get_switch_states()
 
-        # 状態遷移の更新用
-        inputs = {
-            "start": msg.something_on, # INIT<-->STOPPED
-            "throwing_on": msg.is_throwing_on,
-            "elev_min": sw["elev_min"],
-            "eject_on": msg.is_ejection_on,
-            "eject_max": sw["eject_max"],
-            "eject_min": sw["eject_min"],
-        }
+            # 状態遷移の更新用
+            inputs = {
+                "is_system_ready": msg.something_on,  # INIT<-->STOPPED (要修正: 適切なフィールド名に変更)
+                "is_throwing_motor_on": msg.is_throwing_on,
+                "is_elevation_minlim_on": sw["elevation_min"],
+                "is_ejection_on": msg.is_ejection_on,
+                "is_ejection_maxlim_on": sw["ejection_max"],
+                "is_ejection_minlim_on": sw["ejection_min"],
+                "safety_reset_button": False,  # TODO: 実際のボタン状態に置き換え
+                "emergency_stop": False,       # TODO: 実際の緊急停止状態に置き換え
+            }
 
-        # 状態遷移の更新
-        self.state_machine.update_state(inputs)
-        current_state = self.state_machine.get_current_state()
-        self.get_logger().info(f"Current State: {self.state_machine.get_state_name()}")
+            # 状態遷移の更新
+            self.state_machine.update_state(inputs)
+            current_state = self.state_machine.get_current_state()
+            
+            # 状態が変化したときのみログ出力（ログの削減）
+            if self.state_machine.has_state_changed():
+                self.get_logger().info(f"State Changed: {self.state_machine.get_previous_state().name} -> {self.state_machine.get_state_name()}")
 
-        # TO_MAXに遷移したときの一度だけの処理（副作用）
-        if self.state_machine.just_entered_state(State.TO_MAX):
-            self.motor_driver.throwing_off()  # リレー停止（一度だけ）
-            self.get_logger().info("TO_MAX遷移: リレーを停止しました")
+            # TO_MAXに遷移したときの一度だけの処理（副作用）
+            if self.state_machine.just_entered_state(State.TO_MAX):
+                self.motor_driver.throwing_off()  # リレー停止（一度だけ）
+                self.get_logger().info("TO_MAX遷移: リレーを停止しました")
 
-        # 状態に応じたモーター制御
-        if current_state == State.STOPPED:
-            self.motor_driver.ejection_stop()
-        elif current_state == State.TO_MAX:
-            self.motor_driver.ejection_forward()  # 射出駆動
-        elif current_state == State.RETURN_TO_MIN:
-            self.motor_driver.ejection_backward()
+            # 状態に応じたモーター制御等の処理
+            if current_state == State.STOPPED:
+                self.motor_driver.ejection_stop()
+            elif current_state == State.TO_MAX:
+                self.motor_driver.ejection_forward()  # 射出駆動
+            elif current_state == State.RETURN_TO_MIN:
+                self.motor_driver.ejection_backward()
+                
+        except Exception as e:
+            self.get_logger().error(f"Motor callback error: {e}")
+            # エラー時は安全のため全モーター停止
+            try:
+                self.motor_driver.ejection_stop()
+                self.motor_driver.throwing_off()
+            except:
+                pass
 
 
-    # モーターの立ち上がりエッジを検出して制御する
-    def detect_edge_and_control_motor(self, msg):
-        #　
-        if (not self.prev_throwing_cmd) and msg.is_throwing_on:
-            self.throwing_motor.on()
-            self.prev_throwing_cmd = True
+    # # モーターの立ち上がりエッジを検出して制御する
+    # def detect_edge_and_control_motor(self, msg):
+    #     #　
+    #     if (not self.prev_throwing_cmd) and msg.is_throwing_on:
+    #         self.throwing_motor.on()
+    #         self.prev_throwing_cmd = True
 
-        if (not self.prev_ejection_cmd) and msg.is_ejection_on:
-            self.ejection_motor.forward(speed=1.0)
-            self.prev_ejection_cmd = True
+    #     if (not self.prev_ejection_cmd) and msg.is_ejection_on:
+    #         self.ejection_motor.forward(speed=1.0)
+    #         self.prev_ejection_cmd = True
 
         
 

@@ -17,7 +17,7 @@ class MotorDriver:
 
         # 昇降モーター制御用ピン
         self.elevation_motor_forward_pin = 16
-        self.elevation_motor_backward_pin = 27
+        self.elevation_motor_backward_pin = 17
         self.elevation_motor_enable_pin = 12
 
         # -----GPIO configuration END-----
@@ -84,6 +84,24 @@ class MotorDriver:
         self.elevation_motor.stop()
 
     def stop_all_motors(self):
+        """緊急時用：全モーター停止"""
         self.ejection_motor.stop()
         self.elevation_motor.stop()
         self.throwing_motor.off()
+
+    def get_all_states(self) -> dict:
+        """全状態を一度に取得（デバッグ用）"""
+        return {
+            **self.get_switch_states(),
+            **self.get_motor_states()
+        }
+    
+    def validate_hardware(self) -> bool:
+        """ハードウェアの基本チェック"""
+        try:
+            # 基本的な読み取りテスト
+            switches = self.get_switch_states()
+            motors = self.get_motor_states()
+            return True
+        except Exception:
+            return False
