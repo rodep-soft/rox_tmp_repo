@@ -251,7 +251,7 @@ class JoyDriverNode : public rclcpp::Node {
 
     // システム準備状態（例：SELECT + STARTボタン同時押し）
     // これはどうするか迷い中
-    upper_msg->is_system_ready = (msg->buttons[4] == 1 && msg->buttons[6] == 1);
+    upper_msg->is_system_ready = (msg->axes[4] == -1 && msg->axes[5] == -1);
 
     // square button (射出)
     if (msg->buttons[2] == 1) {
