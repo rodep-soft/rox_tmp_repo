@@ -1,5 +1,10 @@
 from enum import Enum
 
+# このコードには状態を定義するState, また状態遷移を管理するStateMachineクラスが含まれる
+# 状態遷移に関する処理以外は絶対に記述しない
+# 状態遷移時に副作用をもたせたい場合は後述のjust_entered_state等を用いてliftin_motor.pyに記述すること
+
+
 class State(Enum):
     INIT = 0
     STOPPED = 1
@@ -10,10 +15,13 @@ class StateMachine:
     def __init__(self):
         # 初期状態の設定(INIT)
         self.state = State.INIT
+        self.previous_state = State.INIT  # 前回の状態を保持
 
     def update_state(self, inputs):
+        # 前回の状態を保存
+        self.previous_state = self.state
         # 安全ボタンが押された場合は常にINITに戻る（最高優先度）
-        if inputs.get('safety_reset_button', False):
+        if inputs.get('safety_reset_button', False): # もしこれがTrueなら実行される
             self.state = State.INIT
             return  # 他の条件をチェックしない
         
@@ -60,6 +68,23 @@ class StateMachine:
     def is_in_init_state(self):
         """INIT状態かどうかチェック（安全確認用）"""
         return self.state == State.INIT
+    
+    def has_state_changed(self):
+        """状態が変化したかチェック"""
+        return self.state != self.previous_state
+    
+    # 副作用的処理を追加する際に用いる
+    def just_entered_state(self, target_state):
+        """指定した状態に今回の更新で入ったかチェック"""
+        return self.state == target_state and self.previous_state != target_state
+    
+    def just_exited_state(self, target_state):
+        """指定した状態から今回の更新で出たかチェック"""
+        return self.previous_state == target_state and self.state != target_state
+    
+    def get_previous_state(self):
+        """前回の状態を取得"""
+        return self.previous_state
     
     def get_state_transition_info(self):
         """現在の状態と可能な遷移を返す（デバッグ用）"""

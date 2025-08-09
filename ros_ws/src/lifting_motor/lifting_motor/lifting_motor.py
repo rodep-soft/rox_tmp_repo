@@ -33,16 +33,21 @@ class LiftingMotorNode(Node):
         }
 
         # 状態遷移の更新
-        new_state = self.state_machine.update_state(inputs)
+        self.state_machine.update_state(inputs)
+        current_state = self.state_machine.get_current_state()
         self.get_logger().info(f"Current State: {self.state_machine.get_state_name()}")
 
+        # TO_MAXに遷移したときの一度だけの処理（副作用）
+        if self.state_machine.just_entered_state(State.TO_MAX):
+            self.motor_driver.throwing_off()  # リレー停止（一度だけ）
+            self.get_logger().info("TO_MAX遷移: リレーを停止しました")
 
-        # 状態遷移後の実際のモーター制御
-        if new_state == State.STOPPED:
+        # 状態に応じたモーター制御
+        if current_state == State.STOPPED:
             self.motor_driver.ejection_stop()
-        elif new_state == State.TO_MAX:
-            self.motor_driver.ejection_forward()
-        elif new_state == State.RETURN_TO_MIN:
+        elif current_state == State.TO_MAX:
+            self.motor_driver.ejection_forward()  # 射出駆動
+        elif current_state == State.RETURN_TO_MIN:
             self.motor_driver.ejection_backward()
 
 
@@ -59,7 +64,7 @@ class LiftingMotorNode(Node):
 
         
 
-        
+
 # ========================
 # This code is a ROS2 node that controls a lifting motor using GPIO pins.
 # Don't change
@@ -73,3 +78,4 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
+# ========================
