@@ -47,7 +47,7 @@ def generate_launch_description():
         #     executable="led_control_node",
         #     name="led_control_node",
         #     output="screen"
-        # )
+        # ),
 
         # Node(
         #     package="lifting_motor",
@@ -55,4 +55,5 @@ def generate_launch_description():
         #     name="lifting_motor_node",
         #     parameters=[]
         # )
+
     ])

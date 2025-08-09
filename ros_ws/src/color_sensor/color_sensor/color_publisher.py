@@ -102,7 +102,7 @@ class LineFollower(Node):
         twist = Twist()
         float64 = Float64()
         diff_outer = (self.color_0_.a - self.color_3_.a) / (self.color_0_.a + self.color_3_.a)
-        # self.color_2_.a = self.color_2_.a * 1.17
+        self.color_2_.a = self.color_2_.a + 0.012
         diff = (self.color_1_.a - self.color_2_.a) / (self.color_1_.a + self.color_2_.a)
 
         if self.before_diff is None:
@@ -116,7 +116,7 @@ class LineFollower(Node):
 
         self.integral += diff
 
-        power = ((6.0 * diff) + (5.0 * derivative) + (0.6 * self.integral))
+        power = ((5.0 * diff) + (0.0 * derivative) + (0.3 * self.integral))
 
         if diff_outer > 0.3:
             self.is_straight = not self.is_straight
@@ -125,23 +125,23 @@ class LineFollower(Node):
             
         
 
-        x_power = 1.2 - (abs(power) * 0.2)
+        x_power = 1.0 - (abs(power) * 0.2)
         if not self.is_straight:
             self.integral = 0.0
 
         #1.5 : 10
         twist.linear.x = -x_power
-        twist.linear.y = power * 1.0 * 0.05
+        twist.linear.y = power * 1.0 * 0.0
         twist.angular.z = power * 1.0
 
         float64.data = diff_outer
 
         if diff_outer < -0.3:
             self.lock_flag = True
-        # if self.lock_flag == True:
-        #     twist.linear.x = 0.0
-        #     twist.linear.y = 0.0
-        #     twist.angular.z = 0.0
+        if self.lock_flag == True:
+            twist.linear.x = 0.0
+            twist.linear.y = 0.0
+            twist.angular.z = 0.0
 
 
 
