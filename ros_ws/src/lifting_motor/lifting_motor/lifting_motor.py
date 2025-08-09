@@ -24,6 +24,7 @@ class LiftingMotorNode(Node):
         self.prev_throwing_on = False
         self.prev_ejection_on = False
         self.elevation_warning_logged = False  # 昇降警告ログのフラグ
+        self.ejection_blocking_logged = False  # 押し出しブロック警告ログのフラグ
         
         # ハードウェア検証
         # リミットスイッチとモーターの状態の読み取りが可能か確認する
@@ -68,9 +69,9 @@ class LiftingMotorNode(Node):
                 self.get_logger().info(f"State Changed: {self.state_machine.get_previous_state().name} -> {self.state_machine.get_state_name()}")
 
             # TO_MAXに遷移したときの一度だけの処理（副作用）
-            if self.state_machine.just_entered_state(State.TO_MAX):
+            if self.state_machine.just_entered_state(State.RETURN_TO_MIN):
                 self.motor_driver.throwing_off()  # リレー停止（一度だけ）
-                self.get_logger().info("TO_MAX遷移: リレーを停止しました")
+                self.get_logger().info("RETURN_TO_MIN遷移: リレーを停止しました")
 
             # 射出用リレーのモーメンタリ制御（STOPPEDまたはRETURN_TO_MIN状態でのみ）
             if current_state in [State.STOPPED, State.RETURN_TO_MIN] and throwing_edge:
@@ -86,12 +87,19 @@ class LiftingMotorNode(Node):
                 self.motor_driver.ejection_backward()
 
             # 昇降モーター制御（motor_driverに委譲）
-            force_descending = self.motor_driver.elevation_control(msg.elevation_mode, current_state)
-            if force_descending and not self.elevation_warning_logged:
+            elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state)
+            
+            # 昇降制御のログ管理
+            if elevation_status == "force_descending" and not self.elevation_warning_logged:
                 self.get_logger().warning(f"非INIT状態({current_state.name})のため昇降を強制的に下降位置へ移動中")
                 self.elevation_warning_logged = True
-            elif not force_descending and current_state == State.INIT:
-                self.elevation_warning_logged = False  # INIT状態になったら警告フラグをリセット
+            elif elevation_status == "blocked_by_ejection" and not self.ejection_blocking_logged:
+                self.get_logger().warning("押し出しが引っ込んでいないため昇降できません")
+                self.ejection_blocking_logged = True
+            elif current_state == State.INIT and elevation_status in ["elevating", "descending", "stopped"]:
+                # INIT状態で正常動作時は警告フラグをリセット
+                self.elevation_warning_logged = False
+                self.ejection_blocking_logged = False
 
                 
         except Exception as e:

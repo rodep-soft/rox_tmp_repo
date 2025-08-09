@@ -87,27 +87,38 @@ class MotorDriver:
         """昇降モーター制御（INIT状態でのみ駆動可能、それ以外は強制的に下降位置へ）"""
         switch_states = self.get_switch_states()
         
+    def elevation_control(self, elevation_mode, current_state):
+        """昇降モーター制御（INIT状態でのみ駆動可能、それ以外は強制的に下降位置へ）"""
+        switch_states = self.get_switch_states()
+        
         if current_state.name == "INIT":  # Enumの比較
             # INIT状態でのみ自由に昇降可能
-            if elevation_mode == 1 and not switch_states["elevation_max"]:
-                # 上昇（最大リミットに達していない場合のみ）
+            if elevation_mode == 1 and not switch_states["elevation_max"] and switch_states["ejection_min"]:
+                # 上昇（最大リミットに達していない かつ 押し出しが引っ込んでいる場合のみ）
                 self.elevation_forward()
+                return "elevating"
             elif elevation_mode == 0 and not switch_states["elevation_min"]:
                 # 下降（最小リミットに達していない場合のみ）
                 self.elevation_backward()
+                return "descending"
+            elif elevation_mode == 1 and not switch_states["ejection_min"]:
+                # 上昇要求があるが押し出しが引っ込んでいない場合は停止
+                self.elevation_stop()
+                return "blocked_by_ejection"
             else:
                 # 停止（mode=2 または リミットスイッチ押下時）
                 self.elevation_stop()
+                return "stopped"
         else:
             # INIT以外の状態では強制的に下降位置へ
             if not switch_states["elevation_min"]:
                 # 最小位置に達していない場合、強制的に下降
                 self.elevation_backward()
-                return True  # 強制下降中であることを返す
+                return "force_descending"  # 強制下降中であることを返す
             else:
                 # 最小位置に達している場合は停止
                 self.elevation_stop()
-                return False  # 下降完了
+                return "at_bottom"  # 下降完了
 
     def stop_all_motors(self):
         """緊急時用：全モーター停止"""
