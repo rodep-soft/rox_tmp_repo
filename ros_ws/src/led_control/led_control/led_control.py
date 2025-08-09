@@ -3,8 +3,18 @@ import rclpy
 from gpiozero import Motor
 from rclpy.node import Node
 from std_msgs.msg import String
-import board
-import neopixel
+
+# NeoPixel用ライブラリの選択
+try:
+    import board
+    import neopixel
+    USE_CIRCUITPYTHON = True
+except ImportError:
+    try:
+        from rpi_ws281x import PixelStrip, Color
+        USE_CIRCUITPYTHON = False
+    except ImportError:
+        USE_CIRCUITPYTHON = None
 
 class LedControlNode(Node):
     def __init__(self):

@@ -35,7 +35,9 @@ ENV CCACHE_MAXSIZE=30G
 
 # --- Install Python Packages ---
 RUN pip install smbus2 \
-    adafruit-circuitpython-neopixel
+    adafruit-circuitpython-neopixel \
+    adafruit-circuitpython-neopixel-spi \
+    rpi_ws281x
 
 # --- Configure Shell Defaults and ROS 2 setup ---
 # This ensures colcon --symlink-install is default and ROS setup.bash is sourced
