@@ -2,8 +2,11 @@
 import rclpy
 from rclpy.node import Node
 from custom_interfaces.msg import UpperMotor
-from state_machine import State, StateMachine
-from motor_driver import MotorDriver
+# from state_machine import State, StateMachine
+# from motor_driver import MotorDriver
+from lifting_motor.state_machine import State, StateMachine
+from lifting_motor.motor_driver import MotorDriver
+
 
 # lifting_motorノードのメインのプログラム
 # state_machine.pyに状態とその遷移のロジックが,
