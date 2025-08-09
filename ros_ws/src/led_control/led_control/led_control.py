@@ -3,18 +3,8 @@ import rclpy
 from gpiozero import Motor
 from rclpy.node import Node
 from std_msgs.msg import String
-
-# NeoPixel用ライブラリの選択
-try:
-    import board
-    import neopixel
-    USE_CIRCUITPYTHON = True
-except ImportError:
-    try:
-        from rpi_ws281x import PixelStrip, Color
-        USE_CIRCUITPYTHON = False
-    except ImportError:
-        USE_CIRCUITPYTHON = None
+import board
+import neopixel
 
 class LedControlNode(Node):
     def __init__(self):
@@ -27,8 +17,18 @@ class LedControlNode(Node):
             10
         )
 
-        self.pixels = neopixel.NeoPixel(board.D23, 6, brightness=1.0, auto_write=False, pixel_order=neopixel.RGB)
-        
+        pixel_pin = board.D23
+
+        num_pixels = 6
+
+        ORDER = neopixel.GRB
+
+        pixels = neopixel.NeoPixel(
+            pixel_pin, num_pixels, brightness=1.0, auto_write=False, pixel_order=ORDER
+        )
+
+        self.pixels = pixels
+
         # 初期化テスト - 起動時に赤く点灯
         try:
             self.get_logger().info("LED初期化テスト開始")
