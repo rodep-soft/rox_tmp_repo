@@ -21,7 +21,8 @@ RUN apt-get update && apt-get upgrade -y && \
     ros-humble-joy \
     ros-humble-demo-nodes-cpp \
     libgpiod-dev \
-    gpiod && \
+    gpiod \
+    ros-$ROS_DISTRO-foxglove-bridge && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
