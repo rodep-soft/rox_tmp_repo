@@ -16,8 +16,8 @@ class MotorDriver:
         self.ejection_motor_enable_pin = 13
 
         # 昇降モーター制御用ピン
-        self.elevation_motor_forward_pin = 16
-        self.elevation_motor_backward_pin = 17
+        self.elevation_motor_forward_pin = 17
+        self.elevation_motor_backward_pin = 16
         self.elevation_motor_enable_pin = 12
 
         # -----GPIO configuration END-----
