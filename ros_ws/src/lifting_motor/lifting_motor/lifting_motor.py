@@ -26,6 +26,9 @@ class LiftingMotorNode(Node):
         # エッジ検出用の前回値保持
         self.prev_throwing_on = False
         self.prev_ejection_on = False
+
+        self.prev_init_on = False # 初期化状態の前回値保持
+
         self.elevation_warning_logged = False  # 昇降警告ログのフラグ
         self.ejection_blocking_logged = False  # 押し出しブロック警告ログのフラグ
         
@@ -46,14 +49,19 @@ class LiftingMotorNode(Node):
             # エッジ検出
             throwing_edge = msg.is_throwing_on and not self.prev_throwing_on
             ejection_edge = msg.is_ejection_on and not self.prev_ejection_on
+
+            init_edge = msg.is_system_ready and not self.prev_init_on
             
             # 前回値を更新
             self.prev_throwing_on = msg.is_throwing_on
             self.prev_ejection_on = msg.is_ejection_on
 
+            self.prev_init_on = msg.is_system_ready
+
             # 状態遷移の更新用
             inputs = {
-                "is_system_ready": msg.is_system_ready,
+                # "is_system_ready": msg.is_system_ready,
+                "is_system_ready": init_edge,
                 "is_throwing_motor_on": self.motor_driver.get_motor_states()["is_throwing_motor_running"],
                 "is_elevation_minlim_on": sw["elevation_min"],
                 "is_ejection_on": ejection_edge,  # エッジ検出結果を使用
