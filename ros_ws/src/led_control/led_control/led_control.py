@@ -38,23 +38,23 @@ class LedControlNode(Node):
             if mode == "STOP":
                 red_script = os.path.join(self.script_dir, "red.py")
                 subprocess.Popen(["python3.11", red_script])
-                self.get_logger().info("LED: 赤色(STOP)")
+                # self.get_logger().info("LED: 赤色(STOP)")
             elif mode == "JOY":
                 green_script = os.path.join(self.script_dir, "green.py")
                 subprocess.Popen(["python3.11", green_script])
-                self.get_logger().info("LED: 緑色(JOY)")
+                # self.get_logger().info("LED: 緑色(JOY)")
             elif mode == "DPAD":
                 blue_script = os.path.join(self.script_dir, "blue.py")
                 subprocess.Popen(["python3.11", blue_script])
-                self.get_logger().info("LED: 青色(DPAD)")
+                # self.get_logger().info("LED: 青色(DPAD)")
             elif mode == "LINETRACE":
                 white_script = os.path.join(self.script_dir, "white.py")
                 subprocess.Popen(["python3.11", white_script])
-                self.get_logger().info("LED: 白色(LINETRACE)")
+                # self.get_logger().info("LED: 白色(LINETRACE)")
             else:
                 off_script = os.path.join(self.script_dir, "off.py")
                 subprocess.Popen(["python3.11", off_script])
-                self.get_logger().info("LED: 消灯")
+                # self.get_logger().info("LED: 消灯")
         except Exception as e:
             self.get_logger().error(f"LED制御エラー: {e}")  
 
