@@ -41,7 +41,6 @@ ENV CCACHE_MAXSIZE=30G
 # --- Install Python Packages ---
 RUN pip install smbus2 
 
-RUN pip install --force-reinstall --no-cache-dir lgpio
 #     adafruit-circuitpython-neopixel \
 #     adafruit-circuitpython-neopixel-spi \
 #     rpi_ws281x
@@ -58,9 +57,10 @@ RUN python3 -m pip install --upgrade pip wheel
 # setuptoolsとsetuptools_scmのバージョンを指定して入れる
 RUN python3 -m pip install setuptools==65.5.0 setuptools_scm==6.4.2
 
-RUN python3.11 -m pip install /Adafruit_Blinka
-RUN python3.11 -m pip install /Adafruit_CircuitPython_NeoPixel
+RUN python3.11 -m pip install Adafruit_Blinka
+RUN python3.11 -m pip install Adafruit_CircuitPython_NeoPixel
 
+RUN pip install --force-reinstall --no-cache-dir lgpio
 
 
 # --- Configure Shell Defaults and ROS 2 setup ---
