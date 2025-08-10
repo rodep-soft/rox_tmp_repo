@@ -24,7 +24,6 @@ RUN apt-get update && apt-get upgrade -y && \
     ros-humble-joy \
     ros-humble-demo-nodes-cpp \
     ros-humble-foxglove-bridge \
-    --force-reinstall --no-cache-dir lgpio \
     libgpiod-dev \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
@@ -41,6 +40,8 @@ ENV CCACHE_MAXSIZE=30G
 
 # --- Install Python Packages ---
 RUN pip install smbus2 
+
+RUN pip install --force-reinstall --no-cache-dir lgpio
 #     adafruit-circuitpython-neopixel \
 #     adafruit-circuitpython-neopixel-spi \
 #     rpi_ws281x
