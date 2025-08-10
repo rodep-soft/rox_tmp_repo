@@ -20,6 +20,7 @@ RUN apt-get update && apt-get upgrade -y && \
     libboost-system-dev \
     ros-humble-joy \
     ros-humble-demo-nodes-cpp \
+    ros-humble-foxglove-bridge \
     libgpiod-dev \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
@@ -35,7 +36,9 @@ ENV CCACHE_MAXSIZE=30G
 
 # --- Install Python Packages ---
 RUN pip install smbus2 \
-    adafruit-circuitpython-neopixel
+    adafruit-circuitpython-neopixel \
+    adafruit-circuitpython-neopixel-spi \
+    rpi_ws281x
 
 # --- Configure Shell Defaults and ROS 2 setup ---
 # This ensures colcon --symlink-install is default and ROS setup.bash is sourced
@@ -52,3 +55,7 @@ WORKDIR /root/ros_ws
 COPY ./ros_ws/src ./src/
 
 CMD ["bash"]
+
+
+# launch foxglove
+# ros2 launch foxglove_bridge foxglove_bridge_launch.xml &

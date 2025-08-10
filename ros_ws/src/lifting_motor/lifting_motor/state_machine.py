@@ -33,6 +33,10 @@ class StateMachine:
         # 初期化完了でSTOPPED状態へ
         elif self.state == State.INIT and inputs.get('is_system_ready', False):
             self.state = State.STOPPED
+
+        # 間違えてSTOPPEDのループに入ってしまったとき用に初期化状態に戻す
+        elif self.state == State.STOPPED and inputs.get('is_system_ready', False):
+            self.state = State.INIT
             
         # 射出シーケンス開始の条件
         elif self.state == State.STOPPED and \
