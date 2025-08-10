@@ -1,6 +1,5 @@
 from time import sleep
 import rclpy
-from gpiozero import Motor
 from rclpy.node import Node
 from std_msgs.msg import String
 import board
@@ -17,6 +16,7 @@ class LedControlNode(Node):
             10
         )
 
+        # NeoPixelの初期化
         pixel_pin = board.D23
 
         num_pixels = 6

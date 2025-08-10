@@ -270,7 +270,7 @@ class JoyDriverNode : public rclcpp::Node {
     // 昇降制御（方向パッド）
     if (msg->buttons[3] == 1) {        // triangle
       upper_msg->elevation_mode = 1;    // 上昇
-    } else if (msg->buttons[12] == 1) { // x
+    } else if (msg->buttons[0] == 1) { // x
       upper_msg->elevation_mode = 0;    // 下降
     } else {
       upper_msg->elevation_mode = 2;    // 停止
