@@ -52,7 +52,7 @@ RUN mkdir -p /root/.config/colcon && \
 # This should match the working_dir in docker-compose.yml
 WORKDIR /root/ros_ws
 
-COPY ../ros_ws/src ./src/
+COPY ./ros_ws/src ./src/
 
 CMD ["bash"]
 
