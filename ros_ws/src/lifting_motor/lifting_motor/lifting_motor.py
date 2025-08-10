@@ -91,7 +91,10 @@ class LiftingMotorNode(Node):
 
             # 状態に応じた押出モーター制御
             if current_state == State.STOPPED:
-                self.motor_driver.ejection_stop()
+                if not self.motor_driver.get_switch_states()["ejection_min"]:
+                    self.motor_driver.ejection_backward()
+                else:
+                    self.motor_driver.ejection_stop()
             elif current_state == State.TO_MAX:
                 self.motor_driver.ejection_forward()  # 射出駆動
             elif current_state == State.RETURN_TO_MIN:
