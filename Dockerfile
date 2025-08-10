@@ -14,7 +14,9 @@ RUN apt-get update && apt-get upgrade -y && \
     fish \
     lsof \
     ccache \
-    python3 \
+    python3.11 \
+    python3.11-venv \
+    python3.11-distutils \
     python3-pip \
     python3-gpiozero \
     libboost-system-dev \
