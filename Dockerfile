@@ -31,16 +31,29 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo install just
 
+
 ENV CCACHE_DIR=/root/.ccache
 ENV PATH="/usr/lib/ccache:$PATH"
 ENV CCACHE_MAXSIZE=30G
 
 
 # --- Install Python Packages ---
-RUN pip install smbus2 \
-    adafruit-circuitpython-neopixel \
-    adafruit-circuitpython-neopixel-spi \
-    rpi_ws281x
+# RUN pip install smbus2 \
+#     adafruit-circuitpython-neopixel \
+#     adafruit-circuitpython-neopixel-spi \
+#     rpi_ws281x
+
+# 悪いコマンド
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
+
+
+RUN git clone https://github.com/adafruit/Adafruit_Blinka.git
+RUN git clone https://github.com/adafruit/Adafruit_CircuitPython_NeoPixel.git
+RUN python3 -m pip install --upgrade pip setuptools wheel
+RUN python3 -m pip install ./Adafruit_Blinka
+RUN python3 -m pip install ./Adafruit_CircuitPython_NeoPixel
+
+
 
 # --- Configure Shell Defaults and ROS 2 setup ---
 # This ensures colcon --symlink-install is default and ROS setup.bash is sourced
