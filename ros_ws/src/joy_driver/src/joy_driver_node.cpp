@@ -53,6 +53,8 @@ class JoyDriverNode : public rclcpp::Node {
   // Previous button states for toggle functionality
   bool prev_linetrace_buttons_ = false;
 
+  bool prev_reverse_button = false;
+
   bool prev_throwing_on = false;
   bool prev_ejection_on = false;
   bool prev_elevation_on = false;
@@ -223,6 +225,15 @@ class JoyDriverNode : public rclcpp::Node {
         break;
       default:
         RCLCPP_WARN(this->get_logger(), "Unknown mode: %d", static_cast<int>(mode_));
+    }
+
+
+    // 反転させる
+    // これちょっと不味そう------------
+    if (msg->buttons[5] == 1) {
+      twist_msg->linear.x = -twist_msg->linear.x;
+      twist_msg->linear.y = -twist_msg->linear.y;
+      prev_reverse_button = !prev_reverse_button;
     }
 
     // cmd_velのpublish
