@@ -128,13 +128,13 @@ class JoyDriverNode : public rclcpp::Node {
 
     // もしライントレースモードでなければ、他のモードに切り替えることができる
     if (mode_ != Mode::LINETRACE) {
-      if (msg->buttons[4] == 1 && mode_ != Mode::JOY) {
+      if (msg->buttons[6] == 1 && mode_ != Mode::JOY) {
         mode_ = Mode::JOY;
         RCLCPP_INFO(this->get_logger(), "Mode: JOY");
       } else if (msg->buttons[5] == 1 && mode_ != Mode::STOP) {
         mode_ = Mode::STOP;
         RCLCPP_INFO(this->get_logger(), "Mode: STOP");
-      } else if (msg->buttons[6] == 1 && mode_ != Mode::DPAD) {
+      } else if (msg->buttons[4] == 1 && mode_ != Mode::DPAD) {
         mode_ = Mode::DPAD;
         init_yaw_ = yaw_;
         RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
