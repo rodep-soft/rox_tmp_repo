@@ -49,7 +49,8 @@ RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
 
 RUN git clone https://github.com/adafruit/Adafruit_Blinka.git
 RUN git clone https://github.com/adafruit/Adafruit_CircuitPython_NeoPixel.git
-RUN python3 -m pip install --upgrade pip setuptools wheel
+# RUN python3 -m pip install --upgrade pip setuptools wheel
+RUN python3 -m pip install --upgrade pip setuptools wheel setuptools_scm
 RUN python3 -m pip install ./Adafruit_Blinka
 RUN python3 -m pip install ./Adafruit_CircuitPython_NeoPixel
 
