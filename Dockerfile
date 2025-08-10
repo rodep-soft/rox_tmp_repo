@@ -20,6 +20,7 @@ RUN apt-get update && apt-get upgrade -y && \
     libboost-system-dev \
     ros-humble-joy \
     ros-humble-demo-nodes-cpp \
+    ros-humble-foxglove-bridge \
     libgpiod-dev \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
