@@ -55,3 +55,7 @@ WORKDIR /root/ros_ws
 COPY ./ros_ws/src ./src/
 
 CMD ["bash"]
+
+
+# launch foxglove
+# ros2 launch foxglove_bridge foxglove_bridge_launch.xml &
