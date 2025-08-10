@@ -51,7 +51,9 @@ RUN pip install smbus2 \
 # RUN git clone https://github.com/adafruit/Adafruit_Blinka.git
 RUN git clone https://github.com/adafruit/Adafruit_CircuitPython_NeoPixel.git
 # RUN python3 -m pip install --upgrade pip setuptools wheel
-RUN python3.11 -m pip install --upgrade pip wheel
+
+
+# RUN python3.11 -m pip install --upgrade pip wheel
 
 # setuptoolsとsetuptools_scmのバージョンを指定して入れる
 RUN python3.10 -m pip install setuptools_scm==6.4.2 \
@@ -65,7 +67,9 @@ RUN python3.11 -m pip install Adafruit-Blinka-Raspberry-Pi5-Neopixel
 
 
 RUN python3.11 -m pip install --force-reinstall --no-cache-dir lgpio
-RUN python3.11 -m pip install --upgrade pip wheel
+# RUN python3.11 -m pip install --upgrade pip wheel
+
+
 RUN python3 -m pip install --force-reinstall numpy
 
 
