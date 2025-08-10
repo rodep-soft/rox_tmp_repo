@@ -32,5 +32,5 @@ services:
 
     # ここで実行しないとバグる
     # ただ、もっと良い方法があるかも
-    command: bash -c "python3 -m pip install /Adafruit_Blinka && bash"
+    # command: bash -c "python3 -m pip install /Adafruit_Blinka && bash"
 

@@ -39,11 +39,10 @@ ENV CCACHE_MAXSIZE=30G
 
 
 # --- Install Python Packages ---
-RUN pip install smbus2 
-
-#     adafruit-circuitpython-neopixel \
-#     adafruit-circuitpython-neopixel-spi \
-#     rpi_ws281x
+RUN pip install smbus2 \
+    adafruit-circuitpython-neopixel \
+    adafruit-circuitpython-neopixel-spi \
+    rpi_ws281x
 
 # 悪いコマンド
 RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
@@ -58,7 +57,7 @@ RUN python3 -m pip install --upgrade pip wheel
 RUN python3 -m pip install setuptools==65.5.0 setuptools_scm==6.4.2
 
 RUN python3 -m pip install Adafruit_CircuitPython_NeoPixel
-# RUN python3 -m pip install Adafruit_Blinka
+RUN python3 -m pip install Adafruit_Blinka
 
 
 RUN python3 -m pip install --force-reinstall --no-cache-dir lgpio
@@ -71,8 +70,6 @@ RUN mkdir -p /root/.config/colcon && \
     echo '  args: ['\''--symlink-install'\'']' >> /root/.config/colcon/defaults.yaml && \
     echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc && \
     echo 'source /opt/ros/humble/setup.bash' >> /root/.profile
-
-RUN python3 -m pip install /Adafruit_Blinka
 
 
 # Set the working directory for subsequent commands and when the container starts
