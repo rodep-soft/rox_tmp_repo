@@ -45,28 +45,28 @@ RUN pip install smbus2 \
     rpi_ws281x
 
 # 悪いコマンド
-RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
+# RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
 
 
 # RUN git clone https://github.com/adafruit/Adafruit_Blinka.git
 RUN git clone https://github.com/adafruit/Adafruit_CircuitPython_NeoPixel.git
 # RUN python3 -m pip install --upgrade pip setuptools wheel
-RUN python3 -m pip install --upgrade pip wheel
+RUN python3.11 -m pip install --upgrade pip wheel
 
 # setuptoolsとsetuptools_scmのバージョンを指定して入れる
-RUN python3 -m pip install setuptools_scm==6.4.2 \
+RUN python3.10 -m pip install setuptools_scm==6.4.2 \
     setuptools==65.5.0 \
     packaging==25.0
 
-RUN python3 -m pip install Adafruit_CircuitPython_NeoPixel
+RUN python3.11 -m pip install Adafruit_CircuitPython_NeoPixel
 # RUN python3 -m pip install Adafruit_Blinka
-RUN python3 -m pip install Adafruit-Blinka-Raspberry-Pi5-Neopixel
+RUN python3.11 -m pip install Adafruit-Blinka-Raspberry-Pi5-Neopixel
 
 
 
-RUN python3 -m pip install --force-reinstall --no-cache-dir lgpio
-RUN python3 -m pip install --upgrade pip wheel
-RUN python3 -m pip install --force-reinstall numpy
+RUN python3.11 -m pip install --force-reinstall --no-cache-dir lgpio
+RUN python3.11 -m pip install --upgrade pip wheel
+RUN python3.10 -m pip install --force-reinstall numpy
 
 
 # --- Configure Shell Defaults and ROS 2 setup ---
