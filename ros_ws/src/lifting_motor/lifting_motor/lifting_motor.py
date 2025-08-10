@@ -80,6 +80,11 @@ class LiftingMotorNode(Node):
             if current_state in [State.STOPPED, State.RETURN_TO_MIN] and throwing_edge:
                 self.motor_driver.throwing_on()
                 self.get_logger().info("射出リレーをONにしました")
+            
+            # 射出用リレーが駆動しているとき、もう一度ボタンを押すと止められるようにする
+            if self.motor_driver.get_motor_states()["is_throwing_motor_running"] and throwing_edge:
+                self.motor_driver.throwing_off()
+                self.get_logger().info("射出リレーをOFFにしました")
 
             # 状態に応じた押出モーター制御
             if current_state == State.STOPPED:
