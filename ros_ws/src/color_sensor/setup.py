@@ -20,7 +20,7 @@ setup(
     maintainer_email="yamato@todo.todo",
     description="A ROS2 package for the TCS34725 color sensor.",
     license="Apache License 2.0",
-    tests_require=["pytest"],
+    extras_require={'test': ["pytest"]},
     entry_points={
         "console_scripts": [
             "color_publisher = color_sensor.color_publisher:main",

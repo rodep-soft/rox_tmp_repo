@@ -1,0 +1,12 @@
+[Unit]
+Description=ROS2 Robot (Docker Compose)
+After=docker.service network-online.target controller-connected.service
+Requires=docker.service controller-connected.service
+
+[Service]
+Restart=always
+ExecStart=/usr/bin/docker compose -f /home/rodep/env/rox_tmp_repo/automation/docker-compose.yml up
+ExecStop=/usr/bin/docker compose -f /home/rodep/env/rox_tmp_repo/automation/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target
