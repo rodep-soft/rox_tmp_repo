@@ -63,6 +63,8 @@ RUN python3 -m pip install Adafruit-Blinka-Raspberry-Pi5-Neopixel
 
 
 RUN python3 -m pip install --force-reinstall --no-cache-dir lgpio
+RUN python3 -m pip install --upgrade pip setuptools wheel
+RUN python3 -m pip install --force-reinstall numpy
 
 
 # --- Configure Shell Defaults and ROS 2 setup ---
