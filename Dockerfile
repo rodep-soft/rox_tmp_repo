@@ -15,6 +15,7 @@ RUN apt-get update && apt-get upgrade -y && \
     lsof \
     ccache \
     python3.11 \
+    python3.11-dev \
     python3.11-venv \
     python3.11-distutils \
     python3-pip \
