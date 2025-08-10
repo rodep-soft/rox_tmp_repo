@@ -54,7 +54,9 @@ RUN git clone https://github.com/adafruit/Adafruit_CircuitPython_NeoPixel.git
 RUN python3 -m pip install --upgrade pip wheel
 
 # setuptoolsとsetuptools_scmのバージョンを指定して入れる
-RUN python3 -m pip install setuptools==65.5.0 setuptools_scm==6.4.2
+RUN python3 -m pip install setuptools_scm==6.4.2 \
+    setuptools==79.0.0 \
+    packaging==25.0
 
 RUN python3 -m pip install Adafruit_CircuitPython_NeoPixel
 # RUN python3 -m pip install Adafruit_Blinka

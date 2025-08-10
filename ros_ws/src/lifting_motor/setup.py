@@ -16,7 +16,7 @@ setup(
     maintainer_email="yano.tatsuki439@mail.kyutech.jp",
     description="TODO: Package description",
     license="TODO: License declaration",
-    tests_require=["pytest"],
+    extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": ["lifting_motor = lifting_motor.lifting_motor:main"],
     },
