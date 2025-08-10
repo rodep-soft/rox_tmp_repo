@@ -216,9 +216,9 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     auto now = std::chrono::steady_clock::now();
     auto last_time = last_subscription_time_.load();
     if (now - last_time > std::chrono::milliseconds(cmd_vel_timeout_ms_)) {
-      RCLCPP_WARN(this->get_logger(),
-                  "No cmd_vel message received in the last %d milliseconds. Stopping motors.",
-                  cmd_vel_timeout_ms_);
+      // RCLCPP_WARN(this->get_logger(),
+      //             "No cmd_vel message received in the last %d milliseconds. Stopping motors.",
+      //             cmd_vel_timeout_ms_);
       // Stop motors by sending zero velocity commands
       stop_all_motors();
       return;

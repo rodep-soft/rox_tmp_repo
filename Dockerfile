@@ -28,6 +28,7 @@ RUN apt-get update && apt-get upgrade -y && \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
 
+    
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo install just
@@ -93,3 +94,5 @@ CMD ["bash"]
 
 # launch foxglove
 # ros2 launch foxglove_bridge foxglove_bridge_launch.xml &
+
+
