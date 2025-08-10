@@ -29,3 +29,5 @@ services:
     # The CMD in the Dockerfile will handle starting bash.
     # If you need a specific command to run at startup, you can add it here,
     # but it won't include installations.
+    command: >
+      python3 -m pip install /Adafruit_Blinka
