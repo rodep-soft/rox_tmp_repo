@@ -5,8 +5,8 @@ Requires=docker.service
 
 [Service]
 Restart=always
-ExecStart=/usr/bin/docker compose -f ~/env/automation/docker-compose.yml up
-ExecStop=/usr/bin/docker compose -f ~/env/automation/docker-compose.yml down
+ExecStart=/usr/bin/docker compose -f ~/env/rox_tmp_repo/automation/docker-compose.yml up
+ExecStop=/usr/bin/docker compose -f ~/env/rox_tmp_repo/automation/docker-compose.yml down
 
 [Install]
 WantedBy=multi-user.target
