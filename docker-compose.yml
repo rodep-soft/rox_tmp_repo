@@ -30,5 +30,7 @@ services:
     # If you need a specific command to run at startup, you can add it here,
     # but it won't include installations.
 
+    # ここで実行しないとバグる
+    # ただ、もっと良い方法があるかも
     command: bash -c "python3 -m pip install /Adafruit_Blinka && bash"
 
