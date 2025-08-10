@@ -72,6 +72,9 @@ RUN mkdir -p /root/.config/colcon && \
     echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc && \
     echo 'source /opt/ros/humble/setup.bash' >> /root/.profile
 
+RUN python3 -m pip install /Adafruit_Blinka
+
+
 # Set the working directory for subsequent commands and when the container starts
 # This should match the working_dir in docker-compose.yml
 WORKDIR /root/ros_ws
