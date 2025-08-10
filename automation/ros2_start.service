@@ -1,7 +1,7 @@
 [Unit]
 Description=ROS2 Robot (Docker Compose)
-After=docker.service network-online.target
-Requires=docker.service
+After=docker.service network-online.target controller-connected.service
+Requires=docker.service controller-connected.service
 
 [Service]
 Restart=always
