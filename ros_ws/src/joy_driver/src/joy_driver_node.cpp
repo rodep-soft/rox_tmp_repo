@@ -232,7 +232,6 @@ class JoyDriverNode : public rclcpp::Node {
         RCLCPP_WARN(this->get_logger(), "Unknown mode: %d", static_cast<int>(mode_));
     }
 
-
     // 反転させる
     // これちょっと不味そう------------
     if (prev_reverse_button == 0 && msg->buttons[5] == 1) {
@@ -247,7 +246,6 @@ class JoyDriverNode : public rclcpp::Node {
       twist_msg->linear.x = -twist_msg->linear.x;
       twist_msg->linear.y = -twist_msg->linear.y;
     }
-
 
     // cmd_velのpublish
     if (mode_ != Mode::LINETRACE) {
@@ -292,15 +290,13 @@ class JoyDriverNode : public rclcpp::Node {
     }
 
     // 昇降制御（方向パッド）
-    if (msg->buttons[3] == 1) {        // triangle
+    if (msg->buttons[3] == 1) {         // triangle
       upper_msg->elevation_mode = 1;    // 上昇
-    } else if (msg->buttons[0] == 1) { // x
+    } else if (msg->buttons[0] == 1) {  // x
       upper_msg->elevation_mode = 0;    // 下降
     } else {
-      upper_msg->elevation_mode = 2;    // 停止
+      upper_msg->elevation_mode = 2;  // 停止
     }
-
-
 
     //  一旦廃止
     // // Check for state changes
@@ -444,5 +440,3 @@ int main(int argc, char** argv) {
   rclcpp::shutdown();
   return 0;
 }
-
-
