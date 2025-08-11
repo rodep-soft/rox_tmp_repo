@@ -68,10 +68,16 @@ class LiftingMotorNode(Node):
         result = UpperFunction.Result()
         result.success = False
 
-        elevation_status = self.motor_driver.elevation_control(1, self.state_machine.get_current_state())
+        elapsed_time = UpperFunction.Feedback()
 
-        if elevation_status == "stopped":
-            result.success = True
+
+        while rclpy.ok():
+            elevation_status = self.motor_driver.elevation_control(1, self.state_machine.get_current_state())
+
+            if elevation_status == "stopped":
+                result.success = True
+                goal_handle.succeed(result)
+                return result
 
         return result
 
