@@ -41,7 +41,7 @@ class LedControlNode(Node):
 
     def driver_mode_callback(self, msg):
         mode = msg.data
-        self.get_logger().info(f"モード切替: {mode}")
+        # self.get_logger().info(f"モード切替: {mode}")
         
         try:
             if mode == "STOP":
