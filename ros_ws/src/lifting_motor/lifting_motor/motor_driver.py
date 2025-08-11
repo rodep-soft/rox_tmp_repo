@@ -115,6 +115,13 @@ class MotorDriver:
                 # 最小位置に達している場合は停止
                 self.elevation_stop()
                 return "at_bottom"  # 下降完了
+            
+    # def linetrace_elevation_control(self, is_rising, current_state):
+    #     switch_states = self.get_switch_states()
+
+    #     if current_state.name == "INIT":
+    #         if is_rising and not switch_states["elevation_max"]
+
 
     def stop_all_motors(self):
         """緊急時用：全モーター停止"""

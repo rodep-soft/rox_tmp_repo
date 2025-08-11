@@ -8,6 +8,10 @@ from lifting_motor.state_machine import State, StateMachine
 from lifting_motor.motor_driver import MotorDriver
 from time import sleep
 
+from custom_interfaces.action import UpperFunction
+from rclpy.action import ActionServer
+from rclpy.action import CancelResponse, GoalResponse
+
 from std_msgs.msg import String
 
 # lifting_motorノードのメインのプログラム
@@ -42,6 +46,39 @@ class LiftingMotorNode(Node):
             self.get_logger().error("ハードウェアの初期化に失敗しました")
         else:
             self.get_logger().info("ハードウェアの初期化が完了しました")
+
+        self._action_server = ActionServer(
+            self,
+            UpperFunction,
+            'upper_function',
+            execute_callback=self.execute_callback,
+            goal_callback=self.goal_callback,
+            # cancel_callback=self.cancel_callback
+        )
+
+    def goal_callback(self, goal_request):
+
+        if goal_request.is_rising:
+            return GoalResponse.ACCEPT
+        else:
+            return GoalResponse.REJECT
+
+    def execute_callback(self, goal_handle):
+
+        result = UpperFunction.Result()
+        result.success = False
+
+        elevation_status = self.motor_driver.elevation_control(1, self.state_machine.get_current_state())
+
+        if elevation_status == "stopped":
+            result.success = True
+
+        return result
+
+    
+    # def cancel_callback(self, goal_handle):
+    #     return CancelResponse.ACCEPT
+
 
     # Callback function for UpperMotor messages
     # ここでモーターの制御を行う
