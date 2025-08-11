@@ -208,7 +208,8 @@ class JoyDriverNode : public rclcpp::Node {
         // }
         twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
         twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
-        twist_msg->angular.z = get_angular_velocity(msg);
+        twist_msg->angular.z = msg->axes[angular_axis_] * angular_scale_;
+        // twist_msg->angular.z = get_angular_velocity(msg);
         break;
       case Mode::DPAD:
         if (!l2_pressed && !r2_pressed) {
@@ -388,10 +389,10 @@ class JoyDriverNode : public rclcpp::Node {
 
     if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
       // R2: rotate right
-      return -(msg->axes[4] - 1) * 2.0;
+      return -(msg->axes[4] - 1);
     } else if (msg->axes[5] < TRIGGER_THRESHOLD && msg->axes[4] >= TRIGGER_THRESHOLD) {
       // L2: rotate left
-      return (msg->axes[5] - 1) * 2.0;
+      return (msg->axes[5] - 1);
     } else {
       return 0.0;
     }
