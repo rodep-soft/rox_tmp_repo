@@ -1,0 +1,9 @@
+# Goal
+float32 duration
+---
+# Result
+bool success
+float32 actual_duration
+---
+# Feedback
+float32 elapsed_time

@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CmdDpad.msg"
   "msg/UpperMotor.msg"
   "msg/MotorFeedback.msg"
+  "action/UpperFunction.action"
 )
 
 if(BUILD_TESTING)
