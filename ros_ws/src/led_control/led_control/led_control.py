@@ -43,7 +43,7 @@ class LedControlNode(Node):
         mode = msg.data
         # self.get_logger().info(f"モード切替: {mode}")
         
-        try:
+        # try:
             if mode == "STOP":
                 red_script = os.path.join(self.script_dir, "red.py")
                 subprocess.Popen(["python3.11", red_script])
@@ -69,8 +69,8 @@ class LedControlNode(Node):
                 subprocess.Popen(["python3.11", off_script])
                 # self.get_logger().info("LED: 消灯")
                 self.current_color = 'off'
-        except Exception as e:
-            self.get_logger().error(f"LED制御エラー: {e}")  
+        # except Exception as e:
+        #     self.get_logger().error(f"LED制御エラー: {e}")  
 
     # def lifting_mode_callback(self, msg):
     #     mode = msg.data
