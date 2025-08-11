@@ -55,7 +55,8 @@ uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data) {
 
 class MotorController {
  public:
-  MotorController(rclcpp::Logger logger) : serial_port_(io_context_), logger_(logger) {}
+  MotorController(rclcpp::Logger logger) : serial_port_(io_context_), logger_(logger), 
+                                           enable_feedback_(false) {}
 
   bool init_port(const std::string& port_name, int baud_rate) {
     try {
@@ -101,8 +102,8 @@ class MotorController {
       // コマンド送信
       boost::asio::write(serial_port_, boost::asio::buffer(data, data.size()));
       
-      // 固定delay（一時的に元に戻す）
-      std::this_thread::sleep_for(std::chrono::milliseconds(4));
+      // フィードバック待ち or 固定delay
+      wait_for_motor_response_safe(motor_id);
       
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to communicate with motor %d: %s", motor_id, e.what());
@@ -251,10 +252,35 @@ class MotorController {
     return true;
   }
 
+  void wait_for_motor_response_safe(uint8_t motor_id = 0, int timeout_ms = 10) {
+    if (!enable_feedback_) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(4));
+      return;
+    }
+    
+    try {
+      // 短時間の安全なフィードバック待ち
+      bool success = wait_for_motor_response(motor_id, timeout_ms);
+      if (!success) {
+        // フィードバック失敗時は短いdelayで継続
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+      }
+    } catch (const std::exception& e) {
+      RCLCPP_DEBUG(logger_, "Feedback wait failed: %s", e.what());
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+  }
+
+  void enable_motor_feedback(bool enable = true) {
+    enable_feedback_ = enable;
+    RCLCPP_INFO(logger_, "Motor feedback %s", enable ? "enabled" : "disabled");
+  }
+
  private:
   boost::asio::io_context io_context_;
   boost::asio::serial_port serial_port_;
   rclcpp::Logger logger_;
+  bool enable_feedback_;
 };
 
 class MecanumWheelControllerNode : public rclcpp::Node {
@@ -268,6 +294,10 @@ class MecanumWheelControllerNode : public rclcpp::Node {
       rclcpp::shutdown();
       return;
     }
+
+    // フィードバック機能を有効化（必要に応じてパラメータで制御可能）
+    bool enable_feedback = this->declare_parameter("enable_motor_feedback", false);
+    motor_controller_.enable_motor_feedback(enable_feedback);
 
     cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>(
         "/cmd_vel", best_effort_qos,
