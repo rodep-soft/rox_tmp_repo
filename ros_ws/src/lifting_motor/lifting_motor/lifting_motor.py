@@ -6,6 +6,7 @@ from custom_interfaces.msg import UpperMotor
 # from motor_driver import MotorDriver
 from lifting_motor.state_machine import State, StateMachine
 from lifting_motor.motor_driver import MotorDriver
+from time import sleep
 
 from std_msgs.msg import String
 
@@ -83,23 +84,29 @@ class LiftingMotorNode(Node):
             if self.state_machine.has_state_changed():
                 self.get_logger().info(f"State Changed: {self.state_machine.get_previous_state().name} -> {self.state_machine.get_state_name()}")
 
-            # TO_MAXに遷移したときの一度だけの処理（副作用）
+            # TO_MAXに遷移したときの一度だけの処理(副作用)
+            if self.state_machine.just_entered_state(State.TO_MAX):
+                self.motor_driver.throwing_on()
+                self.get_logger().info("TO_MAX遷移: リレーをONにしました")
+                sleep(2)
+
+            # RETURN_TO_MINに遷移したときの一度だけの処理（副作用）
             if self.state_machine.just_entered_state(State.RETURN_TO_MIN):
                 self.motor_driver.throwing_off()  # リレー停止（一度だけ）
                 self.get_logger().info("RETURN_TO_MIN遷移: リレーを停止しました")
 
-            # 射出用リレーの制御（状態とエッジ検出に基づく）
-            if throwing_edge:
-                if current_state in [State.STOPPED, State.RETURN_TO_MIN]:
-                    # 射出可能な状態でボタンが押された場合
-                    if not self.motor_driver.get_motor_states()["is_throwing_motor_running"]:
-                        # 現在停止中なら開始
-                        self.motor_driver.throwing_on()
-                        self.get_logger().info("射出リレーをONにしました")
-                    else:
-                        # 現在動作中なら停止
-                        self.motor_driver.throwing_off()
-                        self.get_logger().info("射出リレーをOFFにしました")
+            # # 射出用リレーの制御（状態とエッジ検出に基づく）
+            # if throwing_edge:
+            #     if current_state in [State.STOPPED, State.RETURN_TO_MIN]:
+            #         # 射出可能な状態でボタンが押された場合
+            #         if not self.motor_driver.get_motor_states()["is_throwing_motor_running"]:
+            #             # 現在停止中なら開始
+            #             self.motor_driver.throwing_on()
+            #             self.get_logger().info("射出リレーをONにしました")
+            #         else:
+            #             # 現在動作中なら停止
+            #             self.motor_driver.throwing_off()
+            #             self.get_logger().info("射出リレーをOFFにしました")
 
             # 状態に応じた押出モーター制御
             if current_state == State.STOPPED:

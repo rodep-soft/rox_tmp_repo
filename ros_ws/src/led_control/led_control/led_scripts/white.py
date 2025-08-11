@@ -14,7 +14,7 @@ def main():
     with open(LOCK_FILE, 'w') as lockfile:
         fcntl.flock(lockfile, fcntl.LOCK_EX)
         try:
-            pixels = neopixel.NeoPixel(board.D23, 6, brightness=0.5, auto_write=False, pixel_order=neopixel.RGB)
+            pixels = neopixel.NeoPixel(board.D23, 6, brightness=1.0, auto_write=False, pixel_order=neopixel.RGB)
             pixels.fill((255, 255, 255))
             pixels.show()
             while True:
