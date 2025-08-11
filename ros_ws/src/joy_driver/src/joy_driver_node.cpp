@@ -64,6 +64,11 @@ class JoyDriverNode : public rclcpp::Node {
   //   return (std::abs(val) < threshold) ? 0.0f : val;
   // }
 
+  // デッドゾーン処理を追加
+  static double applyDeadzone(double val, double threshold = 0.05) {
+    return (std::abs(val) < threshold) ? 0.0 : val;
+  }
+
   // share buttons[4]
   // option buttons[6]
 
@@ -206,9 +211,10 @@ class JoyDriverNode : public rclcpp::Node {
         // } else {  // When either L2 or R2 is pressed
         //   twist_msg->angular.z = get_angular_velocity(msg);
         // }
-        twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
-        twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
-        twist_msg->angular.z = msg->axes[angular_axis_] * angular_scale_;
+        // デッドゾーン処理を適用
+        twist_msg->linear.x = applyDeadzone(msg->axes[linear_x_axis_]) * linear_x_scale_;
+        twist_msg->linear.y = applyDeadzone(msg->axes[linear_y_axis_]) * linear_y_scale_;
+        twist_msg->angular.z = applyDeadzone(msg->axes[angular_axis_]) * angular_scale_;
         // twist_msg->angular.z = get_angular_velocity(msg);
         break;
       case Mode::DPAD:
