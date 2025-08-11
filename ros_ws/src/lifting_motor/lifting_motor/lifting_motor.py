@@ -53,7 +53,7 @@ class LiftingMotorNode(Node):
             'upper_function',
             execute_callback=self.execute_callback,
             goal_callback=self.goal_callback,
-            # cancel_callback=self.cancel_callback
+            cancel_callback=self.cancel_callback
         )
 
     def goal_callback(self, goal_request):
@@ -64,22 +64,71 @@ class LiftingMotorNode(Node):
             return GoalResponse.REJECT
 
     def execute_callback(self, goal_handle):
-
+        """昇降アクションの実行"""
+        self.get_logger().info("昇降アクション開始")
+        
+        goal = goal_handle.request
         result = UpperFunction.Result()
-        result.success = False
-
-        elapsed_time = UpperFunction.Feedback()
-
-
+        feedback = UpperFunction.Feedback()
+        
+        start_time = self.get_clock().now()
+        timeout_duration = 10.0  # 10秒タイムアウト
+        last_feedback_time = 0.0  # 最後にフィードバックを送信した時刻
+        
+        # 昇降制御開始（motor_driver.pyの仕様に合わせる）
+        # is_rising=True → elevation_mode=1 (上昇)
+        # is_rising=False → elevation_mode=0 (下降)
+        elevation_mode = 1 if goal.is_rising else 0
+        
         while rclpy.ok():
-            elevation_status = self.motor_driver.elevation_control(1, self.state_machine.get_current_state())
-
+            # キャンセル確認
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                result.success = False
+                result.actual_duration = 0.0
+                self.get_logger().info("昇降アクションがキャンセルされました")
+                return result
+            
+            # タイムアウト確認
+            elapsed = (self.get_clock().now() - start_time).nanoseconds / 1e9
+            if elapsed > timeout_duration:
+                goal_handle.abort()
+                result.success = False
+                result.actual_duration = elapsed
+                self.get_logger().error("昇降アクションがタイムアウトしました")
+                return result
+            
+            # 昇降制御実行
+            current_state = self.state_machine.get_current_state()
+            elevation_status = self.motor_driver.elevation_control(elevation_mode, current_state)
+            
+            # フィードバック送信（1秒に1回）
+            if elapsed - last_feedback_time >= 1.0:
+                feedback.elapsed_time = elapsed
+                goal_handle.publish_feedback(feedback)
+                last_feedback_time = elapsed
+            
+            # 完了確認
             if elevation_status == "stopped":
                 result.success = True
-                goal_handle.succeed(result)
+                result.actual_duration = elapsed
+                goal_handle.succeed()
+                self.get_logger().info(f"昇降アクション完了: {elapsed:.2f}秒")
                 return result
-
+            
+            # 短い待機
+            sleep(0.1)
+        
+        # 異常終了
+        result.success = False
+        result.actual_duration = elapsed
+        goal_handle.abort()
         return result
+
+    def cancel_callback(self, goal_handle):
+        """アクションキャンセル処理"""
+        self.get_logger().info("昇降アクションのキャンセル要求を受諾")
+        return CancelResponse.ACCEPT
 
     
     # def cancel_callback(self, goal_handle):
