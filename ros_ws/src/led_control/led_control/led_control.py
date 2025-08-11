@@ -46,18 +46,18 @@ class LedControlNode(Node):
     def start_led_script(self, script_name):
 
         if self.current_process is not None:
-            self.get_logger().info("LED scriptを停止します")
+            # self.get_logger().info("LED scriptを停止します")
             self.current_process.terminate()
             try:
                 self.current_process.wait(timeout=2)
             except subprocess.TimeoutExpired:
-                self.get_logger().warn("終了遅延のため強制終了")
+                # self.get_logger().warn("終了遅延のため強制終了")
                 self.current_process.kill()
                 self.current_process.wait()
             self.current_process = None
 
         script_path = os.path.join(self.script_dir, script_name)
-        self.get_logger().info(f"LED script開始: {script_name}")
+        # self.get_logger().info(f"LED script開始: {script_name}")
         self.current_process = subprocess.Popen(["python3.11", script_path])
 
     def driver_mode_callback(self, msg):
