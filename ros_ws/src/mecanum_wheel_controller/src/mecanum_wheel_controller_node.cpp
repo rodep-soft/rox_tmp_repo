@@ -219,10 +219,10 @@ class MotorController {
     // int16_t torque_current = (static_cast<int16_t>(packet[2]) << 8) | packet[3];
     int16_t velocity = (static_cast<int16_t>(packet[4]) << 8) | packet[5];
     // uint16_t position = (static_cast<uint16_t>(packet[6]) << 8) | packet[7];
-    uint8_t error_code = packet[8];
+    // uint8_t error_code = packet[8];
 
-    RCLCPP_DEBUG(logger_, "Motor %d feedback: velocity=%d rpm, error=0x%02X", 
-                motor_id, velocity, error_code);
+    // モーターIDと速度のみを出力
+    RCLCPP_INFO(logger_, "Motor ID: %d, Velocity: %d", motor_id, velocity);
     
     // フィードバック受信を記録
     feedback_received_time_ = std::chrono::steady_clock::now();
