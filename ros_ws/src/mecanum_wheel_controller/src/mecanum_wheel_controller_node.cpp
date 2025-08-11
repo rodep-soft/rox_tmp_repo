@@ -13,30 +13,7 @@
 #include <vector>
 
 // Deprecated function for CRC8 calculation
-// // A simple CRC8  void wait_for_motor_response_safe(uint8_t motor_id = 0, int timeout_ms = 10) {
-    if (!enable_feedback_) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(4));
-      return;
-    }
-    
-    // 非同期読み取りが動作している場合は、フィードバック受信を待つ
-    feedback_received_ = false;
-    auto start_time = std::chrono::steady_clock::now();
-    
-    // io_contextを少し実行してバッファを処理
-    for (int i = 0; i < timeout_ms && !feedback_received_; ++i) {
-      io_context_.poll_one();
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    
-    if (!feedback_received_) {
-      // フィードバック受信に失敗、短いdelayで継続
-      std::this_thread::sleep_for(std::chrono::milliseconds(2));
-      RCLCPP_DEBUG(logger_, "Motor %d: No feedback received within %dms", motor_id, timeout_ms);
-    } else {
-      RCLCPP_DEBUG(logger_, "Motor %d: Feedback received successfully", motor_id);
-    }
-  }tor communication
+// // A simple CRC8 calculator for motor communication
 // uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data)
 // {
 //   uint8_t crc = 0x00;
@@ -79,7 +56,17 @@ uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data) {
 class MotorController {
  public:
   MotorController(rclcpp::Logger logger) : serial_port_(io_context_), logger_(logger), 
-                                           enable_feedback_(true), read_buffer_() {}
+                                           buffer_(), running_(false) {}
+
+  ~MotorController() {
+    if (running_) {
+      running_ = false;
+      io_context_.stop();
+      if (io_thread_.joinable()) {
+        io_thread_.join();
+      }
+    }
+  }
 
   bool init_port(const std::string& port_name, int baud_rate) {
     try {
@@ -94,9 +81,13 @@ class MotorController {
           boost::asio::serial_port_base::stop_bits(boost::asio::serial_port_base::stop_bits::one));
       
       // 非同期読み取り開始
-      if (enable_feedback_) {
-        start_async_read();
-      }
+      running_ = true;
+      start_async_read();
+      
+      // io_contextを別スレッドで実行
+      io_thread_ = std::thread([this]() {
+        io_context_.run();
+      });
       
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to open serial port %s: %s", port_name.c_str(), e.what());
@@ -130,87 +121,12 @@ class MotorController {
       // コマンド送信
       boost::asio::write(serial_port_, boost::asio::buffer(data, data.size()));
       
-      // フィードバック待ち or 固定delay
-      wait_for_motor_response_safe(motor_id);
+      // フィードバック待ち（参考コードのアプローチ）
+      wait_for_feedback_response(motor_id);
       
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to communicate with motor %d: %s", motor_id, e.what());
     }
-  }
-
-  void start_async_read() {
-    if (!enable_feedback_) return;
-    
-    serial_port_.async_read_some(
-      boost::asio::buffer(async_read_buf_),
-      [this](boost::system::error_code ec, std::size_t length) {
-        if (!ec && length > 0) {
-          // バッファに追加
-          read_buffer_.insert(read_buffer_.end(), 
-                             async_read_buf_.begin(), 
-                             async_read_buf_.begin() + length);
-          
-          // パケット解析
-          parse_feedback_buffer();
-          
-          // 次の読み取り開始
-          start_async_read();
-        } else if (ec) {
-          RCLCPP_DEBUG(logger_, "Async read error: %s", ec.message().c_str());
-        }
-      });
-  }
-
-  void parse_feedback_buffer() {
-    // 10バイトパケット単位でチェック
-    while (read_buffer_.size() >= 10) {
-      // パケット開始候補を探す(IDは1~4の範囲)
-      size_t pos = 0;
-      for (; pos <= read_buffer_.size() - 10; ++pos) {
-        if (read_buffer_[pos] >= 1 && read_buffer_[pos] <= 4) {
-          // CRC8チェック
-          std::vector<uint8_t> packet_data(read_buffer_.begin() + pos, 
-                                         read_buffer_.begin() + pos + 9);
-          uint8_t crc_calculated = calc_crc8_maxim(packet_data);
-          uint8_t crc_received = read_buffer_[pos + 9];
-          if (crc_calculated == crc_received) {
-            break; // 正しいパケット発見
-          }
-        }
-      }
-
-      if (pos > 0) {
-        // 不正な先頭バイトがあれば捨てる
-        read_buffer_.erase(read_buffer_.begin(), read_buffer_.begin() + pos);
-      }
-
-      if (read_buffer_.size() < 10) break;
-
-      // 10バイトパケット取り出し
-      std::vector<uint8_t> packet(read_buffer_.begin(), read_buffer_.begin() + 10);
-      
-      // フィードバック情報を解析・保存
-      process_feedback_packet(packet);
-
-      // パケット消費
-      read_buffer_.erase(read_buffer_.begin(), read_buffer_.begin() + 10);
-    }
-  }
-
-  void process_feedback_packet(const std::vector<uint8_t>& packet) {
-    uint8_t motor_id = packet[0];
-    uint8_t mode_value = packet[1];
-    int16_t torque_current = (static_cast<int16_t>(packet[2]) << 8) | packet[3];
-    int16_t velocity = (static_cast<int16_t>(packet[4]) << 8) | packet[5];
-    uint16_t position = (static_cast<uint16_t>(packet[6]) << 8) | packet[7];
-    uint8_t error_code = packet[8];
-
-    RCLCPP_DEBUG(logger_, "Motor %d feedback: velocity=%d rpm, torque=%d, error=0x%02X", 
-                motor_id, velocity, torque_current, error_code);
-    
-    // フィードバック受信フラグを設定
-    last_feedback_time_ = std::chrono::steady_clock::now();
-    feedback_received_ = true;
   }
 
   void clear_serial_buffer() {
@@ -244,6 +160,97 @@ class MotorController {
     }
   }
 
+  // 参考コードベースの非同期読み取り
+  void start_async_read() {
+    if (!running_) return;
+
+    serial_port_.async_read_some(boost::asio::buffer(read_buf_),
+      [this](boost::system::error_code ec, std::size_t length) {
+        if (!ec && length > 0) {
+          buffer_.insert(buffer_.end(), read_buf_.begin(), read_buf_.begin() + length);
+          parse_buffer();
+          start_async_read();
+        } else {
+          if (ec) {
+            RCLCPP_DEBUG(logger_, "Read error: %s", ec.message().c_str());
+          }
+        }
+      });
+  }
+
+  void parse_buffer() {
+    // 10バイトパケット単位でチェック
+    while (buffer_.size() >= 10) {
+      // パケット開始候補を探す(IDは1~4の範囲)
+      size_t pos = 0;
+      for (; pos <= buffer_.size() - 10; ++pos) {
+        if (buffer_[pos] >= 1 && buffer_[pos] <= 4) {
+          // CRC8チェック
+          std::vector<uint8_t> packet_data(buffer_.begin() + pos, buffer_.begin() + pos + 9);
+          uint8_t crc_calculated = calc_crc8_maxim(packet_data);
+          uint8_t crc_received = buffer_[pos + 9];
+          if (crc_calculated == crc_received) {
+            break; // 正しいパケット発見
+          }
+        }
+      }
+
+      if (pos > 0) {
+        // 不正な先頭バイトがあれば捨てる
+        buffer_.erase(buffer_.begin(), buffer_.begin() + pos);
+      }
+
+      if (buffer_.size() < 10) break;
+
+      // 10バイトパケット取り出し
+      std::vector<uint8_t> packet(buffer_.begin(), buffer_.begin() + 10);
+
+      // パースして保存
+      process_feedback_packet(packet);
+
+      // パケット消費
+      buffer_.erase(buffer_.begin(), buffer_.begin() + 10);
+    }
+  }
+
+  void process_feedback_packet(const std::vector<uint8_t>& packet) {
+    uint8_t motor_id = packet[0];
+    // uint8_t mode_value = packet[1];
+    // int16_t torque_current = (static_cast<int16_t>(packet[2]) << 8) | packet[3];
+    int16_t velocity = (static_cast<int16_t>(packet[4]) << 8) | packet[5];
+    // uint16_t position = (static_cast<uint16_t>(packet[6]) << 8) | packet[7];
+    uint8_t error_code = packet[8];
+
+    RCLCPP_DEBUG(logger_, "Motor %d feedback: velocity=%d rpm, error=0x%02X", 
+                motor_id, velocity, error_code);
+    
+    // フィードバック受信を記録
+    feedback_received_time_ = std::chrono::steady_clock::now();
+    last_motor_id_ = motor_id;
+  }
+
+  void wait_for_feedback_response(uint8_t motor_id, int timeout_ms = 20) {
+    auto start_time = std::chrono::steady_clock::now();
+    auto deadline = start_time + std::chrono::milliseconds(timeout_ms);
+    
+    // フィードバック受信をリセット
+    last_motor_id_ = 0;
+    
+    while (std::chrono::steady_clock::now() < deadline) {
+      // 少し待機してフィードバック受信をチェック
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      
+      if (last_motor_id_ == motor_id) {
+        // 正しいモーターIDからフィードバック受信
+        RCLCPP_DEBUG(logger_, "Motor %d feedback received successfully", motor_id);
+        return;
+      }
+    }
+    
+    // タイムアウト - でも動作は継続
+    RCLCPP_DEBUG(logger_, "Motor %d feedback timeout, but continuing", motor_id);
+  }
+
   // シーケンシャル版（一つずつ確実に送信）
   void send_velocity_commands_sequential(const std::vector<std::pair<uint8_t, int16_t>>& commands, bool brake = false) {
     for (const auto& [motor_id, rpm] : commands) {
@@ -255,14 +262,6 @@ class MotorController {
 
   bool wait_for_motor_response(uint8_t motor_id, int timeout_ms = 50) {
     try {
-      // まず、シリアルポートに利用可能なデータがあるかチェック
-      size_t available = serial_port_.available();
-      if (available > 0) {
-        RCLCPP_INFO(logger_, "Motor %d: %zu bytes available in serial buffer", motor_id, available);
-      } else {
-        RCLCPP_WARN(logger_, "Motor %d: No data available in serial buffer", motor_id);
-      }
-      
       std::vector<uint8_t> response;
       response.reserve(10);  // DDSM115のレスポンスは10バイト
       
@@ -285,19 +284,8 @@ class MotorController {
           if (!error && bytes_read > 0) {
             response.insert(response.end(), buffer.begin(), buffer.begin() + bytes_read);
             
-            // デバッグ：受信したバイトをログに出力
-            RCLCPP_DEBUG(logger_, "Motor %d: Received byte 0x%02X, total bytes: %zu", 
-                        motor_id, buffer[0], response.size());
-            
             // 完全なパケット（10バイト）を受信したかチェック
             if (response.size() >= 10) {
-              // デバッグ：完全なパケットをログに出力
-              std::string packet_hex = "";
-              for (size_t i = 0; i < 10; ++i) {
-                packet_hex += std::to_string(response[i]) + " ";
-              }
-              RCLCPP_INFO(logger_, "Motor %d: Complete packet received: %s", motor_id, packet_hex.c_str());
-              
               // パケットを解析
               if (validate_motor_response(response, motor_id)) {
                 return true;  // 正常応答受信
@@ -317,16 +305,8 @@ class MotorController {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
       
-      // タイムアウト時の詳細情報
-      RCLCPP_WARN(logger_, "Motor %d response timeout after %d ms. Received %zu bytes.", 
-                  motor_id, timeout_ms, response.size());
-      if (!response.empty()) {
-        std::string partial_data = "";
-        for (size_t i = 0; i < std::min(response.size(), size_t(10)); ++i) {
-          partial_data += std::to_string(response[i]) + " ";
-        }
-        RCLCPP_WARN(logger_, "Motor %d partial data received: %s", motor_id, partial_data.c_str());
-      }
+      // タイムアウト
+      RCLCPP_WARN(logger_, "Motor %d response timeout after %d ms", motor_id, timeout_ms);
       return false;
       
     } catch (const std::exception& e) {
@@ -382,45 +362,20 @@ class MotorController {
     return true;
   }
 
-  void wait_for_motor_response_safe(uint8_t motor_id = 0, int timeout_ms = 10) {
-    if (!enable_feedback_) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(4));
-      return;
-    }
-    
-    try {
-      // 短時間の安全なフィードバック待ち
-      bool success = wait_for_motor_response(motor_id, timeout_ms);
-      if (!success) {
-        // フィードバック失敗時は短いdelayで継続（WARNログは削減）
-        std::this_thread::sleep_for(std::chrono::milliseconds(2));
-      }
-    } catch (const std::exception& e) {
-      RCLCPP_DEBUG(logger_, "Feedback wait failed: %s", e.what());
-      std::this_thread::sleep_for(std::chrono::milliseconds(2));
-    }
-  }
-
-  void enable_motor_feedback(bool enable = true) {
-    enable_feedback_ = enable;
-    RCLCPP_INFO(logger_, "Motor feedback %s", enable ? "enabled" : "disabled");
-    
-    if (enable && serial_port_.is_open()) {
-      start_async_read();
-    }
-  }
-
  private:
   boost::asio::io_context io_context_;
   boost::asio::serial_port serial_port_;
   rclcpp::Logger logger_;
-  bool enable_feedback_;
   
-  // 非同期読み取り用
-  std::vector<uint8_t> read_buffer_;
-  std::array<uint8_t, 64> async_read_buf_;
-  std::atomic<bool> feedback_received_{false};
-  std::chrono::steady_clock::time_point last_feedback_time_;
+  // 参考コードベースの非同期読み取り用
+  std::vector<uint8_t> buffer_;
+  std::array<uint8_t, 64> read_buf_;
+  std::atomic<bool> running_;
+  std::thread io_thread_;
+  
+  // フィードバック管理
+  std::chrono::steady_clock::time_point feedback_received_time_;
+  std::atomic<uint8_t> last_motor_id_{0};
 };
 
 class MecanumWheelControllerNode : public rclcpp::Node {
@@ -434,10 +389,6 @@ class MecanumWheelControllerNode : public rclcpp::Node {
       rclcpp::shutdown();
       return;
     }
-
-    // フィードバック機能を有効化（必要に応じてパラメータで制御可能）
-    bool enable_feedback = this->declare_parameter("enable_motor_feedback", true);
-    motor_controller_.enable_motor_feedback(enable_feedback);
 
     cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>(
         "/cmd_vel", best_effort_qos,
@@ -562,21 +513,23 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // RCLCPP_INFO(this->get_logger(), "RPM values: FL=%d, FR=%d, RL=%d, RR=%d", rpm_front_left,
     // rpm_front_right, rpm_rear_left, rpm_rear_right);
 
-    // 元の方式に戻す（固定delayで安全性確保）
-    motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left,
-                                            static_cast<bool>(this->brake_));
-    motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right,
-                                            static_cast<bool>(this->brake_));
-    motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left,
-                                            static_cast<bool>(this->brake_));
-    motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right,
-                                            static_cast<bool>(this->brake_));
+    // フィードバック待ちのシーケンシャル送信
+    std::vector<std::pair<uint8_t, int16_t>> commands = {
+        {motor_ids_[0], rpm_front_left},
+        {motor_ids_[1], rpm_front_right},
+        {motor_ids_[2], rpm_rear_left},
+        {motor_ids_[3], rpm_rear_right}
+    };
+    
+    motor_controller_.send_velocity_commands_sequential(commands, static_cast<bool>(this->brake_));
   }
 
   void stop_all_motors() {
+    std::vector<std::pair<uint8_t, int16_t>> stop_commands;
     for (const auto& id : motor_ids_) {
-      motor_controller_.send_velocity_command(id, 0);
+      stop_commands.emplace_back(id, 0);
     }
+    motor_controller_.send_velocity_commands_sequential(stop_commands, false);
   }
 
   // ROS 2 components
