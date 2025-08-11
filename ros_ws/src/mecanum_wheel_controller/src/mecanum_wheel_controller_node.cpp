@@ -195,8 +195,8 @@ class MotorController {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
       
-      // タイムアウト
-      RCLCPP_WARN(logger_, "Motor %d response timeout after %d ms", motor_id, timeout_ms);
+      // タイムアウト（頻繁なログを避けるためDEBUGレベル）
+      RCLCPP_DEBUG(logger_, "Motor %d response timeout after %d ms", motor_id, timeout_ms);
       return false;
       
     } catch (const std::exception& e) {
@@ -262,7 +262,7 @@ class MotorController {
       // 短時間の安全なフィードバック待ち
       bool success = wait_for_motor_response(motor_id, timeout_ms);
       if (!success) {
-        // フィードバック失敗時は短いdelayで継続
+        // フィードバック失敗時は短いdelayで継続（WARNログは削減）
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
       }
     } catch (const std::exception& e) {
