@@ -68,6 +68,10 @@ class MotorController {
           boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
       serial_port_.set_option(
           boost::asio::serial_port_base::stop_bits(boost::asio::serial_port_base::stop_bits::one));
+      
+      // ノンブロッキングモードに設定
+      serial_port_.non_blocking(true);
+      
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to open serial port %s: %s", port_name.c_str(), e.what());
       return false;
@@ -115,13 +119,17 @@ class MotorController {
 
   void clear_serial_buffer() {
     try {
-      boost::system::error_code error;
-      size_t available = serial_port_.available(error);
+      // 少し待ってからバッファを確認
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       
-      if (!error && available > 0) {
-        std::vector<uint8_t> buffer(available);
-        boost::asio::read(serial_port_, boost::asio::buffer(buffer), error);
-        RCLCPP_DEBUG(logger_, "Cleared %zu bytes from serial buffer", available);
+      // ノンブロッキング読み取りでバッファをクリア
+      boost::system::error_code error;
+      std::vector<uint8_t> buffer(256);  // 適当なサイズのバッファ
+      
+      size_t bytes_read = serial_port_.read_some(boost::asio::buffer(buffer), error);
+      
+      if (!error && bytes_read > 0) {
+        RCLCPP_DEBUG(logger_, "Cleared %zu bytes from serial buffer", bytes_read);
       }
     } catch (const std::exception& e) {
       RCLCPP_DEBUG(logger_, "Error clearing serial buffer: %s", e.what());
@@ -145,31 +153,13 @@ class MotorController {
       auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
       
       while (std::chrono::steady_clock::now() < deadline) {
-        // 利用可能なデータをチェック
+        // ノンブロッキング読み取りを試行
         boost::system::error_code error;
-        size_t available = serial_port_.available(error);
+        std::vector<uint8_t> buffer(64);  // 一度に読み取る最大バイト数
         
-        if (error) {
-          RCLCPP_WARN(logger_, "Error checking available data for motor %d: %s", 
-                     motor_id, error.message().c_str());
-          return false;
-        }
+        size_t bytes_read = serial_port_.read_some(boost::asio::buffer(buffer), error);
         
-        if (available > 0) {
-          // データを読み取り
-          std::vector<uint8_t> buffer(available);
-          size_t bytes_read = boost::asio::read(
-            serial_port_,
-            boost::asio::buffer(buffer),
-            error
-          );
-          
-          if (error) {
-            RCLCPP_WARN(logger_, "Serial read error for motor %d: %s", 
-                       motor_id, error.message().c_str());
-            return false;
-          }
-          
+        if (!error && bytes_read > 0) {
           // 受信データをresponseに追加
           response.insert(response.end(), buffer.begin(), buffer.begin() + bytes_read);
           
@@ -179,14 +169,20 @@ class MotorController {
             if (validate_motor_response(response, motor_id)) {
               return true;  // 正常応答受信
             } else {
-              // 無効なパケットの場合、バッファをクリアして続行
-              response.clear();
+              // 無効なパケットの場合、先頭1バイトを削除して再試行
+              if (!response.empty()) {
+                response.erase(response.begin());
+              }
             }
           }
+        } else if (error && error != boost::asio::error::would_block) {
+          RCLCPP_WARN(logger_, "Serial read error for motor %d: %s", 
+                     motor_id, error.message().c_str());
+          return false;
         }
         
         // 短い間隔でポーリング
-        std::this_thread::sleep_for(std::chrono::microseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
       
       // タイムアウト
@@ -364,7 +360,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // const double vy = vy_.load();
     // const double wz = wz_.load();
 
-    // 感度調整のためハイパボリックタンジェントを使用
+    // 感度調整のためのゲイン適用
     const double gain = 1.0;  // 必要に応じて調整: 高くするとより敏感になる
     const double vx = gain * vx_.load();
     const double vy = gain * vy_.load();
