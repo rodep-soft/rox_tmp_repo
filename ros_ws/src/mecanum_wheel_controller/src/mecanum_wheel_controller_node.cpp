@@ -98,16 +98,11 @@ class MotorController {
     data.push_back(calc_crc8_maxim(data));  // CRC8
 
     try {
-      // バッファクリア（古いデータを除去）
-      clear_serial_buffer();
-      
       // コマンド送信
       boost::asio::write(serial_port_, boost::asio::buffer(data, data.size()));
       
-      // フィードバック待ち
-      if (!wait_for_motor_response(motor_id)) {
-        RCLCPP_WARN(logger_, "Motor %d did not respond properly", motor_id);
-      }
+      // 固定delay（一時的に元に戻す）
+      std::this_thread::sleep_for(std::chrono::milliseconds(4));
       
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to communicate with motor %d: %s", motor_id, e.what());
@@ -397,23 +392,21 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // RCLCPP_INFO(this->get_logger(), "RPM values: FL=%d, FR=%d, RL=%d, RR=%d", rpm_front_left,
     // rpm_front_right, rpm_rear_left, rpm_rear_right);
 
-    // フィードバック待ちのシーケンシャル送信
-    std::vector<std::pair<uint8_t, int16_t>> commands = {
-        {motor_ids_[0], rpm_front_left},
-        {motor_ids_[1], rpm_front_right},
-        {motor_ids_[2], rpm_rear_left},
-        {motor_ids_[3], rpm_rear_right}
-    };
-    
-    motor_controller_.send_velocity_commands_sequential(commands, static_cast<bool>(this->brake_));
+    // 元の方式に戻す（固定delayで安全性確保）
+    motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left,
+                                            static_cast<bool>(this->brake_));
+    motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right,
+                                            static_cast<bool>(this->brake_));
+    motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left,
+                                            static_cast<bool>(this->brake_));
+    motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right,
+                                            static_cast<bool>(this->brake_));
   }
 
   void stop_all_motors() {
-    std::vector<std::pair<uint8_t, int16_t>> stop_commands;
     for (const auto& id : motor_ids_) {
-      stop_commands.emplace_back(id, 0);
+      motor_controller_.send_velocity_command(id, 0);
     }
-    motor_controller_.send_velocity_commands_sequential(stop_commands, false);
   }
 
   // ROS 2 components
