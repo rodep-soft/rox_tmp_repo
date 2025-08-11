@@ -7,6 +7,7 @@ from custom_interfaces.msg import UpperMotor
 from lifting_motor.state_machine import State, StateMachine
 from lifting_motor.motor_driver import MotorDriver
 
+from std_msgs.msg import String
 
 # lifting_motorノードのメインのプログラム
 # state_machine.pyに状態とその遷移のロジックが,
@@ -18,6 +19,8 @@ class LiftingMotorNode(Node):
         super().__init__("lifting_motor_node")
         # UpperMotor msgのsubscription
         self.subscription = self.create_subscription(UpperMotor, "/upper_motor", self.motor_callback, 10)
+
+        self.publisher_ = self.create_publisher(String, "/lifting_mode", 10)
         
         # State and MotorDriver initialization
         self.state_machine = StateMachine()
@@ -42,6 +45,7 @@ class LiftingMotorNode(Node):
     # Callback function for UpperMotor messages
     # ここでモーターの制御を行う
     def motor_callback(self, msg):
+
         try:
             # スイッチの状態を取得
             sw = self.motor_driver.get_switch_states()
@@ -132,6 +136,9 @@ class LiftingMotorNode(Node):
             except:
                 pass
 
+        mode_msg = String()
+        mode_msg.data = self.state_machine.get_state_name()
+        self.publisher_.publish(mode_msg)
 
     # # モーターの立ち上がりエッジを検出して制御する
     # def detect_edge_and_control_motor(self, msg):
