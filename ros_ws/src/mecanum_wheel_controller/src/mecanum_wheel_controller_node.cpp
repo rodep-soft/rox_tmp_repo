@@ -69,9 +69,6 @@ class MotorController {
       serial_port_.set_option(
           boost::asio::serial_port_base::stop_bits(boost::asio::serial_port_base::stop_bits::one));
       
-      // ノンブロッキングモードに設定
-      serial_port_.non_blocking(true);
-      
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to open serial port %s: %s", port_name.c_str(), e.what());
       return false;
@@ -119,17 +116,29 @@ class MotorController {
 
   void clear_serial_buffer() {
     try {
-      // 少し待ってからバッファを確認
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      
-      // ノンブロッキング読み取りでバッファをクリア
-      boost::system::error_code error;
-      std::vector<uint8_t> buffer(256);  // 適当なサイズのバッファ
-      
-      size_t bytes_read = serial_port_.read_some(boost::asio::buffer(buffer), error);
-      
-      if (!error && bytes_read > 0) {
-        RCLCPP_DEBUG(logger_, "Cleared %zu bytes from serial buffer", bytes_read);
+      // バッファクリアのため短時間で複数回読み取り試行
+      for (int i = 0; i < 5; ++i) {
+        try {
+          std::vector<uint8_t> buffer(64);
+          boost::system::error_code error;
+          
+          std::size_t bytes_read = boost::asio::read(
+            serial_port_,
+            boost::asio::buffer(buffer),
+            boost::asio::transfer_at_least(1),
+            error
+          );
+          
+          if (!error && bytes_read > 0) {
+            RCLCPP_DEBUG(logger_, "Cleared %zu bytes from serial buffer", bytes_read);
+          } else {
+            break;  // 読み取るデータがない場合は終了
+          }
+        } catch (const std::exception&) {
+          break;  // エラーまたはタイムアウトで終了
+        }
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
     } catch (const std::exception& e) {
       RCLCPP_DEBUG(logger_, "Error clearing serial buffer: %s", e.what());
@@ -153,32 +162,37 @@ class MotorController {
       auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
       
       while (std::chrono::steady_clock::now() < deadline) {
-        // ノンブロッキング読み取りを試行
-        boost::system::error_code error;
-        std::vector<uint8_t> buffer(64);  // 一度に読み取る最大バイト数
-        
-        size_t bytes_read = serial_port_.read_some(boost::asio::buffer(buffer), error);
-        
-        if (!error && bytes_read > 0) {
-          // 受信データをresponseに追加
-          response.insert(response.end(), buffer.begin(), buffer.begin() + bytes_read);
+        // 短いタイムアウトで読み取り試行
+        try {
+          std::vector<uint8_t> buffer(1);  // 1バイトずつ読み取り
+          boost::system::error_code error;
           
-          // 完全なパケット（10バイト）を受信したかチェック
-          if (response.size() >= 10) {
-            // パケットを解析
-            if (validate_motor_response(response, motor_id)) {
-              return true;  // 正常応答受信
-            } else {
-              // 無効なパケットの場合、先頭1バイトを削除して再試行
-              if (!response.empty()) {
-                response.erase(response.begin());
+          // 短時間でタイムアウトする読み取り
+          std::size_t bytes_read = boost::asio::read(
+            serial_port_,
+            boost::asio::buffer(buffer),
+            boost::asio::transfer_exactly(1),
+            error
+          );
+          
+          if (!error && bytes_read > 0) {
+            response.insert(response.end(), buffer.begin(), buffer.begin() + bytes_read);
+            
+            // 完全なパケット（10バイト）を受信したかチェック
+            if (response.size() >= 10) {
+              // パケットを解析
+              if (validate_motor_response(response, motor_id)) {
+                return true;  // 正常応答受信
+              } else {
+                // 無効なパケットの場合、先頭1バイトを削除して再試行
+                if (!response.empty()) {
+                  response.erase(response.begin());
+                }
               }
             }
           }
-        } else if (error && error != boost::asio::error::would_block) {
-          RCLCPP_WARN(logger_, "Serial read error for motor %d: %s", 
-                     motor_id, error.message().c_str());
-          return false;
+        } catch (const std::exception&) {
+          // 読み取りエラーまたはタイムアウトの場合は続行
         }
         
         // 短い間隔でポーリング
