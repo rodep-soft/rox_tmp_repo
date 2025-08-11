@@ -6,6 +6,11 @@ from custom_interfaces.msg import UpperMotor
 # from motor_driver import MotorDriver
 from lifting_motor.state_machine import State, StateMachine
 from lifting_motor.motor_driver import MotorDriver
+from time import sleep
+
+from custom_interfaces.action import UpperFunction
+from rclpy.action import ActionServer
+from rclpy.action import CancelResponse, GoalResponse
 
 from std_msgs.msg import String
 
@@ -41,6 +46,94 @@ class LiftingMotorNode(Node):
             self.get_logger().error("ハードウェアの初期化に失敗しました")
         else:
             self.get_logger().info("ハードウェアの初期化が完了しました")
+
+        self._action_server = ActionServer(
+            self,
+            UpperFunction,
+            'upper_function',
+            execute_callback=self.execute_callback,
+            goal_callback=self.goal_callback,
+            cancel_callback=self.cancel_callback
+        )
+
+    def goal_callback(self, goal_request):
+
+        if goal_request.is_rising:
+            return GoalResponse.ACCEPT
+        else:
+            return GoalResponse.REJECT
+
+    def execute_callback(self, goal_handle):
+        """昇降アクションの実行"""
+        self.get_logger().info("昇降アクション開始")
+        
+        goal = goal_handle.request
+        result = UpperFunction.Result()
+        feedback = UpperFunction.Feedback()
+        
+        start_time = self.get_clock().now()
+        timeout_duration = 10.0  # 10秒タイムアウト
+        last_feedback_time = 0.0  # 最後にフィードバックを送信した時刻
+        
+        # 昇降制御開始（motor_driver.pyの仕様に合わせる）
+        # is_rising=True → elevation_mode=1 (上昇)
+        # is_rising=False → elevation_mode=0 (下降)
+        elevation_mode = 1 if goal.is_rising else 0
+        
+        while rclpy.ok():
+            # キャンセル確認
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                result.success = False
+                result.actual_duration = 0.0
+                self.get_logger().info("昇降アクションがキャンセルされました")
+                return result
+            
+            # タイムアウト確認
+            elapsed = (self.get_clock().now() - start_time).nanoseconds / 1e9
+            if elapsed > timeout_duration:
+                goal_handle.abort()
+                result.success = False
+                result.actual_duration = elapsed
+                self.get_logger().error("昇降アクションがタイムアウトしました")
+                return result
+            
+            # 昇降制御実行
+            current_state = self.state_machine.get_current_state()
+            elevation_status = self.motor_driver.elevation_control(elevation_mode, current_state)
+            
+            # フィードバック送信（1秒に1回）
+            if elapsed - last_feedback_time >= 1.0:
+                feedback.elapsed_time = elapsed
+                goal_handle.publish_feedback(feedback)
+                last_feedback_time = elapsed
+            
+            # 完了確認
+            if elevation_status == "stopped":
+                result.success = True
+                result.actual_duration = elapsed
+                goal_handle.succeed()
+                self.get_logger().info(f"昇降アクション完了: {elapsed:.2f}秒")
+                return result
+            
+            # 短い待機
+            sleep(0.1)
+        
+        # 異常終了
+        result.success = False
+        result.actual_duration = elapsed
+        goal_handle.abort()
+        return result
+
+    def cancel_callback(self, goal_handle):
+        """アクションキャンセル処理"""
+        self.get_logger().info("昇降アクションのキャンセル要求を受諾")
+        return CancelResponse.ACCEPT
+
+    
+    # def cancel_callback(self, goal_handle):
+    #     return CancelResponse.ACCEPT
+
 
     # Callback function for UpperMotor messages
     # ここでモーターの制御を行う
@@ -83,26 +176,35 @@ class LiftingMotorNode(Node):
             if self.state_machine.has_state_changed():
                 self.get_logger().info(f"State Changed: {self.state_machine.get_previous_state().name} -> {self.state_machine.get_state_name()}")
 
-            # TO_MAXに遷移したときの一度だけの処理（副作用）
+            # TO_MAXに遷移したときの一度だけの処理(副作用)
+            # STOPPEDでボタンが押されると、ここでリレーON + 2秒待機 + 押し出し動作開始
+            if self.state_machine.just_entered_state(State.TO_MAX):
+                self.motor_driver.throwing_on()
+                self.get_logger().info("TO_MAX遷移: リレーをONにしました")
+                sleep(1)  # 2秒待機後、下記の押し出し制御で前進開始
+
+            # RETURN_TO_MINに遷移したときの一度だけの処理（副作用）
             if self.state_machine.just_entered_state(State.RETURN_TO_MIN):
                 self.motor_driver.throwing_off()  # リレー停止（一度だけ）
                 self.get_logger().info("RETURN_TO_MIN遷移: リレーを停止しました")
 
-            # 射出用リレーの制御（状態とエッジ検出に基づく）
-            if throwing_edge:
-                if current_state in [State.STOPPED, State.RETURN_TO_MIN]:
-                    # 射出可能な状態でボタンが押された場合
-                    if not self.motor_driver.get_motor_states()["is_throwing_motor_running"]:
-                        # 現在停止中なら開始
-                        self.motor_driver.throwing_on()
-                        self.get_logger().info("射出リレーをONにしました")
-                    else:
-                        # 現在動作中なら停止
-                        self.motor_driver.throwing_off()
-                        self.get_logger().info("射出リレーをOFFにしました")
+            # # 射出用リレーの制御（状態とエッジ検出に基づく）
+            # if throwing_edge:
+            #     if current_state in [State.STOPPED, State.RETURN_TO_MIN]:
+            #         # 射出可能な状態でボタンが押された場合
+            #         if not self.motor_driver.get_motor_states()["is_throwing_motor_running"]:
+            #             # 現在停止中なら開始
+            #             self.motor_driver.throwing_on()
+            #             self.get_logger().info("射出リレーをONにしました")
+            #         else:
+            #             # 現在動作中なら停止
+            #             self.motor_driver.throwing_off()
+            #             self.get_logger().info("射出リレーをOFFにしました")
 
             # 状態に応じた押出モーター制御
             if current_state == State.STOPPED:
+                # STOPPEDステート: ejection_minまで後退させる
+                # ボタン押下時はstate_machineがTO_MAXに遷移させる
                 if not self.motor_driver.get_switch_states()["ejection_min"]:
                     self.motor_driver.ejection_backward()
                 else:
