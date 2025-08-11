@@ -53,7 +53,8 @@ class JoyDriverNode : public rclcpp::Node {
   // Previous button states for toggle functionality
   bool prev_linetrace_buttons_ = false;
 
-  bool prev_reverse_button = false;
+  bool reverse_flag = false;
+  bool prev_reverse_button = 0;
 
   bool prev_throwing_on = false;
   bool prev_ejection_on = false;
@@ -230,11 +231,19 @@ class JoyDriverNode : public rclcpp::Node {
 
     // 反転させる
     // これちょっと不味そう------------
-    if (msg->buttons[5] == 1) {
+    if (prev_reverse_button == 0 && msg->buttons[5] == 1) {
+      // twist_msg->linear.x = -twist_msg->linear.x;
+      // twist_msg->linear.y = -twist_msg->linear.y;
+      reverse_flag = !reverse_flag;
+    }
+
+    prev_reverse_button = msg->buttons[5];
+
+    if (reverse_flag) {
       twist_msg->linear.x = -twist_msg->linear.x;
       twist_msg->linear.y = -twist_msg->linear.y;
-      prev_reverse_button = !prev_reverse_button;
     }
+
 
     // cmd_velのpublish
     if (mode_ != Mode::LINETRACE) {
