@@ -12,12 +12,21 @@ class LedControlNode(Node):
         # LED スクリプトのパスを取得
         self.script_dir = os.path.join(os.path.dirname(__file__), "led_scripts")
 
-        self.subscription = self.create_subscription(
+        self.driver_mode_subscription = self.create_subscription(
             String,
             "/mode",
-            self.mode_callback,
+            self.driver_mode_callback,
             10
         )
+
+        # self.lifting_mode_subscription = self.create_subscription(
+        #     String,
+        #     "/lifting_mode",
+        #     self.lifting_mode_callback,
+        #     10
+        # )
+
+        self.current_color = 'red'
 
         # 初期化テスト - 起動時に赤く点灯
         try:
@@ -30,7 +39,7 @@ class LedControlNode(Node):
         except Exception as e:
             self.get_logger().error(f"LED初期化エラー: {e}")
 
-    def mode_callback(self, msg):
+    def driver_mode_callback(self, msg):
         mode = msg.data
         self.get_logger().info(f"モード切替: {mode}")
         
@@ -39,24 +48,38 @@ class LedControlNode(Node):
                 red_script = os.path.join(self.script_dir, "red.py")
                 subprocess.Popen(["python3.11", red_script])
                 # self.get_logger().info("LED: 赤色(STOP)")
+                self.current_color = 'red'
             elif mode == "JOY":
                 green_script = os.path.join(self.script_dir, "green.py")
                 subprocess.Popen(["python3.11", green_script])
                 # self.get_logger().info("LED: 緑色(JOY)")
+                self.current_color = 'green'
             elif mode == "DPAD":
                 blue_script = os.path.join(self.script_dir, "blue.py")
                 subprocess.Popen(["python3.11", blue_script])
                 # self.get_logger().info("LED: 青色(DPAD)")
+                self.current_color = 'blue'
             elif mode == "LINETRACE":
                 white_script = os.path.join(self.script_dir, "white.py")
                 subprocess.Popen(["python3.11", white_script])
                 # self.get_logger().info("LED: 白色(LINETRACE)")
+                self.current_color = 'white'
             else:
                 off_script = os.path.join(self.script_dir, "off.py")
                 subprocess.Popen(["python3.11", off_script])
                 # self.get_logger().info("LED: 消灯")
+                self.current_color = 'off'
         except Exception as e:
             self.get_logger().error(f"LED制御エラー: {e}")  
+
+    # def lifting_mode_callback(self, msg):
+    #     mode = msg.data
+
+    #     if mode == 'INIT':
+        
+    #     elif mode == 'TO_MAX':
+        
+    #     elif mode == 'RETURN_TO_MIN'
 
 
 def main(args=None):

@@ -20,7 +20,7 @@ class LiftingMotorNode(Node):
         # UpperMotor msgのsubscription
         self.subscription = self.create_subscription(UpperMotor, "/upper_motor", self.motor_callback, 10)
 
-        self.publisher_ = self.create_publisher(String, "/lifting_mode", 10)
+        self.publisher_ = self.create_publisher(String, "/lifting_mode", 10) # led pattern
         
         # State and MotorDriver initialization
         self.state_machine = StateMachine()
