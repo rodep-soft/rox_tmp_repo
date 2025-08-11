@@ -89,7 +89,7 @@ class LiftingMotorNode(Node):
             if self.state_machine.just_entered_state(State.TO_MAX):
                 self.motor_driver.throwing_on()
                 self.get_logger().info("TO_MAX遷移: リレーをONにしました")
-                sleep(2)  # 2秒待機後、下記の押し出し制御で前進開始
+                sleep(1)  # 2秒待機後、下記の押し出し制御で前進開始
 
             # RETURN_TO_MINに遷移したときの一度だけの処理（副作用）
             if self.state_machine.just_entered_state(State.RETURN_TO_MIN):
