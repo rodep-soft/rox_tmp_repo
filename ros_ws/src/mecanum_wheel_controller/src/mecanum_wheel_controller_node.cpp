@@ -56,7 +56,7 @@ uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data) {
 class MotorController {
  public:
   MotorController(rclcpp::Logger logger) : serial_port_(io_context_), logger_(logger), 
-                                           enable_feedback_(false) {}
+                                           enable_feedback_(true) {}
 
   bool init_port(const std::string& port_name, int baud_rate) {
     try {
