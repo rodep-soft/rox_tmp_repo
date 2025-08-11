@@ -65,19 +65,19 @@ class MotorDriver:
     def throwing_off(self):
         self.throwing_motor.off()
 
-    def ejection_forward(self, speed=0.8):
+    def ejection_forward(self, speed=1.0):
         self.ejection_motor.forward(speed=speed)
 
-    def ejection_backward(self, speed=0.3):
+    def ejection_backward(self, speed=1.0):
         self.ejection_motor.backward(speed=speed)
 
     def ejection_stop(self):
         self.ejection_motor.stop()
 
-    def elevation_forward(self, speed=1.0):
+    def elevation_forward(self, speed=0.8):
         self.elevation_motor.forward(speed=speed)
 
-    def elevation_backward(self, speed=1.0):
+    def elevation_backward(self, speed=0.3):
         self.elevation_motor.backward(speed=speed)
 
     def elevation_stop(self):
@@ -114,7 +114,6 @@ class MotorDriver:
             else:
                 # 最小位置に達している場合は停止
                 self.elevation_stop()
-                return "at_bottom"  # 下降完了
                 return "at_bottom"  # 下降完了
 
     def stop_all_motors(self):
