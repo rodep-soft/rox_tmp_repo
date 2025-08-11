@@ -388,10 +388,10 @@ class JoyDriverNode : public rclcpp::Node {
 
     if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
       // R2: rotate right
-      return -(msg->axes[4] - 1) / 2.0;
+      return -(msg->axes[4] - 1) * 2.0;
     } else if (msg->axes[5] < TRIGGER_THRESHOLD && msg->axes[4] >= TRIGGER_THRESHOLD) {
       // L2: rotate left
-      return (msg->axes[5] - 1) / 2.0;
+      return (msg->axes[5] - 1) * 2.0;
     } else {
       return 0.0;
     }
