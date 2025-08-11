@@ -296,7 +296,7 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     }
 
     // フィードバック機能を有効化（必要に応じてパラメータで制御可能）
-    bool enable_feedback = this->declare_parameter("enable_motor_feedback", false);
+    bool enable_feedback = this->declare_parameter("enable_motor_feedback", true);
     motor_controller_.enable_motor_feedback(enable_feedback);
 
     cmd_vel_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>(
