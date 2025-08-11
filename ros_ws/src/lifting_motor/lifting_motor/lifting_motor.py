@@ -85,10 +85,11 @@ class LiftingMotorNode(Node):
                 self.get_logger().info(f"State Changed: {self.state_machine.get_previous_state().name} -> {self.state_machine.get_state_name()}")
 
             # TO_MAXに遷移したときの一度だけの処理(副作用)
+            # STOPPEDでボタンが押されると、ここでリレーON + 2秒待機 + 押し出し動作開始
             if self.state_machine.just_entered_state(State.TO_MAX):
                 self.motor_driver.throwing_on()
                 self.get_logger().info("TO_MAX遷移: リレーをONにしました")
-                sleep(2)
+                sleep(2)  # 2秒待機後、下記の押し出し制御で前進開始
 
             # RETURN_TO_MINに遷移したときの一度だけの処理（副作用）
             if self.state_machine.just_entered_state(State.RETURN_TO_MIN):
@@ -110,6 +111,8 @@ class LiftingMotorNode(Node):
 
             # 状態に応じた押出モーター制御
             if current_state == State.STOPPED:
+                # STOPPEDステート: ejection_minまで後退させる
+                # ボタン押下時はstate_machineがTO_MAXに遷移させる
                 if not self.motor_driver.get_switch_states()["ejection_min"]:
                     self.motor_driver.ejection_backward()
                 else:

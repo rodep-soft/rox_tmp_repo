@@ -40,7 +40,7 @@ class StateMachine:
             
         # 射出シーケンス開始の条件
         elif self.state == State.STOPPED and \
-                inputs.get('is_throwing_motor_on', False) and \
+                not inputs.get('is_throwing_motor_on', False) and \
                 inputs.get('is_elevation_minlim_on', False) and \
                 inputs.get('is_ejection_on', False):
             self.state = State.TO_MAX
