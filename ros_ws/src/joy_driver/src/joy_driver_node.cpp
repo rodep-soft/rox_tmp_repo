@@ -134,7 +134,7 @@ class JoyDriverNode : public rclcpp::Node {
       if (msg->buttons[6] == 1 && mode_ != Mode::JOY) {
         mode_ = Mode::JOY;
         RCLCPP_INFO(this->get_logger(), "Mode: JOY");
-      } else if (msg->buttons[5] == 1 && mode_ != Mode::STOP) {
+      } else if (msg->buttons[15] == 1 && mode_ != Mode::STOP) {
         mode_ = Mode::STOP;
         RCLCPP_INFO(this->get_logger(), "Mode: STOP");
       } else if (msg->buttons[4] == 1 && mode_ != Mode::DPAD) {
