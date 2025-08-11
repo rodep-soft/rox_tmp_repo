@@ -77,7 +77,7 @@ class MotorDriver:
     def elevation_forward(self, speed=1.0):
         self.elevation_motor.forward(speed=speed)
 
-    def elevation_backward(self, speed=1.0):
+    def elevation_backward(self, speed=0.7):
         self.elevation_motor.backward(speed=speed)
 
     def elevation_stop(self):
@@ -114,7 +114,6 @@ class MotorDriver:
             else:
                 # 最小位置に達している場合は停止
                 self.elevation_stop()
-                return "at_bottom"  # 下降完了
                 return "at_bottom"  # 下降完了
 
     def stop_all_motors(self):

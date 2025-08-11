@@ -53,6 +53,9 @@ class JoyDriverNode : public rclcpp::Node {
   // Previous button states for toggle functionality
   bool prev_linetrace_buttons_ = false;
 
+  bool reverse_flag = false;
+  bool prev_reverse_button = 0;
+
   bool prev_throwing_on = false;
   bool prev_ejection_on = false;
   bool prev_elevation_on = false;
@@ -60,6 +63,11 @@ class JoyDriverNode : public rclcpp::Node {
   // static float applyDeadzone(double val, double threshold) {
   //   return (std::abs(val) < threshold) ? 0.0f : val;
   // }
+
+  // デッドゾーン処理を追加
+  static double applyDeadzone(double val, double threshold = 0.05) {
+    return (std::abs(val) < threshold) ? 0.0 : val;
+  }
 
   // share buttons[4]
   // option buttons[6]
@@ -131,7 +139,7 @@ class JoyDriverNode : public rclcpp::Node {
       if (msg->buttons[6] == 1 && mode_ != Mode::JOY) {
         mode_ = Mode::JOY;
         RCLCPP_INFO(this->get_logger(), "Mode: JOY");
-      } else if (msg->buttons[5] == 1 && mode_ != Mode::STOP) {
+      } else if (msg->buttons[15] == 1 && mode_ != Mode::STOP) {
         mode_ = Mode::STOP;
         RCLCPP_INFO(this->get_logger(), "Mode: STOP");
       } else if (msg->buttons[4] == 1 && mode_ != Mode::DPAD) {
@@ -196,13 +204,18 @@ class JoyDriverNode : public rclcpp::Node {
         twist_msg->angular.z = 0.0;
         break;
       case Mode::JOY:
-        if (!l2_pressed && !r2_pressed) {  // When neither L2 nor R2 are pressed
-          twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
-          twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
-          twist_msg->angular.z = 0.0;
-        } else {  // When either L2 or R2 is pressed
-          twist_msg->angular.z = get_angular_velocity(msg);
-        }
+        // if (!l2_pressed && !r2_pressed) {  // When neither L2 nor R2 are pressed
+        //   twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
+        //   twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
+        //   twist_msg->angular.z = 0.0;
+        // } else {  // When either L2 or R2 is pressed
+        //   twist_msg->angular.z = get_angular_velocity(msg);
+        // }
+        // デッドゾーン処理を適用
+        twist_msg->linear.x = applyDeadzone(msg->axes[linear_x_axis_]) * linear_x_scale_;
+        twist_msg->linear.y = applyDeadzone(msg->axes[linear_y_axis_]) * linear_y_scale_;
+        twist_msg->angular.z = applyDeadzone(msg->axes[angular_axis_]) * angular_scale_;
+        // twist_msg->angular.z = get_angular_velocity(msg);
         break;
       case Mode::DPAD:
         if (!l2_pressed && !r2_pressed) {
@@ -223,6 +236,21 @@ class JoyDriverNode : public rclcpp::Node {
         break;
       default:
         RCLCPP_WARN(this->get_logger(), "Unknown mode: %d", static_cast<int>(mode_));
+    }
+
+    // 反転させる
+    // これちょっと不味そう------------
+    if (prev_reverse_button == 0 && msg->buttons[5] == 1) {
+      // twist_msg->linear.x = -twist_msg->linear.x;
+      // twist_msg->linear.y = -twist_msg->linear.y;
+      reverse_flag = !reverse_flag;
+    }
+
+    prev_reverse_button = msg->buttons[5];
+
+    if (reverse_flag) {
+      twist_msg->linear.x = -twist_msg->linear.x;
+      twist_msg->linear.y = -twist_msg->linear.y;
     }
 
     // cmd_velのpublish
@@ -268,15 +296,13 @@ class JoyDriverNode : public rclcpp::Node {
     }
 
     // 昇降制御（方向パッド）
-    if (msg->buttons[3] == 1) {        // triangle
+    if (msg->buttons[3] == 1) {         // triangle
       upper_msg->elevation_mode = 1;    // 上昇
-    } else if (msg->buttons[0] == 1) { // x
+    } else if (msg->buttons[0] == 1) {  // x
       upper_msg->elevation_mode = 0;    // 下降
     } else {
-      upper_msg->elevation_mode = 2;    // 停止
+      upper_msg->elevation_mode = 2;  // 停止
     }
-
-
 
     //  一旦廃止
     // // Check for state changes
@@ -365,10 +391,10 @@ class JoyDriverNode : public rclcpp::Node {
 
     if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
       // R2: rotate right
-      return -(msg->axes[4] - 1) / 2.0;
+      return -(msg->axes[4] - 1);
     } else if (msg->axes[5] < TRIGGER_THRESHOLD && msg->axes[4] >= TRIGGER_THRESHOLD) {
       // L2: rotate left
-      return (msg->axes[5] - 1) / 2.0;
+      return (msg->axes[5] - 1);
     } else {
       return 0.0;
     }
@@ -420,5 +446,3 @@ int main(int argc, char** argv) {
   rclcpp::shutdown();
   return 0;
 }
-
-

@@ -1,9 +1,9 @@
 /**:
   ros__parameters:
     # Joy Driver Parameters
-    linear_x_scale: -2.0
-    linear_y_scale: -2.0
-    angular_scale: 2.0
+    linear_x_scale: 4.5
+    linear_y_scale: 4.5
+    angular_scale: 4.5
     linear_x_axis: 1
     linear_y_axis: 0
     angular_axis: 2
@@ -11,8 +11,8 @@
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08
-    wheel_base_x: 0.148
-    wheel_base_y: 0.200
+    wheel_base_x: 0.172
+    wheel_base_y: 0.210
     serial_port: "/dev/ttyACM0" # ラズパイが落ちそうになるとHATが死んで名前が変わってしまう
     baud_rate: 115200
     motor_ids: [1, 2, 3, 4]  # FL, FR, BL, BR
