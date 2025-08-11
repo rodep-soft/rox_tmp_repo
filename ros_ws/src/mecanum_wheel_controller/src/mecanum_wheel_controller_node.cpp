@@ -108,7 +108,7 @@ class MotorController {
     } catch (const std::exception& e) {
       RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(4));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
  private:
