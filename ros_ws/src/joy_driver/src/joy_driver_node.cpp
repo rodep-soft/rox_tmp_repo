@@ -199,13 +199,16 @@ class JoyDriverNode : public rclcpp::Node {
         twist_msg->angular.z = 0.0;
         break;
       case Mode::JOY:
-        if (!l2_pressed && !r2_pressed) {  // When neither L2 nor R2 are pressed
-          twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
-          twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
-          twist_msg->angular.z = 0.0;
-        } else {  // When either L2 or R2 is pressed
-          twist_msg->angular.z = get_angular_velocity(msg);
-        }
+        // if (!l2_pressed && !r2_pressed) {  // When neither L2 nor R2 are pressed
+        //   twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
+        //   twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
+        //   twist_msg->angular.z = 0.0;
+        // } else {  // When either L2 or R2 is pressed
+        //   twist_msg->angular.z = get_angular_velocity(msg);
+        // }
+        twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
+        twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
+        twist_msg->angular.z = get_angular_velocity(msg);
         break;
       case Mode::DPAD:
         if (!l2_pressed && !r2_pressed) {
