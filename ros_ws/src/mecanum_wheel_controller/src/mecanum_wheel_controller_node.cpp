@@ -2,6 +2,8 @@
 #include <bit>
 #include <boost/asio.hpp>
 #include <cmath>
+#include <future>
+#include <thread>
 #include <geometry_msgs/msg/twist.hpp>
 #include <memory>
 #include <rclcpp/qos.hpp>
@@ -74,41 +76,174 @@ class MotorController {
   }
 
   void send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false) {
-    // std::vector<uint8_t> command_data = {
-    //   motor_id,
-    //   0x64, // Command for velocity control
-    //   static_cast<uint8_t>((rpm >> 8) & 0xFF), // High byte of RPM
-    //   static_cast<uint8_t>(rpm & 0xFF),        // Low byte of RPM
-    //   0x00, 0x00, 0x00, 0x00, 0x00 // Reserved bytes
-    // };
-    // command_data.push_back(calc_crc8_maxim(command_data));
-
     std::vector<uint8_t> data;
 
     data.push_back(static_cast<uint8_t>(motor_id & 0xFF));
-    data.push_back(0x64);
+    data.push_back(0x64);  // DDSM115 velocity command
     uint16_t val_u16 = std::bit_cast<uint16_t>(rpm);  // 符号付きを符号なしに変換
 
     data.push_back(static_cast<uint8_t>((val_u16 >> 8) & 0xFF));  // Highバイト
     data.push_back(static_cast<uint8_t>(val_u16 & 0xFF));         // Lowバイト
 
-    data.push_back(0x00);
-    data.push_back(0x00);
-    data.push_back(0x00);
+    data.push_back(0x00);  // Acceleration time (0 = default)
+    data.push_back(0x00);  // Reserved
+    data.push_back(0x00);  // Reserved  
     if (brake) {
-      data.push_back(0xFF);
+      data.push_back(0xFF);  // Brake command
     } else {
       data.push_back(0x00);
     }
-    data.push_back(0x00);
-    data.push_back(calc_crc8_maxim(data));
+    data.push_back(0x00);  // Reserved
+    data.push_back(calc_crc8_maxim(data));  // CRC8
 
     try {
+      // バッファクリア（古いデータを除去）
+      clear_serial_buffer();
+      
+      // コマンド送信
       boost::asio::write(serial_port_, boost::asio::buffer(data, data.size()));
+      
+      // フィードバック待ち
+      if (!wait_for_motor_response(motor_id)) {
+        RCLCPP_WARN(logger_, "Motor %d did not respond properly", motor_id);
+      }
+      
     } catch (const std::exception& e) {
-      RCLCPP_ERROR(logger_, "Failed to write to serial port: %s", e.what());
+      RCLCPP_ERROR(logger_, "Failed to communicate with motor %d: %s", motor_id, e.what());
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  void clear_serial_buffer() {
+    try {
+      boost::system::error_code error;
+      size_t available = serial_port_.available(error);
+      
+      if (!error && available > 0) {
+        std::vector<uint8_t> buffer(available);
+        boost::asio::read(serial_port_, boost::asio::buffer(buffer), error);
+        RCLCPP_DEBUG(logger_, "Cleared %zu bytes from serial buffer", available);
+      }
+    } catch (const std::exception& e) {
+      RCLCPP_DEBUG(logger_, "Error clearing serial buffer: %s", e.what());
+    }
+  }
+
+  // シーケンシャル版（一つずつ確実に送信）
+  void send_velocity_commands_sequential(const std::vector<std::pair<uint8_t, int16_t>>& commands, bool brake = false) {
+    for (const auto& [motor_id, rpm] : commands) {
+      send_velocity_command(motor_id, rpm, brake);
+      // 次のモーター送信前に少し待機（バス競合防止）
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  }
+
+  bool wait_for_motor_response(uint8_t motor_id, int timeout_ms = 50) {
+    try {
+      std::vector<uint8_t> response;
+      response.reserve(10);  // DDSM115のレスポンスは10バイト
+      
+      auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+      
+      while (std::chrono::steady_clock::now() < deadline) {
+        // 利用可能なデータをチェック
+        boost::system::error_code error;
+        size_t available = serial_port_.available(error);
+        
+        if (error) {
+          RCLCPP_WARN(logger_, "Error checking available data for motor %d: %s", 
+                     motor_id, error.message().c_str());
+          return false;
+        }
+        
+        if (available > 0) {
+          // データを読み取り
+          std::vector<uint8_t> buffer(available);
+          size_t bytes_read = boost::asio::read(
+            serial_port_,
+            boost::asio::buffer(buffer),
+            error
+          );
+          
+          if (error) {
+            RCLCPP_WARN(logger_, "Serial read error for motor %d: %s", 
+                       motor_id, error.message().c_str());
+            return false;
+          }
+          
+          // 受信データをresponseに追加
+          response.insert(response.end(), buffer.begin(), buffer.begin() + bytes_read);
+          
+          // 完全なパケット（10バイト）を受信したかチェック
+          if (response.size() >= 10) {
+            // パケットを解析
+            if (validate_motor_response(response, motor_id)) {
+              return true;  // 正常応答受信
+            } else {
+              // 無効なパケットの場合、バッファをクリアして続行
+              response.clear();
+            }
+          }
+        }
+        
+        // 短い間隔でポーリング
+        std::this_thread::sleep_for(std::chrono::microseconds(500));
+      }
+      
+      // タイムアウト
+      RCLCPP_WARN(logger_, "Motor %d response timeout after %d ms", motor_id, timeout_ms);
+      return false;
+      
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR(logger_, "Failed to read motor %d response: %s", motor_id, e.what());
+      return false;
+    }
+  }
+
+  bool validate_motor_response(const std::vector<uint8_t>& response, uint8_t expected_id) {
+    if (response.size() < 10) {
+      return false;
+    }
+    
+    // DDSM115 レスポンス形式:
+    // DATA[0]: ID
+    // DATA[1]: Mode value  
+    // DATA[2]: Torque current high 8 bits
+    // DATA[3]: Torque current low 8 bits
+    // DATA[4]: Velocity high 8 bits
+    // DATA[5]: Velocity low 8 bits
+    // DATA[6]: Position high 8 bits
+    // DATA[7]: Position low 8 bits
+    // DATA[8]: Error code
+    // DATA[9]: CRC8
+    
+    // IDチェック
+    if (response[0] != expected_id) {
+      RCLCPP_DEBUG(logger_, "Motor ID mismatch: expected %d, got %d", expected_id, response[0]);
+      return false;
+    }
+    
+    // CRC8チェック
+    std::vector<uint8_t> data_for_crc(response.begin(), response.begin() + 9);
+    uint8_t calculated_crc = calc_crc8_maxim(data_for_crc);
+    
+    if (calculated_crc != response[9]) {
+      RCLCPP_DEBUG(logger_, "CRC mismatch for motor %d: expected %02X, got %02X", 
+                  expected_id, calculated_crc, response[9]);
+      return false;
+    }
+    
+    // エラーコードチェック
+    uint8_t error_code = response[8];
+    if (error_code != 0) {
+      RCLCPP_WARN(logger_, "Motor %d error code: 0x%02X", expected_id, error_code);
+      // エラーがあっても通信は成功したと見なす
+    }
+    
+    // デバッグ情報：速度フィードバック
+    int16_t velocity_feedback = (static_cast<int16_t>(response[4]) << 8) | response[5];
+    RCLCPP_DEBUG(logger_, "Motor %d velocity feedback: %d rpm", expected_id, velocity_feedback);
+    
+    return true;
   }
 
  private:
@@ -252,20 +387,23 @@ class MecanumWheelControllerNode : public rclcpp::Node {
     // RCLCPP_INFO(this->get_logger(), "RPM values: FL=%d, FR=%d, RL=%d, RR=%d", rpm_front_left,
     // rpm_front_right, rpm_rear_left, rpm_rear_right);
 
-    motor_controller_.send_velocity_command(motor_ids_[0], rpm_front_left,
-                                            static_cast<bool>(this->brake_));
-    motor_controller_.send_velocity_command(motor_ids_[1], rpm_front_right,
-                                            static_cast<bool>(this->brake_));
-    motor_controller_.send_velocity_command(motor_ids_[2], rpm_rear_left,
-                                            static_cast<bool>(this->brake_));
-    motor_controller_.send_velocity_command(motor_ids_[3], rpm_rear_right,
-                                            static_cast<bool>(this->brake_));
+    // フィードバック待ちのシーケンシャル送信
+    std::vector<std::pair<uint8_t, int16_t>> commands = {
+        {motor_ids_[0], rpm_front_left},
+        {motor_ids_[1], rpm_front_right},
+        {motor_ids_[2], rpm_rear_left},
+        {motor_ids_[3], rpm_rear_right}
+    };
+    
+    motor_controller_.send_velocity_commands_sequential(commands, static_cast<bool>(this->brake_));
   }
 
   void stop_all_motors() {
+    std::vector<std::pair<uint8_t, int16_t>> stop_commands;
     for (const auto& id : motor_ids_) {
-      motor_controller_.send_velocity_command(id, 0);
+      stop_commands.emplace_back(id, 0);
     }
+    motor_controller_.send_velocity_commands_sequential(stop_commands, false);
   }
 
   // ROS 2 components
