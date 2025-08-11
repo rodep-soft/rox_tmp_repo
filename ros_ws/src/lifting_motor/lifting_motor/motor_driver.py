@@ -65,10 +65,10 @@ class MotorDriver:
     def throwing_off(self):
         self.throwing_motor.off()
 
-    def ejection_forward(self, speed=1.0):
+    def ejection_forward(self, speed=0.8):
         self.ejection_motor.forward(speed=speed)
 
-    def ejection_backward(self, speed=1.0):
+    def ejection_backward(self, speed=0.3):
         self.ejection_motor.backward(speed=speed)
 
     def ejection_stop(self):
