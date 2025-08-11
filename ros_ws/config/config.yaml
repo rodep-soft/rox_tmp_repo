@@ -11,8 +11,8 @@
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08
-    wheel_base_x: 0.148
-    wheel_base_y: 0.200
+    wheel_base_x: 0.172
+    wheel_base_y: 0.210
     serial_port: "/dev/ttyACM0" # ラズパイが落ちそうになるとHATが死んで名前が変わってしまう
     baud_rate: 115200
     motor_ids: [1, 2, 3, 4]  # FL, FR, BL, BR
