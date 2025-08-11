@@ -105,11 +105,11 @@ private:
       uint8_t error_code = packet[8];
 
       std::cout << "Motor ID: " << +motor_id
-                << ", Mode: " << +mode_value
-                << ", Torque Current: " << torque_current
+                // << ", Mode: " << +mode_value
+                // << ", Torque Current: " << torque_current
                 << ", Velocity: " << velocity
-                << ", Position: " << position
-                << ", Error: 0x" << std::hex << static_cast<int>(error_code) << std::dec
+                // << ", Position: " << position
+                // << ", Error: 0x" << std::hex << static_cast<int>(error_code) << std::dec
                 << std::endl;
 
       // パケット消費
