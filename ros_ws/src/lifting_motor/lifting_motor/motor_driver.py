@@ -77,7 +77,7 @@ class MotorDriver:
     def elevation_forward(self, speed=1.0):
         self.elevation_motor.forward(speed=speed)
 
-    def elevation_backward(self, speed=0.7):
+    def elevation_backward(self, speed=0.3):
         self.elevation_motor.backward(speed=speed)
 
     def elevation_stop(self):
