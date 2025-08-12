@@ -379,9 +379,10 @@ class JoyDriverNode : public rclcpp::Node {
 
   // オイラー角を受信するためのコールバック関数
   void rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg) {
-    roll_ = msg->x;
-    pitch_ = msg->y;
-    yaw_ = msg->z;  // current yaw value
+    // BNO055からは度（degrees）で来るのでradianに変換
+    roll_ = msg->x * M_PI / 180.0;
+    pitch_ = msg->y * M_PI / 180.0;
+    yaw_ = msg->z * M_PI / 180.0;  // current yaw value in radians
   }
 
   // void set_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg,
