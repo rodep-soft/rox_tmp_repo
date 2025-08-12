@@ -9,6 +9,7 @@
     angular_axis: 2
     Kp: 0.01
     deadband: 0.05 # デッドバンド(rad)
+    max_angular_correction: 0.3 # P制御の最大角速度出力
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <geometry_msgs/msg/twist.hpp>
 #include <memory>
 #include <rclcpp/qos.hpp>
@@ -84,6 +85,7 @@ class JoyDriverNode : public rclcpp::Node {
 
     this->declare_parameter<double>("Kp", 0.3);  // DPADモードのずれを補正する比例ゲイン
     this->declare_parameter<double>("deadband", 0.05);  // 角度補正のデッドバンド（rad）
+    this->declare_parameter<double>("max_angular_correction", 0.5);  // P制御の最大角速度出力
   }
 
   // パラメータを取得する関数
@@ -97,6 +99,7 @@ class JoyDriverNode : public rclcpp::Node {
 
     Kp = this->get_parameter("Kp").as_double();  // 比例ゲイン
     deadband_ = this->get_parameter("deadband").as_double();  // デッドバンド
+    max_angular_correction_ = this->get_parameter("max_angular_correction").as_double();  // 最大角速度補正
   }
 
   // ----- メインのコールバック関数 -----
@@ -110,10 +113,16 @@ class JoyDriverNode : public rclcpp::Node {
     // だめぽ
     // linetrace_msg->data = false;
 
-    // Ensure the message has enough axes to prevent a crash
+    // Ensure the message has enough axes and buttons to prevent a crash
     if (msg->axes.size() <=
         static_cast<size_t>(std::max({linear_x_axis_, linear_y_axis_, angular_axis_}))) {
       RCLCPP_WARN(this->get_logger(), "Joystick message has insufficient axes.");
+      return;
+    }
+    
+    if (msg->buttons.size() < 16) {  // 最大使用するボタンインデックスは15
+      RCLCPP_WARN(this->get_logger(), "Joystick message has insufficient buttons (%zu < 16).", 
+                  msg->buttons.size());
       return;
     }
 
@@ -197,7 +206,11 @@ class JoyDriverNode : public rclcpp::Node {
     //   default:
     // }
 
+    // 角度差分を正しく計算（-πからπの範囲に正規化）
     double error = yaw_ - init_yaw_;
+    // 角度の連続性を考慮した正規化
+    while (error > M_PI) error -= 2.0 * M_PI;
+    while (error < -M_PI) error += 2.0 * M_PI;
 
     switch (mode_) {
       case Mode::STOP:
@@ -228,7 +241,7 @@ class JoyDriverNode : public rclcpp::Node {
           if (std::abs(error) < deadband_) {
             twist_msg->angular.z = 0.0;
           } else {
-            twist_msg->angular.z = std::clamp(error * Kp, -0.3, 0.3);
+            twist_msg->angular.z = std::clamp(error * Kp, -max_angular_correction_, max_angular_correction_);
           }
         } else {
           twist_msg->angular.z = get_angular_velocity(msg);
@@ -278,9 +291,9 @@ class JoyDriverNode : public rclcpp::Node {
     auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
     // UpperMotor.msgのフィールド設定
 
-    // システム準備状態（例：SELECT + STARTボタン同時押し）
-    // これはどうするか迷い中
-    upper_msg->is_system_ready = (msg->axes[4] == -1 && msg->axes[5] == -1);
+    // システム準備状態（L2 + R2ボタン同時押し）
+    // 浮動小数点比較なので閾値を使用
+    upper_msg->is_system_ready = (msg->axes[4] < -0.9 && msg->axes[5] < -0.9);
 
     // square button (射出)
     if (msg->buttons[2] == 1) {
@@ -385,10 +398,16 @@ class JoyDriverNode : public rclcpp::Node {
   // }
 
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
-    if (mode_ == Mode::DPAD) {
-      // 基準値を変更する
+    // L2/R2を押した時の手動回転時は基準値を更新
+    // （ただし、これは意図的な回転なので基準をリセット）
+    static bool was_manual_rotation = false;
+    bool is_manual_rotation = (msg->axes[4] < TRIGGER_THRESHOLD) || (msg->axes[5] < TRIGGER_THRESHOLD);
+    
+    if (!was_manual_rotation && is_manual_rotation) {
+      // 手動回転開始時に基準値を更新
       init_yaw_ = yaw_;
     }
+    was_manual_rotation = is_manual_rotation;
 
     if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
       // R2: rotate right
@@ -426,6 +445,7 @@ class JoyDriverNode : public rclcpp::Node {
   // PID制御のゲイン
   double Kp;  // 比例ゲイン
   double deadband_;  // 角度補正のデッドバンド
+  double max_angular_correction_;  // P制御の最大角速度出力
 
   // オイラー角
   double pitch_ = 0.0;

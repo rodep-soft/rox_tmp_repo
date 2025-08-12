@@ -8,3 +8,4 @@ joy_driver_node:
     angular_axis: 3
     Kp: 0.3  # P制御ゲイン（角度補正用）- 低めに設定
     deadband: 0.05  # デッドバンド（rad）- 約3度
+    max_angular_correction: 0.5  # P制御の最大角速度出力（rad/s）
