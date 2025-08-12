@@ -82,7 +82,8 @@ class JoyDriverNode : public rclcpp::Node {
     this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
     this->declare_parameter<int>("angular_axis", 3);
 
-    this->declare_parameter<double>("Kp", 1.0);  // DPADモードのずれを補正する比例ゲイン
+    this->declare_parameter<double>("Kp", 0.3);  // DPADモードのずれを補正する比例ゲイン
+    this->declare_parameter<double>("deadband", 0.05);  // 角度補正のデッドバンド（rad）
   }
 
   // パラメータを取得する関数
@@ -95,6 +96,7 @@ class JoyDriverNode : public rclcpp::Node {
     angular_axis_ = this->get_parameter("angular_axis").as_int();
 
     Kp = this->get_parameter("Kp").as_double();  // 比例ゲイン
+    deadband_ = this->get_parameter("deadband").as_double();  // デッドバンド
   }
 
   // ----- メインのコールバック関数 -----
@@ -221,13 +223,12 @@ class JoyDriverNode : public rclcpp::Node {
         if (!l2_pressed && !r2_pressed) {
           twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
           twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
-          // twist_msg->angular.z = 0.0;
-          // 要検討
           // IMUのデータをもとにP制御で補正をかける
-          if (error < 0.05 || error > -0.05) {
+          // デッドバンドを設けてエラーが小さい時は補正しない
+          if (std::abs(error) < deadband_) {
             twist_msg->angular.z = 0.0;
           } else {
-            twist_msg->angular.z = std::clamp(error * Kp, -0.5, 0.5);
+            twist_msg->angular.z = std::clamp(error * Kp, -0.3, 0.3);
           }
         } else {
           twist_msg->angular.z = get_angular_velocity(msg);
@@ -424,6 +425,7 @@ class JoyDriverNode : public rclcpp::Node {
 
   // PID制御のゲイン
   double Kp;  // 比例ゲイン
+  double deadband_;  // 角度補正のデッドバンド
 
   // オイラー角
   double pitch_ = 0.0;

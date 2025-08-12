@@ -1,0 +1,10 @@
+joy_driver_node:
+  ros__parameters:
+    linear_x_scale: 1.0
+    linear_y_scale: 1.0
+    angular_scale: 1.0
+    linear_x_axis: 1
+    linear_y_axis: 0
+    angular_axis: 3
+    Kp: 0.3  # P制御ゲイン（角度補正用）- 低めに設定
+    deadband: 0.05  # デッドバンド（rad）- 約3度

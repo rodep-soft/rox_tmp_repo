@@ -8,6 +8,7 @@
     linear_y_axis: 0
     angular_axis: 2
     Kp: 0.01
+    deadband: 0.05 # デッドバンド(rad)
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08
