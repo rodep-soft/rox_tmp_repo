@@ -223,6 +223,7 @@ class JoyDriverNode : public rclcpp::Node {
           twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
           // twist_msg->angular.z = 0.0;
           // 要検討
+          // IMUのデータをもとにP制御で補正をかける
           if (error < 0.05 || error > -0.05) {
             twist_msg->angular.z = 0.0;
           } else {
@@ -239,7 +240,6 @@ class JoyDriverNode : public rclcpp::Node {
     }
 
     // 反転させる
-    // これちょっと不味そう------------
     if (prev_reverse_button == 0 && msg->buttons[5] == 1) {
       // twist_msg->linear.x = -twist_msg->linear.x;
       // twist_msg->linear.y = -twist_msg->linear.y;
