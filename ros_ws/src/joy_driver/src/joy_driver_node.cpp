@@ -231,30 +231,29 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         // 角度誤差を計算（正規化済み）
         double error = normalizeAngle(yaw_ - init_yaw_);
         
-        // 移動速度に基づく適応的ゲイン（速度が大きいほど補正を強く）
+        // 全方向移動時に補正を適用
         double velocity_magnitude = std::sqrt(twist_msg->linear.x * twist_msg->linear.x + 
                                             twist_msg->linear.y * twist_msg->linear.y);
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
-        // PID補正を適用（適切なゲインで調整）
+        // PID補正を適用
         double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
         
-        // 補正方向を反転（実際のドリフトと逆方向に補正が働いていたため）
-        // PID補正値を手動操作と同じスケールに合わせる（angular_scale_=3.0と統一）
+        // PID補正値を適用（正のエラー=左ドリフト→負の補正=右回転）
         twist_msg->angular.z = -pid_correction * angular_scale_;
         
-        // 旋回ずれの監視ログ（微小ドリフトも検出）
+        // デバッグログ（IMUデータの詳細確認）
         double yaw_drift_deg = error * 180.0 / M_PI;
         static int log_counter = 0;
         log_counter++;
         
-        // 微小ドリフトも含めて定期的にログ出力（0.5度以上）
-        if (std::abs(yaw_drift_deg) > 0.5 && log_counter % 20 == 0) {  
+        if (std::abs(yaw_drift_deg) > 0.5 && log_counter % 10 == 0) {  
           RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "MICRO-DRIFT: %.2f° %s, PID=%.4f, VelFactor=%.2f, FINAL=%.4f", 
+                               "IMU_CHECK: yaw=%.2f° init=%.2f° error=%.2f° %s, PID=%.4f, FINAL=%.4f", 
+                               yaw_ * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI,
                                std::abs(yaw_drift_deg), 
                                (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
-                               pid_correction, velocity_factor, twist_msg->angular.z);
+                               pid_correction, twist_msg->angular.z);
         }
       } else if (std::abs(manual_angular) > 0.01) {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
@@ -290,8 +289,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         last_correction_time_ = current_time;
         
         // DPADモードでは最大強度で角度+角速度補正を適用
-        // ！！！補正方向を反転！！！（実際のドリフトと逆方向に補正が働いていたため）
-        twist_msg->angular.z = -calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, 1.0);
+        // 符号修正：ドリフト方向と同じ方向に補正して相殺
+        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, 1.0);
         
         // デバッグ出力（補正時のみ）
         if (std::abs(twist_msg->angular.z) > 0.01) {
@@ -435,8 +434,17 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
   
   // IMU軸診断：すべての軸を表示して正しい軸を確認
   RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
-                       "IMU AXES CHECK: X=%.1f°, Y=%.1f°, Z=%.1f° (FIXED: using X for yaw)", 
+                       "IMU RAW DATA: X=%.1f°, Y=%.1f°, Z=%.1f° (using X for yaw)", 
                        msg->x, msg->y, msg->z);
+  
+  // IMUデータの詳細確認用ログ（変化量も表示）
+  static double prev_x = 0.0, prev_y = 0.0, prev_z = 0.0;
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                       "IMU ANALYSIS: X=%.2f°(Δ%.2f), Y=%.2f°(Δ%.2f), Z=%.2f°(Δ%.2f)", 
+                       msg->x, msg->x - prev_x,
+                       msg->y, msg->y - prev_y, 
+                       msg->z, msg->z - prev_z);
+  prev_x = msg->x; prev_y = msg->y; prev_z = msg->z;
   
   // IMUデータの確認用ログ（5秒間隔に削減）
   RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
@@ -550,7 +558,7 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   double adaptive_ki = Ki_ * velocity_factor;        // 標準の積分ゲイン
   double adaptive_kd = Kd_ * velocity_factor;        // 標準の微分ゲイン
 
-  // 角度ベースのPID計算
+  // 角度ベースのPID計算（標準的なPID制御）
   double angle_correction = adaptive_kp * angle_error + 
                            adaptive_ki * integral_error_ + 
                            adaptive_kd * derivative;

@@ -154,13 +154,13 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
                          (wz > 0) ? "LEFT" : "RIGHT");
   }
 
-  // 並列送信でタイミングずれを防止
+  // 逐次送信に戻す（並列送信は効果が薄いため）
   std::vector<std::pair<uint8_t, int16_t>> commands = {{motor_ids_[0], rpm_front_left},
                                                        {motor_ids_[1], rpm_front_right},
                                                        {motor_ids_[2], rpm_rear_left},
                                                        {motor_ids_[3], rpm_rear_right}};
 
-  motor_controller_.send_velocity_commands_parallel(commands, static_cast<bool>(brake_));
+  motor_controller_.send_velocity_commands_sequential(commands, static_cast<bool>(brake_));
 }
 
 void MecanumWheelControllerNode::stop_all_motors() {
