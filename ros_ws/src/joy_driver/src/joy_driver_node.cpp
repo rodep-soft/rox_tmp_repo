@@ -239,8 +239,13 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         // PID補正を適用
         double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
         
-        // PID補正値を適用（正のエラー=左ドリフト→負の補正=右回転）
-        twist_msg->angular.z = -pid_correction * angular_scale_;
+        // PID補正値を適用（機体左旋回→右回転補正、正のエラー→正の補正）
+        twist_msg->angular.z = pid_correction * angular_scale_;
+        
+        // **デバッグ**: 計算過程を詳細表示
+        RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "CALC_DEBUG: PID=%.4f, angular_scale=%.2f, RESULT=%.4f", 
+                             pid_correction, angular_scale_, twist_msg->angular.z);
         
         // デバッグログ（IMUデータの詳細確認）
         double yaw_drift_deg = error * 180.0 / M_PI;
@@ -289,7 +294,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         last_correction_time_ = current_time;
         
         // DPADモードでは最大強度で角度+角速度補正を適用
-        // 符号修正：ドリフト方向と同じ方向に補正して相殺
+        // 符号修正：エラーと同じ方向に補正して打ち消す
         twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, 1.0);
         
         // デバッグ出力（補正時のみ）
