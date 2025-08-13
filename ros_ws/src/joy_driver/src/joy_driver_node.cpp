@@ -229,8 +229,9 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         // PID補正を適用（適切なゲインで調整）
         double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
         
+        // ！！！補正方向を反転！！！（実際のドリフトと逆方向に補正が働いていたため）
         // PID補正値を手動操作と同じスケールに合わせる（angular_scale_=3.0と統一）
-        twist_msg->angular.z = pid_correction * angular_scale_;
+        twist_msg->angular.z = -pid_correction * angular_scale_;
         
         // 旋回ずれの監視ログ（重要な情報のみ）
         double yaw_drift_deg = error * 180.0 / M_PI;
@@ -263,7 +264,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         last_correction_time_ = current_time;
         
         // DPADモードでは最大強度で角度+角速度補正を適用
-        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, 1.0);
+        // ！！！補正方向を反転！！！（実際のドリフトと逆方向に補正が働いていたため）
+        twist_msg->angular.z = -calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, 1.0);
         
         // デバッグ出力（補正時のみ）
         if (std::abs(twist_msg->angular.z) > 0.01) {
