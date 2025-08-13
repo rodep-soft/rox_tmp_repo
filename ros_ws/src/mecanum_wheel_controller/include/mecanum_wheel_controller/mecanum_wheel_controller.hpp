@@ -42,6 +42,12 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   double wheel_radius_;
   double wheel_base_x_;
   double wheel_base_y_;
+  
+  // Motor hardware correction factors
+  double motor_correction_fl_;
+  double motor_correction_fr_;
+  double motor_correction_rl_;
+  double motor_correction_rr_;
 
   std::atomic<double> vx_, vy_, wz_;
 

@@ -49,8 +49,14 @@ void MecanumWheelControllerNode::declare_parameters() {
   this->declare_parameter<double>("wheel_base_y", 0.2);
   this->declare_parameter<std::string>("serial_port", "/dev/ttyACM0");
   this->declare_parameter<int>("baud_rate", 115200);
+  this->declare_parameter<int>("cmd_vel_timeout_ms", 500);
   this->declare_parameter<std::vector<int64_t>>("motor_ids", {1, 2, 3, 4});
-  this->declare_parameter<int>("cmd_vel_timeout_ms", 500);  // Timeout for cmd_vel in ms
+  
+  // Motor hardware correction factors
+  this->declare_parameter<double>("motor_correction_fl", 1.0);
+  this->declare_parameter<double>("motor_correction_fr", 1.0);
+  this->declare_parameter<double>("motor_correction_rl", 1.0);
+  this->declare_parameter<double>("motor_correction_rr", 1.0);
 }
 
 void MecanumWheelControllerNode::get_parameters() {
@@ -63,6 +69,12 @@ void MecanumWheelControllerNode::get_parameters() {
 
   auto motor_ids_int64 = this->get_parameter("motor_ids").as_integer_array();
   motor_ids_.assign(motor_ids_int64.begin(), motor_ids_int64.end());
+  
+  // Get motor correction factors
+  motor_correction_fl_ = this->get_parameter("motor_correction_fl").as_double();
+  motor_correction_fr_ = this->get_parameter("motor_correction_fr").as_double();
+  motor_correction_rl_ = this->get_parameter("motor_correction_rl").as_double();
+  motor_correction_rr_ = this->get_parameter("motor_correction_rr").as_double();
 }
 
 void MecanumWheelControllerNode::cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg) {
@@ -114,11 +126,11 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
   const double wheel_rear_left_vel = (vx + vy - lxy_sum * wz) / wheel_radius_;
   const double wheel_rear_right_vel = (vx - vy + lxy_sum * wz) / wheel_radius_;
 
-  // Convert to RPM and send to motors
-  int16_t rpm_front_left = static_cast<int16_t>(wheel_front_left_vel * rad_to_rpm);
-  int16_t rpm_front_right = static_cast<int16_t>(wheel_front_right_vel * rad_to_rpm * -1);
-  int16_t rpm_rear_left = static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm);
-  int16_t rpm_rear_right = static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm * -1);
+  // Convert to RPM with hardware correction factors applied
+  int16_t rpm_front_left = static_cast<int16_t>(wheel_front_left_vel * rad_to_rpm * motor_correction_fl_);
+  int16_t rpm_front_right = static_cast<int16_t>(wheel_front_right_vel * rad_to_rpm * -1 * motor_correction_fr_);
+  int16_t rpm_rear_left = static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm * motor_correction_rl_);
+  int16_t rpm_rear_right = static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm * -1 * motor_correction_rr_);
 
   // モーター値の詳細ログ（前後移動とゼロ速度変化を監視）
   static int16_t prev_fl = 0, prev_fr = 0, prev_rl = 0, prev_rr = 0;

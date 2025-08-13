@@ -243,14 +243,18 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         // PID補正値を手動操作と同じスケールに合わせる（angular_scale_=3.0と統一）
         twist_msg->angular.z = -pid_correction * angular_scale_;
         
-        // 旋回ずれの監視ログ（重要な情報のみ）
+        // 旋回ずれの監視ログ（微小ドリフトも検出）
         double yaw_drift_deg = error * 180.0 / M_PI;
-        if (std::abs(yaw_drift_deg) > 2.0) {  // 2度以上のずれを検出
-          RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                               "DRIFT DETECTED: %.1f° %s, PID=%.3f, FINAL=%.3f", 
+        static int log_counter = 0;
+        log_counter++;
+        
+        // 微小ドリフトも含めて定期的にログ出力（0.5度以上）
+        if (std::abs(yaw_drift_deg) > 0.5 && log_counter % 20 == 0) {  
+          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "MICRO-DRIFT: %.2f° %s, PID=%.4f, VelFactor=%.2f, FINAL=%.4f", 
                                std::abs(yaw_drift_deg), 
                                (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
-                               pid_correction, twist_msg->angular.z);
+                               pid_correction, velocity_factor, twist_msg->angular.z);
         }
       } else if (std::abs(manual_angular) > 0.01) {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
@@ -557,6 +561,20 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   
   // 総合補正値
   double total_correction = angle_correction + velocity_damping;
+  
+  // 微小補正も含めた詳細ログ
+  static int debug_counter = 0;
+  debug_counter++;
+  if (std::abs(angle_error) > 0.01 && debug_counter % 50 == 0) {  // 0.6度以上の誤差で50回に1回ログ
+    RCLCPP_INFO(this->get_logger(), 
+                "PID_DETAIL: err=%.4f°, P=%.4f, I=%.4f, D=%.4f, VelDamp=%.4f, Total=%.4f",
+                angle_error * 180.0 / M_PI, 
+                adaptive_kp * angle_error,
+                adaptive_ki * integral_error_,
+                adaptive_kd * derivative,
+                velocity_damping,
+                total_correction);
+  }
 
   // 出力制限
   return std::clamp(total_correction, -max_angular_correction_, max_angular_correction_);
