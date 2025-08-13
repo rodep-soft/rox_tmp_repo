@@ -15,6 +15,10 @@ JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
       "/imu/rpy", best_effort_qos,
       std::bind(&JoyDriverNode::rpy_callback, this, std::placeholders::_1));
 
+  imu_subscription_ = this->create_subscription<sensor_msgs::msg::Imu>(
+      "/imu", best_effort_qos,
+      std::bind(&JoyDriverNode::imu_callback, this, std::placeholders::_1));
+
   // Create publisher for the /cmd_vel topic
   cmd_vel_publisher_ =
       this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", best_effort_qos);
@@ -215,8 +219,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
                                             twist_msg->linear.y * twist_msg->linear.y);
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
-        // PID補正を適用（JOYモードでは控えめに）
-        twist_msg->angular.z = calculatePIDCorrection(error, dt, velocity_factor * 0.7);
+        // PID補正を適用（角度+角速度フィードバック制御）
+        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor * 0.7);
       } else {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
         integral_error_ = 0.0;
@@ -238,8 +242,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         double dt = (last_correction_time_ > 0) ? (current_time - last_correction_time_) : 0.02;
         last_correction_time_ = current_time;
         
-        // DPADモードでは最大強度でPID補正を適用
-        twist_msg->angular.z = calculatePIDCorrection(error, dt, 1.0);
+        // DPADモードでは最大強度で角度+角速度補正を適用
+        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, 1.0);
       } else {
         // 手動回転時はPID状態をリセット
         integral_error_ = 0.0;
@@ -392,6 +396,17 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
   yaw_ = filtered_yaw_;
 }
 
+void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
+  // 角速度データを取得（既にrad/s）
+  angular_vel_x_ = msg->angular_velocity.x;
+  angular_vel_y_ = msg->angular_velocity.y;
+  angular_vel_z_ = msg->angular_velocity.z;
+  
+  // Z軸角速度にローパスフィルタを適用
+  filtered_angular_vel_z_ = YAW_FILTER_ALPHA * angular_vel_z_ + 
+                           (1.0 - YAW_FILTER_ALPHA) * filtered_angular_vel_z_;
+}
+
 double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
   // L2/R2を押した時の手動回転時は基準値を更新
   // （ただし、これは意図的な回転なので基準をリセット）
@@ -445,9 +460,9 @@ double JoyDriverNode::normalizeAngle(double angle) {
   return angle - M_PI;
 }
 
-double JoyDriverNode::calculatePIDCorrection(double error, double dt, double velocity_factor) {
+double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_z, double dt, double velocity_factor) {
   // デッドバンド処理
-  if (std::abs(error) < deadband_) {
+  if (std::abs(angle_error) < deadband_) {
     // デッドバンド内では積分をリセット
     integral_error_ = 0.0;
     prev_yaw_error_ = 0.0;
@@ -455,23 +470,31 @@ double JoyDriverNode::calculatePIDCorrection(double error, double dt, double vel
   }
 
   // 積分項の計算（ウィンドアップ防止付き）
-  integral_error_ += error * dt;
+  integral_error_ += angle_error * dt;
   integral_error_ = std::clamp(integral_error_, -MAX_INTEGRAL_ERROR, MAX_INTEGRAL_ERROR);
 
-  // 微分項の計算
-  double derivative = (dt > 0.001) ? (error - prev_yaw_error_) / dt : 0.0;
-  prev_yaw_error_ = error;
+  // 微分項の計算（角度の変化率）
+  double derivative = (dt > 0.001) ? (angle_error - prev_yaw_error_) / dt : 0.0;
+  prev_yaw_error_ = angle_error;
 
   // 速度依存の適応的ゲイン調整
   double adaptive_kp = Kp_ * velocity_factor;
   double adaptive_ki = Ki_ * velocity_factor;
   double adaptive_kd = Kd_ * velocity_factor;
 
-  // PID計算
-  double correction = adaptive_kp * error + 
-                     adaptive_ki * integral_error_ + 
-                     adaptive_kd * derivative;
+  // 角度ベースのPID計算
+  double angle_correction = adaptive_kp * angle_error + 
+                           adaptive_ki * integral_error_ + 
+                           adaptive_kd * derivative;
+
+  // 角速度フィードバック制御を追加（現在の回転を抑制）
+  // パラメータで渡された角速度と、フィルタ済み角速度の両方を考慮
+  double current_angular_vel = (std::abs(angular_vel_z) > 0.001) ? angular_vel_z : filtered_angular_vel_z_;
+  double velocity_damping = -0.3 * current_angular_vel * velocity_factor;
+  
+  // 総合補正値
+  double total_correction = angle_correction + velocity_damping;
 
   // 出力制限
-  return std::clamp(correction, -max_angular_correction_, max_angular_correction_);
+  return std::clamp(total_correction, -max_angular_correction_, max_angular_correction_);
 }

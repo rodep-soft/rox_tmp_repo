@@ -12,6 +12,7 @@
 // ROS messages
 #include <geometry_msgs/msg/twist.hpp>
 #include <sensor_msgs/msg/joy.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/string.hpp>
 
@@ -33,6 +34,7 @@ class JoyDriverNode : public rclcpp::Node {
   static double applyDeadzone(double val, double threshold = 0.05);
   static double normalizeAngle(double angle);
   double calculatePIDCorrection(double error, double dt, double velocity_factor = 1.0);
+  double calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_z, double dt, double velocity_factor = 1.0);
   std::string mode_to_string(Mode mode);
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg);
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg);
@@ -48,6 +50,7 @@ class JoyDriverNode : public rclcpp::Node {
 
   // Callback functions
   void rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg);
+  void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg);
 
   // Helper functions
   // double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg);  // moved to public
@@ -60,7 +63,7 @@ class JoyDriverNode : public rclcpp::Node {
   // ROS2 Subscription
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
   rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr rpy_subscription_;
-  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr keyboard_subscription_;
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_subscription_;
 
   // ROS2 Publisher
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
@@ -112,6 +115,12 @@ class JoyDriverNode : public rclcpp::Node {
   double pitch_ = 0.0;
   double roll_ = 0.0;
   double yaw_ = 0.0;
+
+  // Angular velocities from IMU (rad/s)
+  double angular_vel_x_ = 0.0;
+  double angular_vel_y_ = 0.0;
+  double angular_vel_z_ = 0.0;
+  double filtered_angular_vel_z_ = 0.0;
 
   // 初期化時のyaw値
   // これはロボットの初期姿勢を基準にするための値
