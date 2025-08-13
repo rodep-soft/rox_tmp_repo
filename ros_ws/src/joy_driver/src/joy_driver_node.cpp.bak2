@@ -1,8 +1,22 @@
-# include "joy_driver/joy_driver_node.hpp"
+#include <algorithm>
+#include <cmath>
+#include <geometry_msgs/msg/twist.hpp>
+#include <memory>
+#include <rclcpp/qos.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/joy.hpp>
+#include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/set_bool.hpp>
+#include <string>
 
-// Constructor
-JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
-      // Declare and get parameters for velocity scaling and axis mapping
+#include "custom_interfaces/msg/cmd_dpad.hpp"
+#include "custom_interfaces/msg/upper_motor.hpp"
+
+class JoyDriverNode : public rclcpp::Node {
+ public:
+  JoyDriverNode() : Node("joy_driver_node") {
+    // Declare and get parameters for velocity scaling and axis mapping
     declare_parameters();
     get_parameters();
 
@@ -29,10 +43,39 @@ JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
     mode_publisher_ = this->create_publisher<std_msgs::msg::String>("/mode", 10);
 
     RCLCPP_INFO(this->get_logger(), "Joy driver node started.");
+  }
 
-}
+ private:
+  // Define the mode of operation for the robot
+  enum class Mode { STOP, JOY, DPAD, LINETRACE };
 
-void JoyDriverNode::declare_parameters() {
+  Mode mode_ = Mode::STOP;
+
+  // Previous button states for toggle functionality
+  bool prev_linetrace_buttons_ = false;
+
+  bool reverse_flag = false;
+  bool prev_reverse_button = 0;
+
+  bool prev_throwing_on = false;
+  bool prev_ejection_on = false;
+  bool prev_elevation_on = false;
+
+  // static float applyDeadzone(double val, double threshold) {
+  //   return (std::abs(val) < threshold) ? 0.0f : val;
+  // }
+
+  // デッドゾーン処理を追加
+  static double applyDeadzone(double val, double threshold = 0.05) {
+    return (std::abs(val) < threshold) ? 0.0 : val;
+  }
+
+  // share buttons[4]
+  // option buttons[6]
+
+  // ROS2パラメータ
+  // config/mecanum.yamlを変更することで再ビルドかけずにパラメータの変更が可能
+  void declare_parameters() {
     this->declare_parameter<double>("linear_x_scale", 1.0);
     this->declare_parameter<double>("linear_y_scale", 1.0);
     this->declare_parameter<double>("angular_scale", 1.0);
@@ -43,10 +86,10 @@ void JoyDriverNode::declare_parameters() {
     this->declare_parameter<double>("Kp", 0.3);  // DPADモードのずれを補正する比例ゲイン
     this->declare_parameter<double>("deadband", 0.05);  // 角度補正のデッドバンド（rad）
     this->declare_parameter<double>("max_angular_correction", 0.5);  // P制御の最大角速度出力
- 
-}
+  }
 
-void JoyDriverNode::get_parameters() {
+  // パラメータを取得する関数
+  void get_parameters() {
     linear_x_scale_ = this->get_parameter("linear_x_scale").as_double();
     linear_y_scale_ = this->get_parameter("linear_y_scale").as_double();
     angular_scale_ = this->get_parameter("angular_scale").as_double();
@@ -57,11 +100,10 @@ void JoyDriverNode::get_parameters() {
     Kp = this->get_parameter("Kp").as_double();  // 比例ゲイン
     deadband_ = this->get_parameter("deadband").as_double();  // デッドバンド
     max_angular_correction_ = this->get_parameter("max_angular_correction").as_double();  // 最大角速度補正
- 
-}
+  }
 
-// Joy main callback function
-void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
+  // ----- メインのコールバック関数 -----
+  void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
     auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
 
     auto linetrace_msg = std::make_unique<std_msgs::msg::Bool>();
@@ -317,17 +359,46 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
     mode_msg->data = mode_to_string(mode_);
     mode_publisher_->publish(std::move(mode_msg));
-}
+  }
 
-void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg) {
+  // モードを文字列に変換する関数
+  std::string mode_to_string(Mode mode) {
+    switch (mode) {
+      case Mode::STOP:
+        return "STOP";
+      case Mode::JOY:
+        return "JOY";
+      case Mode::DPAD:
+        return "DPAD";
+      case Mode::LINETRACE:
+        return "LINETRACE";
+      default:
+        return "UNKNOWN";
+    }
+  }
+
+  // オイラー角を受信するためのコールバック関数
+  void rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg) {
     // BNO055からは度（degrees）で来るのでradianに変換
     roll_ = msg->x * M_PI / 180.0;
     pitch_ = msg->y * M_PI / 180.0;
     yaw_ = msg->z * M_PI / 180.0;  // current yaw value in radians
+  }
 
-} 
+  // void set_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg,
+  //                          std::unique_ptr<geometry_msgs::msg::Twist>& twist_msg) {
+  //   if(msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
+  //     // R2: rotate right
+  //     twist_msg->angular.z = -(msg->axes[4] - 1) / 2.0;
+  //   } else if(msg->axes[5] < TRIGGER_THRESHOLD && msg->axes[4] >= TRIGGER_THRESHOLD) {
+  //     // L2: rotate left
+  //     twist_msg->angular.z = (msg->axes[5] - 1) / 2.0;
+  //   } else {
+  //     twist_msg->angular.z = 0.0;
+  //   }
+  // }
 
-double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
+  double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
     // L2/R2を押した時の手動回転時は基準値を更新
     // （ただし、これは意図的な回転なので基準をリセット）
     static bool was_manual_rotation = false;
@@ -348,24 +419,53 @@ double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPt
     } else {
       return 0.0;
     }
-}
+  }
 
-static double JoyDriverNode::applyDeadzone(double val, double threshold) {
-  return (std::abs(val) < threshold) ? 0.0 : val;
-}
+  const double TRIGGER_THRESHOLD = 0.95;
 
-std::string JoyDriverNode::mode_to_string(Mode mode){
-    switch (mode) {
-      case Mode::STOP:
-        return "STOP";
-      case Mode::JOY:
-        return "JOY";
-      case Mode::DPAD:
-        return "DPAD";
-      case Mode::LINETRACE:
-        return "LINETRACE";
-      default:
-        return "UNKNOWN";
-    }
-}
+  // ROS 2 components
+  rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
+  rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr
+      rpy_subscription_;  // オイラー角を受信するためのsubscription
 
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
+  rclcpp::Publisher<custom_interfaces::msg::UpperMotor>::SharedPtr upper_publisher_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr linetrace_publisher_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr mode_publisher_;
+
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr brake_client_;
+
+  // Parameters
+  double linear_x_scale_;
+  double linear_y_scale_;
+  double angular_scale_;
+  int linear_x_axis_;
+  int linear_y_axis_;
+  int angular_axis_;
+
+  // PID制御のゲイン
+  double Kp;  // 比例ゲイン
+  double deadband_;  // 角度補正のデッドバンド
+  double max_angular_correction_;  // P制御の最大角速度出力
+
+  // オイラー角
+  double pitch_ = 0.0;
+  double roll_ = 0.0;
+  double yaw_ = 0.0;
+
+  // 初期化時のyaw値
+  // これはロボットの初期姿勢を基準にするための値
+  // これを用いてDPADモードでの直線移動での回転方向のズレを補正する
+  // L2, R2を押した時も値を更新する
+  double init_yaw_ = 0.0;
+
+  const rclcpp::QoS reliable_qos = rclcpp::QoS(1).reliable();
+  const rclcpp::QoS best_effort_qos = rclcpp::QoS(10).best_effort();
+};
+
+int main(int argc, char** argv) {
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<JoyDriverNode>());
+  rclcpp::shutdown();
+  return 0;
+}
