@@ -401,20 +401,22 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
   // BNO055からは度（degrees）で来るのでradianに変換
   roll_ = msg->x * M_PI / 180.0;
   pitch_ = msg->y * M_PI / 180.0;
-  double raw_yaw = msg->z * M_PI / 180.0;  // current yaw value in radians
+  
+  // 重要: 正しい軸はX軸だった！（テストで確認済み）
+  double raw_yaw = msg->x * M_PI / 180.0;  // X軸を使用するように修正
   
   // IMU軸診断：すべての軸を表示して正しい軸を確認
   RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
-                       "IMU AXES CHECK: X=%.1f°, Y=%.1f°, Z=%.1f° (current yaw=Z)", 
+                       "IMU AXES CHECK: X=%.1f°, Y=%.1f°, Z=%.1f° (FIXED: using X for yaw)", 
                        msg->x, msg->y, msg->z);
   
   // IMUデータの確認用ログ（5秒間隔に削減）
   RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                       "IMU: yaw=%.1f° (change_rate=%.3f°/s)", msg->z, 
-                       (last_yaw_log_time_ > 0) ? (msg->z - last_yaw_log_) / 5.0 : 0.0);
+                       "IMU: yaw=%.1f° (change_rate=%.3f°/s)", msg->x,  // X軸を表示
+                       (last_yaw_log_time_ > 0) ? (msg->x - last_yaw_log_) / 5.0 : 0.0);
   
-  // ログ用の前回値を保存
-  last_yaw_log_ = msg->z;
+  // ログ用の前回値を保存（X軸を使用）
+  last_yaw_log_ = msg->x;
   last_yaw_log_time_ = this->get_clock()->now().seconds();
   
   // ローパスフィルタで角度データを平滑化
