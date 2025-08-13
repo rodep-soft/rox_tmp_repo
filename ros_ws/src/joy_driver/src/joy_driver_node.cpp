@@ -198,10 +198,18 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
       // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中も十分な値に
       bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-      double angular_deadzone = is_moving ? 0.3 : 0.15;  // 現実的な値に戻す
+      double angular_deadzone = is_moving ? 1.0 : 0.8;  // ジョイスティックノイズ対策で大幅に増加
 
       // 手動回転入力を取得
       double manual_angular = applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
+      
+      // ジョイスティックノイズのデバッグ
+      if (std::abs(msg->axes[angular_axis_] * angular_scale_) > 0.5) {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "JOYSTICK NOISE: raw[2]=%.3f, scaled=%.3f, deadzone=%.3f, final=%.3f",
+                             msg->axes[angular_axis_], msg->axes[angular_axis_] * angular_scale_, 
+                             angular_deadzone, manual_angular);
+      }
       
       // 手動回転入力がない場合、移動中にIMU補正を適用
       if (std::abs(manual_angular) < 0.01 && is_moving) {
