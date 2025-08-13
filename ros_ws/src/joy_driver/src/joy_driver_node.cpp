@@ -182,9 +182,9 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           twist_msg->linear.x = applyDeadzone(msg->axes[linear_x_axis_]) * linear_x_scale_;
           twist_msg->linear.y = applyDeadzone(msg->axes[linear_y_axis_]) * linear_y_scale_;
           
-          // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中は小さく
+          // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中も十分な値に
           bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-          double angular_deadzone = is_moving ? 0.4 : 0.15;  // 移動中は大きなデッドゾーン
+          double angular_deadzone = is_moving ? 0.95 : 0.5;  // ドリフト対策で値を大幅に増加
           
           twist_msg->angular.z = applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
           // twist_msg->angular.z = get_angular_velocity(msg);
@@ -232,7 +232,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         double raw_angular = msg->axes[angular_axis_];
         // デバッグ用に再計算
         bool is_moving_debug = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-        double angular_deadzone_debug = is_moving_debug ? 0.4 : 0.15;
+        double angular_deadzone_debug = is_moving_debug ? 0.95 : 0.5;  // 新しいデッドゾーン値
         RCLCPP_INFO(this->get_logger(), "Mode: %s, angular.z=%.3f (raw=%.3f, deadzone=%.2f, moving=%s)", 
                     mode_to_string(mode_).c_str(),
                     twist_msg->angular.z, raw_angular, angular_deadzone_debug, is_moving_debug ? "YES" : "NO");
