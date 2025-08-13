@@ -2,6 +2,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
+#include <thread>
 #include <vector>
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>

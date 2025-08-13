@@ -1,10 +1,11 @@
 #pragma once
 
+#include <array>
 #include <atomic>
-// #include <bit>
+#include <chrono>
+#include <thread>
 #include <boost/asio.hpp>
 #include <cmath>
-// #include <future>
 #include <string>
 #include <vector>
 #include <memory>
@@ -40,11 +41,13 @@ class MotorController {
         boost::asio::serial_port serial_port_;
         rclcpp::Logger logger_;
 
+        uint8_t calc_crc8_maxim(const std::vector<uint8_t>& data);
+
         std::vector<uint8_t> buffer_;
         std::array<uint8_t, 64> read_buf_;
         std::atomic<bool> reading_;
         std::thread io_thread_;
 
-        std::chrono::stady_clock::time_point feedback_received_time_;
+        std::chrono::steady_clock::time_point feedback_received_time_;
         std::atomic<uint8_t> last_motor_id_{0};
 };
