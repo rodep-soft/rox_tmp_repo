@@ -226,17 +226,17 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
                                             twist_msg->linear.y * twist_msg->linear.y);
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
-        // PID補正を適用（強化版：角度+角速度フィードバック制御）
+        // PID補正を適用（適切なゲインで調整）
         double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
         
-        // テスト: 補正方向を反転して確認
-        twist_msg->angular.z = -pid_correction * angular_scale_;  // 符号反転
+        // PID補正値を手動操作と同じスケールに合わせる（angular_scale_=3.0と統一）
+        twist_msg->angular.z = pid_correction * angular_scale_;
         
         // 旋回ずれの監視ログ（重要な情報のみ）
         double yaw_drift_deg = error * 180.0 / M_PI;
         if (std::abs(yaw_drift_deg) > 2.0) {  // 2度以上のずれを検出
           RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                               "DRIFT DETECTED: %.1f° %s, PID=%.3f, FINAL=%.3f (REVERSED TEST)", 
+                               "DRIFT DETECTED: %.1f° %s, PID=%.3f, FINAL=%.3f", 
                                std::abs(yaw_drift_deg), 
                                (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
                                pid_correction, twist_msg->angular.z);
@@ -510,21 +510,21 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   double derivative = (dt > 0.001) ? (angle_error - prev_yaw_error_) / dt : 0.0;
   prev_yaw_error_ = angle_error;
 
-  // 速度依存の適応的ゲイン調整（超強化版）
-  double adaptive_kp = Kp_ * velocity_factor * 2.0;  // 比例ゲインをさらに強化
-  double adaptive_ki = Ki_ * velocity_factor * 1.5;  // 積分ゲインも強化
-  double adaptive_kd = Kd_ * velocity_factor * 1.2;  // 微分ゲインも強化
+  // 速度依存の適応的ゲイン調整（適切な値に調整）
+  double adaptive_kp = Kp_ * velocity_factor;        // 標準の比例ゲイン
+  double adaptive_ki = Ki_ * velocity_factor;        // 標準の積分ゲイン
+  double adaptive_kd = Kd_ * velocity_factor;        // 標準の微分ゲイン
 
   // 角度ベースのPID計算
   double angle_correction = adaptive_kp * angle_error + 
                            adaptive_ki * integral_error_ + 
                            adaptive_kd * derivative;
 
-  // 角速度フィードバック制御を超強化（現在の回転を強力に抑制）
+  // 角速度フィードバック制御を適切に調整（現在の回転を適度に抑制）
   double current_angular_vel = (std::abs(angular_vel_z) > 0.001) ? angular_vel_z : filtered_angular_vel_z_;
-  double velocity_damping = -0.5 * current_angular_vel * velocity_factor;  // ダンピングを超強化
+  double velocity_damping = -0.1 * current_angular_vel * velocity_factor;  // ダンピングを適度に
   
-  // 総合補正値（より積極的な補正）
+  // 総合補正値
   double total_correction = angle_correction + velocity_damping;
 
   // 出力制限

@@ -7,11 +7,11 @@
     linear_x_axis: 1
     linear_y_axis: 0
     angular_axis: 2  
-    Kp: 200.0  # 大幅に強化: より強い比例制御
-    Ki: 2.0   # 積分項を大幅強化: 定常偏差を素早く除去
-    Kd: 1.0   # 微分項を強化: オーバーシュートを抑制
+    Kp: 2.0   # 適切な比例制御に調整
+    Ki: 0.2   # 積分項を控えめに
+    Kd: 0.1   # 微分項を控えめに
     deadband: 0.035 # デッドバンド(rad) - 約2度に縮小
-    max_angular_correction: 1.0 # PID出力制限 (angular_scale=3.0倍後に3.0rad/s)
+    max_angular_correction: 0.5 # PID出力制限を下げる (angular_scale=3.0倍後に1.5rad/s)
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08
