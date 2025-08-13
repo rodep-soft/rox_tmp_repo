@@ -6,7 +6,7 @@
     angular_scale: 4.5
     linear_x_axis: 1
     linear_y_axis: 0
-    angular_axis: 3  # 3..?（右スティックの横軸）
+    angular_axis: 2  
     Kp: 0.3  # 修正: 度→ラジアン変換後の適切なゲイン
     deadband: 0.087 # デッドバンド(rad) - 約5度
     max_angular_correction: 0.5 # P制御の最大角速度出力（rad/s）

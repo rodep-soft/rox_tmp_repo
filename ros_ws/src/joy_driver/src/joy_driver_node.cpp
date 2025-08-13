@@ -38,7 +38,7 @@ void JoyDriverNode::declare_parameters() {
     this->declare_parameter<double>("angular_scale", 1.0);
     this->declare_parameter<int>("linear_x_axis", 1);  // Vertical movement
     this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
-    this->declare_parameter<int>("angular_axis", 3);
+    this->declare_parameter<int>("angular_axis", 2);  // デフォルトを軸2に変更
 
     this->declare_parameter<double>("Kp", 0.3);  // DPADモードのずれを補正する比例ゲイン
     this->declare_parameter<double>("deadband", 0.05);  // 角度補正のデッドバンド（rad）
@@ -57,6 +57,10 @@ void JoyDriverNode::get_parameters() {
     Kp_ = this->get_parameter("Kp").as_double();  // 比例ゲイン
     deadband_ = this->get_parameter("deadband").as_double();  // デッドバンド
     max_angular_correction_ = this->get_parameter("max_angular_correction").as_double();  // 最大角速度補正
+
+    // パラメータ値をログ出力して確認
+    RCLCPP_INFO(this->get_logger(), "Parameters loaded: angular_axis=%d, linear_x_axis=%d, linear_y_axis=%d, angular_scale=%.2f", 
+                angular_axis_, linear_x_axis_, linear_y_axis_, angular_scale_);
  
 }
 
