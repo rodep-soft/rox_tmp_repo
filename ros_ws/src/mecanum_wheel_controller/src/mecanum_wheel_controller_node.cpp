@@ -103,6 +103,11 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
     const double vy = gain * vy_.load();
     const double wz = gain * wz_.load();
 
+    // デバッグログ: cmd_velの値を確認
+    if (std::abs(wz) > 0.001) {
+        RCLCPP_INFO(this->get_logger(), "Received cmd_vel: vx=%.3f, vy=%.3f, wz=%.3f", vx, vy, wz);
+    }
+
     const double lxy_sum = wheel_base_x_ + wheel_base_y_;
     const double rad_to_rpm = 60.0 / (2.0 * M_PI);
 
@@ -116,6 +121,12 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
     int16_t rpm_front_right = static_cast<int16_t>(wheel_front_right_vel * rad_to_rpm * -1);
     int16_t rpm_rear_left = static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm);
     int16_t rpm_rear_right = static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm * -1);
+
+    // デバッグログ: RPM計算結果を確認
+    if (std::abs(wz) > 0.001 || std::abs(vx) > 0.1 || std::abs(vy) > 0.1) {
+        RCLCPP_INFO(this->get_logger(), "Wheel RPMs: FL=%d, FR=%d, RL=%d, RR=%d (lxy_sum=%.3f)", 
+                    rpm_front_left, rpm_front_right, rpm_rear_left, rpm_rear_right, lxy_sum);
+    }
 
     // フィードバック待ちのシーケンシャル送信
     std::vector<std::pair<uint8_t, int16_t>> commands = {

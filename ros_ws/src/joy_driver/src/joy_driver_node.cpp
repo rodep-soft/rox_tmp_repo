@@ -164,11 +164,11 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
     //   default:
     // }
 
-    // 角度差分を正しく計算（-πからπの範囲に正規化）
-    double error = yaw_ - init_yaw_;
-    // 角度の連続性を考慮した正規化
-    while (error > M_PI) error -= 2.0 * M_PI;
-    while (error < -M_PI) error += 2.0 * M_PI;
+    // 角度差分を正しく計算（-πからπの範囲に正規化） - DPADモード専用
+    // double error = yaw_ - init_yaw_;
+    // // 角度の連続性を考慮した正規化
+    // while (error > M_PI) error -= 2.0 * M_PI;
+    // while (error < -M_PI) error += 2.0 * M_PI;
 
     switch (mode_) {
       case Mode::STOP:
@@ -182,27 +182,35 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           twist_msg->linear.x = applyDeadzone(msg->axes[linear_x_axis_]) * linear_x_scale_;
           twist_msg->linear.y = applyDeadzone(msg->axes[linear_y_axis_]) * linear_y_scale_;
           
-          // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中も十分な値に
+                    // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中も十分な値に
           bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-          double angular_deadzone = is_moving ? 0.95 : 0.5;  // ドリフト対策で値を大幅に増加
+          double angular_deadzone = is_moving ? 0.3 : 0.15;  // 現実的な値に戻す
           
           twist_msg->angular.z = applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
           // twist_msg->angular.z = get_angular_velocity(msg);
         }
         break;
       case Mode::DPAD:
-        if (!l2_pressed && !r2_pressed) {
-          twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
-          twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
-          // IMUのデータをもとにP制御で補正をかける
-          // デッドバンドを設けてエラーが小さい時は補正しない
-          if (std::abs(error) < deadband_) {
-            twist_msg->angular.z = 0.0;
+        {
+          // DPADモード専用：角度差分を正しく計算（-πからπの範囲に正規化）
+          double error = yaw_ - init_yaw_;
+          // 角度の連続性を考慮した正規化
+          while (error > M_PI) error -= 2.0 * M_PI;
+          while (error < -M_PI) error += 2.0 * M_PI;
+          
+          if (!l2_pressed && !r2_pressed) {
+            twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
+            twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
+            // IMUのデータをもとにP制御で補正をかける
+            // デッドバンドを設けてエラーが小さい時は補正しない
+            if (std::abs(error) < deadband_) {
+              twist_msg->angular.z = 0.0;
+            } else {
+              twist_msg->angular.z = std::clamp(error * Kp_, -max_angular_correction_, max_angular_correction_);
+            }
           } else {
-            twist_msg->angular.z = std::clamp(error * Kp_, -max_angular_correction_, max_angular_correction_);
+            twist_msg->angular.z = get_angular_velocity(msg);
           }
-        } else {
-          twist_msg->angular.z = get_angular_velocity(msg);
         }
         break;
       case Mode::LINETRACE:
@@ -227,15 +235,14 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
     // cmd_velのpublish
     if (mode_ != Mode::LINETRACE) {
-      // デバッグ用：小さな回転値も検出して原因特定
-      if (std::abs(twist_msg->angular.z) > 0.001) {  // より小さな値も検出
+      // デバッグ用：回転があった時のみログ出力
+      if (std::abs(twist_msg->angular.z) > 0.001) {  
         double raw_angular = msg->axes[angular_axis_];
-        // デバッグ用に再計算
         bool is_moving_debug = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-        double angular_deadzone_debug = is_moving_debug ? 0.95 : 0.5;  // 新しいデッドゾーン値
-        RCLCPP_INFO(this->get_logger(), "Mode: %s, angular.z=%.3f (raw=%.3f, deadzone=%.2f, moving=%s)", 
-                    mode_to_string(mode_).c_str(),
-                    twist_msg->angular.z, raw_angular, angular_deadzone_debug, is_moving_debug ? "YES" : "NO");
+        double angular_deadzone_debug = is_moving_debug ? 0.3 : 0.15;
+        RCLCPP_WARN(this->get_logger(), "UNWANTED ROTATION: Mode=%s, angular.z=%.3f (raw[%d]=%.3f, deadzone=%.2f, moving=%s)", 
+                    mode_to_string(mode_).c_str(), twist_msg->angular.z, angular_axis_, 
+                    raw_angular, angular_deadzone_debug, is_moving_debug ? "YES" : "NO");
       }
       cmd_vel_publisher_->publish(std::move(twist_msg));
     }
