@@ -128,6 +128,10 @@ class JoyDriverNode : public rclcpp::Node {
   // L2, R2を押した時も値を更新する
   double init_yaw_ = 0.0;
 
+  // ログ用の変数
+  double last_yaw_log_ = 0.0;
+  double last_yaw_log_time_ = 0.0;
+
   // member constants
   const double TRIGGER_THRESHOLD = 0.95;
 

@@ -227,16 +227,19 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
         // PID補正を適用（強化版：角度+角速度フィードバック制御）
-        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
+        double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
+        
+        // 重要: PID補正値を手動操作と同じスケールに合わせる（angular_scale_=3.0と統一）
+        twist_msg->angular.z = pid_correction * angular_scale_;
         
         // 旋回ずれの監視ログ（重要な情報のみ）
         double yaw_drift_deg = error * 180.0 / M_PI;
         if (std::abs(yaw_drift_deg) > 2.0) {  // 2度以上のずれを検出
           RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                               "DRIFT DETECTED: %.1f° %s, correction=%.3f", 
+                               "DRIFT DETECTED: %.1f° %s, PID=%.3f, FINAL=%.3f", 
                                std::abs(yaw_drift_deg), 
                                (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
-                               twist_msg->angular.z);
+                               pid_correction, twist_msg->angular.z);
         }
       } else {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
@@ -297,8 +300,10 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
   // cmd_velのpublish
   if (mode_ != Mode::LINETRACE) {
-    // デバッグ用：回転があった時のみログ出力
-    if (std::abs(twist_msg->angular.z) > 0.001) {
+    // 重要: 実際に送信しているcmd_velを診断ログ
+    if (std::abs(twist_msg->angular.z) > 0.1) {
+      RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                           "SENDING: wz=%.3f (should fix 90° drift!)", twist_msg->angular.z);
     }
     cmd_vel_publisher_->publish(std::move(twist_msg));
   }
@@ -400,7 +405,12 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
   
   // IMUデータの確認用ログ（5秒間隔に削減）
   RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                       "IMU: yaw=%.1f°", msg->z);
+                       "IMU: yaw=%.1f° (change_rate=%.3f°/s)", msg->z, 
+                       (last_yaw_log_time_ > 0) ? (msg->z - last_yaw_log_) / 5.0 : 0.0);
+  
+  // ログ用の前回値を保存
+  last_yaw_log_ = msg->z;
+  last_yaw_log_time_ = this->get_clock()->now().seconds();
   
   // ローパスフィルタで角度データを平滑化
   if (filtered_yaw_ == 0.0) {

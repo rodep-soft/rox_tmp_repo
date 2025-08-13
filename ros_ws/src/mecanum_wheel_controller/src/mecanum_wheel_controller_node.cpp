@@ -105,6 +105,12 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
   const double vy = gain * vy_.load();
   const double wz = gain * wz_.load();
 
+  // 重要: 実際に受信している回転指令を診断ログ
+  if (std::abs(wz) > 0.1) {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                         "MOTOR CMD: wz=%.3f (this should correct drift!)", wz);
+  }
+
   const double lxy_sum = wheel_base_x_ + wheel_base_y_;
   const double rad_to_rpm = 60.0 / (2.0 * M_PI);
 
