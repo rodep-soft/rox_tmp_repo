@@ -200,8 +200,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
       double angular_deadzone = is_moving ? 1.0 : 0.8;  // ジョイスティックノイズ対策で大幅に増加
 
-      // 手動回転入力を取得
-      double manual_angular = applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
+      // 手動回転入力を取得（ハードウェア配線の関係で符号を逆転）
+      double manual_angular = -applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
       
       // ジョイスティックノイズのデバッグ（頻度を大幅削減）
       if (std::abs(msg->axes[angular_axis_] * angular_scale_) > 1.0) {
@@ -272,11 +272,11 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
                                             twist_msg->linear.y * twist_msg->linear.y);
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
-        // PID補正を適用
+                // PID補正を適用
         double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
         
-        // PID補正値を適用（機体左旋回→右回転補正、正のエラー→正の補正）
-        twist_msg->angular.z = pid_correction * angular_scale_;
+        // PID補正値を適用（補正方向を反転）
+        twist_msg->angular.z = -pid_correction * angular_scale_;
         
         // **デバッグ**: 計算過程を詳細表示
         RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
