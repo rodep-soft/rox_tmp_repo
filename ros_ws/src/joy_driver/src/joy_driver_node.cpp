@@ -181,12 +181,11 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         twist_msg->linear.x = applyDeadzone(msg->axes[linear_x_axis_]) * linear_x_scale_;
         twist_msg->linear.y = applyDeadzone(msg->axes[linear_y_axis_]) * linear_y_scale_;
         
-        // 回転はL2/R2が押されているか、右スティックが大きく動いている場合のみ
-        if (l2_pressed || r2_pressed || std::abs(msg->axes[angular_axis_]) > 0.3) {
-          twist_msg->angular.z = applyDeadzone(msg->axes[angular_axis_], 0.15) * angular_scale_;
-        } else {
-          twist_msg->angular.z = 0.0;  // ジョイスティックドリフトを完全に排除
-        }
+        // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中は小さく
+        bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
+        double angular_deadzone = is_moving ? 0.4 : 0.15;  // 移動中は大きなデッドゾーン
+        
+        twist_msg->angular.z = applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
         // twist_msg->angular.z = get_angular_velocity(msg);
         break;
       case Mode::DPAD:
@@ -226,11 +225,15 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
     // cmd_velのpublish
     if (mode_ != Mode::LINETRACE) {
-      // デバッグ用：意図しない回転が発生していないかチェック
-      if (std::abs(twist_msg->angular.z) > 0.01) {
-        RCLCPP_INFO(this->get_logger(), "Mode: %s, angular.z=%.3f (raw_axis[%d]=%.3f)", 
+      // デバッグ用：小さな回転値も検出して原因特定
+      if (std::abs(twist_msg->angular.z) > 0.001) {  // より小さな値も検出
+        double raw_angular = msg->axes[angular_axis_];
+        bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
+        double angular_deadzone = is_moving ? 0.4 : 0.15;
+        double after_deadzone = applyDeadzone(raw_angular, angular_deadzone);
+        RCLCPP_INFO(this->get_logger(), "Mode: %s, angular.z=%.3f (raw=%.3f, deadzone=%.2f, moving=%s)", 
                     mode_to_string(mode_).c_str(),
-                    twist_msg->angular.z, angular_axis_, msg->axes[angular_axis_]);
+                    twist_msg->angular.z, raw_angular, angular_deadzone, is_moving ? "YES" : "NO");
       }
       cmd_vel_publisher_->publish(std::move(twist_msg));
     }
