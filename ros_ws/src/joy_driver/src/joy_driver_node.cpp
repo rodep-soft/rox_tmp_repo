@@ -485,13 +485,12 @@ double JoyDriverNode::normalizeAngle(double angle) {
 }
 
 double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_z, double dt, double velocity_factor) {
-  // デッドバンド処理
-  if (std::abs(angle_error) < deadband_) {
-    // デッドバンド内では積分をリセット
-    integral_error_ = 0.0;
-    prev_yaw_error_ = 0.0;
-    return 0.0;
-  }
+  // デッドバンド処理を一時無効化（すべての誤差に対して補正を適用）
+  // if (std::abs(angle_error) < deadband_) {
+  //   integral_error_ = 0.0;
+  //   prev_yaw_error_ = 0.0;
+  //   return 0.0;
+  // }
 
   // 積分項の計算（ウィンドアップ防止付き）
   integral_error_ += angle_error * dt;
@@ -501,19 +500,19 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   double derivative = (dt > 0.001) ? (angle_error - prev_yaw_error_) / dt : 0.0;
   prev_yaw_error_ = angle_error;
 
-  // 速度依存の適応的ゲイン調整（ファクターを強化）
-  double adaptive_kp = Kp_ * velocity_factor * 1.5;  // 比例ゲインを強化
-  double adaptive_ki = Ki_ * velocity_factor;
-  double adaptive_kd = Kd_ * velocity_factor;
+  // 速度依存の適応的ゲイン調整（超強化版）
+  double adaptive_kp = Kp_ * velocity_factor * 2.0;  // 比例ゲインをさらに強化
+  double adaptive_ki = Ki_ * velocity_factor * 1.5;  // 積分ゲインも強化
+  double adaptive_kd = Kd_ * velocity_factor * 1.2;  // 微分ゲインも強化
 
   // 角度ベースのPID計算
   double angle_correction = adaptive_kp * angle_error + 
                            adaptive_ki * integral_error_ + 
                            adaptive_kd * derivative;
 
-  // 角速度フィードバック制御を強化（現在の回転を強く抑制）
+  // 角速度フィードバック制御を超強化（現在の回転を強力に抑制）
   double current_angular_vel = (std::abs(angular_vel_z) > 0.001) ? angular_vel_z : filtered_angular_vel_z_;
-  double velocity_damping = -0.3 * current_angular_vel * velocity_factor;  // ダンピングを強化
+  double velocity_damping = -0.5 * current_angular_vel * velocity_factor;  // ダンピングを超強化
   
   // 総合補正値（より積極的な補正）
   double total_correction = angle_correction + velocity_damping;

@@ -7,11 +7,11 @@
     linear_x_axis: 1
     linear_y_axis: 0
     angular_axis: 2  
-    Kp: 20.0  # 大幅に強化: より強い比例制御
-    Ki: 0.5  # 積分項を追加: 定常偏差を除去
-    Kd: 0.1  # 微分項を追加: オーバーシュートを抑制
-    deadband: 0.052 # デッドバンド(rad) - 約3度に縮小
-    max_angular_correction: 2.0 # 最大補正値を大幅に増加
+    Kp: 200.0  # 大幅に強化: より強い比例制御
+    Ki: 2.0   # 積分項を大幅強化: 定常偏差を素早く除去
+    Kd: 1.0   # 微分項を強化: オーバーシュートを抑制
+    deadband: 0.035 # デッドバンド(rad) - 約2度に縮小
+    max_angular_correction: 6.0 # 最大補正値を3倍に増加（angular_scale=3.0の2倍）
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08
