@@ -212,30 +212,47 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       
       // 手動回転中フラグを外部で管理
       static bool was_manual_rotating = false;
+      static auto manual_rotation_end_time = std::chrono::steady_clock::now();
       
       // **手動回転中は一切の補正を停止**
       if (std::abs(manual_angular) > 0.01) {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
         integral_error_ = 0.0;
         prev_yaw_error_ = 0.0;
-        twist_msg->angular.z = manual_angular;
+        twist_msg->angular.z = -manual_angular;  // 手動回転の符号を反転
         was_manual_rotating = true;  // 手動回転中フラグを設定
         
         // 手動回転中のデバッグログ
         RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                               "Manual rotation active: %.3f (PID disabled)", manual_angular);
+      } else if (was_manual_rotating) {
+        // 手動回転終了直後の処理
+        manual_rotation_end_time = std::chrono::steady_clock::now();
+        was_manual_rotating = false;
+        
+        // 目標角度を即座に更新（IMUの遅延を考慮せず）
+        double old_target = init_yaw_;
+        init_yaw_ = yaw_;  // 現在の向きを新しい基準に設定
+        integral_error_ = 0.0;
+        prev_yaw_error_ = 0.0;
+        
+        RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "TARGET UPDATE (manual end): old=%.1f° -> new=%.1f° (current=%.1f°)", 
+                             old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI, yaw_ * 180.0 / M_PI);
+        
+        // 手動回転終了直後はPID補正を無効化
+        twist_msg->angular.z = 0.0;
       } else if (std::abs(manual_angular) < 0.01 && is_moving) {
-        // 手動回転終了時の目標姿勢更新処理
-        if (was_manual_rotating) {
-          double old_target = init_yaw_;
-          init_yaw_ = yaw_;  // 現在の向きを新しい基準に設定
+        // 手動回転終了から一定時間後のみPID補正を開始
+        auto current_time = std::chrono::steady_clock::now();
+        auto time_since_manual_end = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - manual_rotation_end_time);
+        
+        if (time_since_manual_end.count() < 200) {
+          // 手動回転終了から200ms以内はPID補正を無効化
+          twist_msg->angular.z = 0.0;
           integral_error_ = 0.0;
           prev_yaw_error_ = 0.0;
-          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "TARGET UPDATE: old=%.1f° -> new=%.1f° (current=%.1f°)", 
-                               old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI, yaw_ * 180.0 / M_PI);
-          was_manual_rotating = false;
-        }
+        } else {
         
         // 動作開始時にPID状態をリセット（切り返し対応）
         static bool was_moving = false;
@@ -275,7 +292,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
                 // PID補正を適用
         double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
         
-        // PID補正値を適用（補正方向を反転）
+        // PID補正値を適用（符号反転を除去）
         twist_msg->angular.z = -pid_correction * angular_scale_;
         
         // **デバッグ**: 計算過程を詳細表示
@@ -296,20 +313,9 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
                                (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
                                pid_correction, twist_msg->angular.z);
         }
-      } else {
-        // 手動回転終了時の処理（移動停止時）
-        if (was_manual_rotating) {
-          double old_target = init_yaw_;
-          init_yaw_ = yaw_;  // 現在の向きを新しい基準に設定
-          integral_error_ = 0.0;
-          prev_yaw_error_ = 0.0;
-          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "TARGET UPDATE (stopped): old=%.1f° -> new=%.1f° (current=%.1f°)", 
-                               old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI, yaw_ * 180.0 / M_PI);
-          was_manual_rotating = false;
         }
-        
-        // 移動停止時のフラグリセット＋PID状態クリア
+      } else {
+        // 移動停止時の処理（手動回転後の重複更新を防止）
         static bool was_moving = true;
         if (was_moving) {
           // 入力停止時にPID状態をクリア（切り返し対応）
