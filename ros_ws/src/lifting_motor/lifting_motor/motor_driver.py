@@ -74,6 +74,7 @@ class MotorDriver:
     def ejection_stop(self):
         self.ejection_motor.stop()
 
+    # 0.95でギリギリ。1.0は怖い
     def elevation_forward(self, speed=0.95):
         self.elevation_motor.forward(speed=speed)
 
