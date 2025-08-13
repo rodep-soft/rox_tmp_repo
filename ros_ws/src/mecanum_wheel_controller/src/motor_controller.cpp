@@ -223,6 +223,15 @@ void MotorController::send_velocity_commands_sequential(
   }
 }
 
+void MotorController::send_velocity_commands_parallel(
+    const std::vector<std::pair<uint8_t, int16_t>>& commands, bool brake) {
+  // 全モーターに同時送信（タイミングずれ防止）
+  for (const auto& [motor_id, rpm] : commands) {
+    send_velocity_command(motor_id, rpm, brake);
+    // 並列送信なので待機なし
+  }
+}
+
 bool MotorController::wait_for_motor_response(uint8_t motor_id, int timeout_ms) {
   try {
     std::vector<uint8_t> response;

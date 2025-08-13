@@ -212,8 +212,15 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       
       // 手動回転入力がない場合、移動中にIMU補正を適用
       if (std::abs(manual_angular) < 0.01 && is_moving) {
-        // ！！！テスト用に補正を無効化！！！（mecanum kinematics検証のため）
-        twist_msg->angular.z = 0.0;
+        // 動作開始時にPID状態をリセット（切り返し対応）
+        static bool was_moving = false;
+        if (!was_moving) {
+          integral_error_ = 0.0;
+          prev_yaw_error_ = 0.0;
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "Movement started - PID state reset");
+        }
+        was_moving = true;
         
         // 現在時刻の取得
         auto now = this->get_clock()->now();
@@ -224,19 +231,44 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         // 角度誤差を計算（正規化済み）
         double error = normalizeAngle(yaw_ - init_yaw_);
         
+        // 移動速度に基づく適応的ゲイン（速度が大きいほど補正を強く）
+        double velocity_magnitude = std::sqrt(twist_msg->linear.x * twist_msg->linear.x + 
+                                            twist_msg->linear.y * twist_msg->linear.y);
+        double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
+        
+        // PID補正を適用（適切なゲインで調整）
+        double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
+        
+        // 補正方向を反転（実際のドリフトと逆方向に補正が働いていたため）
+        // PID補正値を手動操作と同じスケールに合わせる（angular_scale_=3.0と統一）
+        twist_msg->angular.z = -pid_correction * angular_scale_;
+        
         // 旋回ずれの監視ログ（重要な情報のみ）
         double yaw_drift_deg = error * 180.0 / M_PI;
         if (std::abs(yaw_drift_deg) > 2.0) {  // 2度以上のずれを検出
           RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                               "MECANUM DRIFT TEST: %.1f° %s (correction DISABLED)", 
+                               "DRIFT DETECTED: %.1f° %s, PID=%.3f, FINAL=%.3f", 
                                std::abs(yaw_drift_deg), 
-                               (yaw_drift_deg > 0) ? "LEFT" : "RIGHT");
+                               (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
+                               pid_correction, twist_msg->angular.z);
         }
-      } else {
+      } else if (std::abs(manual_angular) > 0.01) {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
         integral_error_ = 0.0;
         prev_yaw_error_ = 0.0;
         twist_msg->angular.z = manual_angular;
+      } else {
+        // 移動停止時のフラグリセット＋PID状態クリア
+        static bool was_moving = true;
+        if (was_moving) {
+          // 入力停止時にPID状態をクリア（切り返し対応）
+          integral_error_ = 0.0;
+          prev_yaw_error_ = 0.0;
+          last_correction_time_ = 0.0;
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "Movement stopped - PID state cleared for smooth restart");
+        }
+        was_moving = false;
       }
     } break;
     case Mode::DPAD: {

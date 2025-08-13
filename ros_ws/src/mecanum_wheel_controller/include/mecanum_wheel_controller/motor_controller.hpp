@@ -26,6 +26,8 @@ class MotorController {
   void send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false);
   void send_velocity_commands_sequential(const std::vector<std::pair<uint8_t, int16_t>>& commands,
                                          bool brake = false);
+  void send_velocity_commands_parallel(const std::vector<std::pair<uint8_t, int16_t>>& commands,
+                                       bool brake = false);
 
   // Helper functions
   void clear_serial_buffer();

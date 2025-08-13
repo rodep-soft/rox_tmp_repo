@@ -120,7 +120,21 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
   int16_t rpm_rear_left = static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm);
   int16_t rpm_rear_right = static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm * -1);
 
-  // 重要: 実際に受信している回転指令を診断ログ
+  // モーター値の詳細ログ（前後移動とゼロ速度変化を監視）
+  static int16_t prev_fl = 0, prev_fr = 0, prev_rl = 0, prev_rr = 0;
+  bool velocity_changed = (rpm_front_left != prev_fl || rpm_front_right != prev_fr || 
+                          rpm_rear_left != prev_rl || rpm_rear_right != prev_rr);
+  
+  if (velocity_changed || std::abs(vx) > 0.1 || std::abs(vy) > 0.1) {
+    RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 500,
+                         "MOTOR DETAIL: vx=%.3f,vy=%.3f,wz=%.3f -> FL=%d,FR=%d,RL=%d,RR=%d", 
+                         vx, vy, wz, rpm_front_left, rpm_front_right, rpm_rear_left, rpm_rear_right);
+  }
+  
+  prev_fl = rpm_front_left; prev_fr = rpm_front_right; 
+  prev_rl = rpm_rear_left; prev_rr = rpm_rear_right;
+
+  // 従来の回転ログ  
   if (std::abs(wz) > 0.1) {
     RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                          "MOTOR CMD: wz=%.3f -> FL=%d,FR=%d,RL=%d,RR=%d (%s rotation)", 
@@ -128,13 +142,13 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
                          (wz > 0) ? "LEFT" : "RIGHT");
   }
 
-  // フィードバック待ちのシーケンシャル送信
+  // 並列送信でタイミングずれを防止
   std::vector<std::pair<uint8_t, int16_t>> commands = {{motor_ids_[0], rpm_front_left},
                                                        {motor_ids_[1], rpm_front_right},
                                                        {motor_ids_[2], rpm_rear_left},
                                                        {motor_ids_[3], rpm_rear_right}};
 
-  motor_controller_.send_velocity_commands_sequential(commands, static_cast<bool>(brake_));
+  motor_controller_.send_velocity_commands_parallel(commands, static_cast<bool>(brake_));
 }
 
 void MecanumWheelControllerNode::stop_all_motors() {
