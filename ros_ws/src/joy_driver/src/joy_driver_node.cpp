@@ -213,8 +213,18 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       // 手動回転中フラグを外部で管理
       static bool was_manual_rotating = false;
       
-      // 手動回転入力がない場合、移動中にIMU補正を適用
-      if (std::abs(manual_angular) < 0.01 && is_moving) {
+      // **手動回転中は一切の補正を停止**
+      if (std::abs(manual_angular) > 0.01) {
+        // 手動回転入力がある場合はそれを優先し、PID状態をリセット
+        integral_error_ = 0.0;
+        prev_yaw_error_ = 0.0;
+        twist_msg->angular.z = manual_angular;
+        was_manual_rotating = true;  // 手動回転中フラグを設定
+        
+        // 手動回転中のデバッグログ
+        RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                              "Manual rotation active: %.3f (PID disabled)", manual_angular);
+      } else if (std::abs(manual_angular) < 0.01 && is_moving) {
         // 手動回転終了時の目標姿勢更新処理
         if (was_manual_rotating) {
           init_yaw_ = yaw_;  // 現在の向きを新しい基準に設定
@@ -273,12 +283,6 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
                                (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
                                pid_correction, twist_msg->angular.z);
         }
-      } else if (std::abs(manual_angular) > 0.01) {
-        // 手動回転入力がある場合はそれを優先し、PID状態をリセット
-        integral_error_ = 0.0;
-        prev_yaw_error_ = 0.0;
-        twist_msg->angular.z = manual_angular;
-        was_manual_rotating = true;  // 手動回転中フラグを設定
       } else {
         // 手動回転終了時の処理（移動停止時）
         if (was_manual_rotating) {
@@ -575,8 +579,8 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   // }
 
   // 積分項の計算（ウィンドアップ防止付き）
-  // 大きなエラーに対して積分蓄積を加速
-  double integral_acceleration = (std::abs(angle_error) > 0.2) ? 2.0 : 1.0;  // 11度以上で加速
+  // 大きなエラーに対して積分蓄積を加速（振動抑制のため緩和）
+  double integral_acceleration = (std::abs(angle_error) > 0.3) ? 1.5 : 1.0;  // 17度以上で1.5倍加速
   integral_error_ += angle_error * dt * integral_acceleration;
   integral_error_ = std::clamp(integral_error_, -MAX_INTEGRAL_ERROR, MAX_INTEGRAL_ERROR);
 
