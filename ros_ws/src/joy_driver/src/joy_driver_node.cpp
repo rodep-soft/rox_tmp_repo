@@ -177,17 +177,16 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         twist_msg->angular.z = 0.0;
         break;
       case Mode::JOY:
-        // if (!l2_pressed && !r2_pressed) {  // When neither L2 nor R2 are pressed
-        //   twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
-        //   twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
-        //   twist_msg->angular.z = 0.0;
-        // } else {  // When either L2 or R2 is pressed
-        //   twist_msg->angular.z = get_angular_velocity(msg);
-        // }
-        // デッドゾーン処理を適用
+        // 移動は常に有効
         twist_msg->linear.x = applyDeadzone(msg->axes[linear_x_axis_]) * linear_x_scale_;
         twist_msg->linear.y = applyDeadzone(msg->axes[linear_y_axis_]) * linear_y_scale_;
-        twist_msg->angular.z = applyDeadzone(msg->axes[angular_axis_]) * angular_scale_;
+        
+        // 回転はL2/R2が押されているか、右スティックが大きく動いている場合のみ
+        if (l2_pressed || r2_pressed || std::abs(msg->axes[angular_axis_]) > 0.3) {
+          twist_msg->angular.z = applyDeadzone(msg->axes[angular_axis_], 0.15) * angular_scale_;
+        } else {
+          twist_msg->angular.z = 0.0;  // ジョイスティックドリフトを完全に排除
+        }
         // twist_msg->angular.z = get_angular_velocity(msg);
         break;
       case Mode::DPAD:
@@ -227,6 +226,12 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
     // cmd_velのpublish
     if (mode_ != Mode::LINETRACE) {
+      // デバッグ用：意図しない回転が発生していないかチェック
+      if (std::abs(twist_msg->angular.z) > 0.01) {
+        RCLCPP_INFO(this->get_logger(), "Mode: %s, angular.z=%.3f (raw_axis[%d]=%.3f)", 
+                    mode_to_string(mode_).c_str(),
+                    twist_msg->angular.z, angular_axis_, msg->axes[angular_axis_]);
+      }
       cmd_vel_publisher_->publish(std::move(twist_msg));
     }
 
