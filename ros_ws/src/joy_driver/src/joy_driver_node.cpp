@@ -2,391 +2,390 @@
 
 // Constructor
 JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
-      // Declare and get parameters for velocity scaling and axis mapping
-    declare_parameters();
-    get_parameters();
+  // Declare and get parameters for velocity scaling and axis mapping
+  declare_parameters();
+  get_parameters();
 
-    // Create subscription to the /joy topic
-    joy_subscription_ = this->create_subscription<sensor_msgs::msg::Joy>(
-        "/joy", best_effort_qos,
-        std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
+  // Create subscription to the /joy topic
+  joy_subscription_ = this->create_subscription<sensor_msgs::msg::Joy>(
+      "/joy", best_effort_qos,
+      std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
 
-    rpy_subscription_ = this->create_subscription<geometry_msgs::msg::Vector3>(
-        "/imu/rpy", best_effort_qos,
-        std::bind(&JoyDriverNode::rpy_callback, this, std::placeholders::_1));
+  rpy_subscription_ = this->create_subscription<geometry_msgs::msg::Vector3>(
+      "/imu/rpy", best_effort_qos,
+      std::bind(&JoyDriverNode::rpy_callback, this, std::placeholders::_1));
 
-    // Create publisher for the /cmd_vel topic
-    cmd_vel_publisher_ =
-        this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", best_effort_qos);
+  // Create publisher for the /cmd_vel topic
+  cmd_vel_publisher_ =
+      this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", best_effort_qos);
 
-    brake_client_ = this->create_client<std_srvs::srv::SetBool>("/brake");
+  brake_client_ = this->create_client<std_srvs::srv::SetBool>("/brake");
 
-    upper_publisher_ =
-        this->create_publisher<custom_interfaces::msg::UpperMotor>("/upper_motor", 3);
+  upper_publisher_ = this->create_publisher<custom_interfaces::msg::UpperMotor>("/upper_motor", 3);
 
-    linetrace_publisher_ = this->create_publisher<std_msgs::msg::Bool>("/is_linetrace", 10);
+  linetrace_publisher_ = this->create_publisher<std_msgs::msg::Bool>("/is_linetrace", 10);
 
-    mode_publisher_ = this->create_publisher<std_msgs::msg::String>("/mode", 10);
+  mode_publisher_ = this->create_publisher<std_msgs::msg::String>("/mode", 10);
 
-    RCLCPP_INFO(this->get_logger(), "Joy driver node started.");
-
+  RCLCPP_INFO(this->get_logger(), "Joy driver node started.");
 }
 
 void JoyDriverNode::declare_parameters() {
-    this->declare_parameter<double>("linear_x_scale", 1.0);
-    this->declare_parameter<double>("linear_y_scale", 1.0);
-    this->declare_parameter<double>("angular_scale", 1.0);
-    this->declare_parameter<int>("linear_x_axis", 1);  // Vertical movement
-    this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
-    this->declare_parameter<int>("angular_axis", 2);  // デフォルトを軸2に変更
+  this->declare_parameter<double>("linear_x_scale", 1.0);
+  this->declare_parameter<double>("linear_y_scale", 1.0);
+  this->declare_parameter<double>("angular_scale", 1.0);
+  this->declare_parameter<int>("linear_x_axis", 1);  // Vertical movement
+  this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
+  this->declare_parameter<int>("angular_axis", 2);
 
-    this->declare_parameter<double>("Kp", 0.3);  // DPADモードのずれを補正する比例ゲイン
-    this->declare_parameter<double>("deadband", 0.05);  // 角度補正のデッドバンド（rad）
-    this->declare_parameter<double>("max_angular_correction", 0.5);  // P制御の最大角速度出力
- 
+  this->declare_parameter<double>("Kp", 0.3);  // DPADモードのずれを補正する比例ゲイン
+  this->declare_parameter<double>("deadband", 0.05);  // 角度補正のデッドバンド（rad）
+  this->declare_parameter<double>("max_angular_correction", 0.5);  // P制御の最大角速度出力
 }
 
 void JoyDriverNode::get_parameters() {
-    linear_x_scale_ = this->get_parameter("linear_x_scale").as_double();
-    linear_y_scale_ = this->get_parameter("linear_y_scale").as_double();
-    angular_scale_ = this->get_parameter("angular_scale").as_double();
-    linear_x_axis_ = this->get_parameter("linear_x_axis").as_int();
-    linear_y_axis_ = this->get_parameter("linear_y_axis").as_int();
-    angular_axis_ = this->get_parameter("angular_axis").as_int();
+  linear_x_scale_ = this->get_parameter("linear_x_scale").as_double();
+  linear_y_scale_ = this->get_parameter("linear_y_scale").as_double();
+  angular_scale_ = this->get_parameter("angular_scale").as_double();
+  linear_x_axis_ = this->get_parameter("linear_x_axis").as_int();
+  linear_y_axis_ = this->get_parameter("linear_y_axis").as_int();
+  angular_axis_ = this->get_parameter("angular_axis").as_int();
 
-    Kp_ = this->get_parameter("Kp").as_double();  // 比例ゲイン
-    deadband_ = this->get_parameter("deadband").as_double();  // デッドバンド
-    max_angular_correction_ = this->get_parameter("max_angular_correction").as_double();  // 最大角速度補正
+  Kp_ = this->get_parameter("Kp").as_double();              // 比例ゲイン
+  deadband_ = this->get_parameter("deadband").as_double();  // デッドバンド
+  max_angular_correction_ =
+      this->get_parameter("max_angular_correction").as_double();  // 最大角速度補正
 
-    // パラメータ値をログ出力して確認
-    RCLCPP_INFO(this->get_logger(), "Parameters loaded: angular_axis=%d, linear_x_axis=%d, linear_y_axis=%d, angular_scale=%.2f", 
-                angular_axis_, linear_x_axis_, linear_y_axis_, angular_scale_);
- 
+  // パラメータ値をログ出力して確認
+  RCLCPP_INFO(
+      this->get_logger(),
+      "Parameters loaded: angular_axis=%d, linear_x_axis=%d, linear_y_axis=%d, angular_scale=%.2f",
+      angular_axis_, linear_x_axis_, linear_y_axis_, angular_scale_);
 }
 
 // Joy main callback function
 void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
-    auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
+  auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
 
-    auto linetrace_msg = std::make_unique<std_msgs::msg::Bool>();
+  auto linetrace_msg = std::make_unique<std_msgs::msg::Bool>();
 
-    auto mode_msg = std::make_unique<std_msgs::msg::String>();
+  auto mode_msg = std::make_unique<std_msgs::msg::String>();
 
-    // だめぽ
-    // linetrace_msg->data = false;
+  // だめぽ
+  // linetrace_msg->data = false;
 
-    // Ensure the message has enough axes and buttons to prevent a crash
-    if (msg->axes.size() <=
-        static_cast<size_t>(std::max({linear_x_axis_, linear_y_axis_, angular_axis_}))) {
-      RCLCPP_WARN(this->get_logger(), "Joystick message has insufficient axes.");
-      return;
-    }
-    
-    if (msg->buttons.size() < 16) {  // 最大使用するボタンインデックスは15
-      RCLCPP_WARN(this->get_logger(), "Joystick message has insufficient buttons (%zu < 16).", 
-                  msg->buttons.size());
-      return;
-    }
+  // Ensure the message has enough axes and buttons to prevent a crash
+  if (msg->axes.size() <=
+      static_cast<size_t>(std::max({linear_x_axis_, linear_y_axis_, angular_axis_}))) {
+    RCLCPP_WARN(this->get_logger(), "Joystick message has insufficient axes.");
+    return;
+  }
 
-    // buttons[11] == 1 && buttons[12] == 1
-    // linetrace_msg->data = 1
-    //
+  if (msg->buttons.size() < 16) {  // 最大使用するボタンインデックスは15
+    RCLCPP_WARN(this->get_logger(), "Joystick message has insufficient buttons (%zu < 16).",
+                msg->buttons.size());
+    return;
+  }
 
-    // Mode switching logic
-    bool current_linetrace_buttons = (msg->buttons[7] == 1 && msg->buttons[8] == 1);
+  // buttons[11] == 1 && buttons[12] == 1
+  // linetrace_msg->data = 1
+  //
 
-    // ライントレースモードかどうかを変える
-    if (current_linetrace_buttons && !prev_linetrace_buttons_) {
-      // Toggle LINETRACE mode only on button press (not hold)
-      if (mode_ == Mode::LINETRACE) {
-        mode_ = Mode::JOY;
-        RCLCPP_INFO(this->get_logger(), "Mode: JOY (from LINETRACE)");
-      } else {
-        mode_ = Mode::LINETRACE;
-        RCLCPP_INFO(this->get_logger(), "Mode: LINETRACE");
-      }
-    }
+  // Mode switching logic
+  bool current_linetrace_buttons = (msg->buttons[7] == 1 && msg->buttons[8] == 1);
 
-    // もしライントレースモードでなければ、他のモードに切り替えることができる
-    if (mode_ != Mode::LINETRACE) {
-      if (msg->buttons[6] == 1 && mode_ != Mode::JOY) {
-        mode_ = Mode::JOY;
-        RCLCPP_INFO(this->get_logger(), "Mode: JOY");
-      } else if (msg->buttons[15] == 1 && mode_ != Mode::STOP) {
-        mode_ = Mode::STOP;
-        RCLCPP_INFO(this->get_logger(), "Mode: STOP");
-      } else if (msg->buttons[4] == 1 && mode_ != Mode::DPAD) {
-        mode_ = Mode::DPAD;
-        init_yaw_ = yaw_;
-        RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
-      }
-    }
-
-    // Update previous button state
-    prev_linetrace_buttons_ = current_linetrace_buttons;
-
-    bool l2_pressed = msg->axes[4] < TRIGGER_THRESHOLD;  // L2 trigger
-    bool r2_pressed = msg->axes[5] < TRIGGER_THRESHOLD;  // R2 trigger
-
-    // Initialize the twist message
-    twist_msg->linear.x = 0.0;
-    twist_msg->linear.y = 0.0;
-    twist_msg->angular.z = 0.0;
-
-    // if (r2_pressed && !l2_pressed) {
-    //       // R2: rotate left
-    //       twist_msg->angular.z = -(msg->axes[4] - 1) / 2.0;
-    //     } else if (l2_pressed && !r2_pressed) {
-    //       // L2: rotate right
-    //       twist_msg->angular.z = (msg->axes[5] - 1) / 2.0;
-    //     }
-
-    // switch (mode_){
-    //   case Mode::JOY:
-    //     if(!l2_pressed && !r2_pressed) {
-    //       twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
-    //       twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
-    //       twist_msg->angular.z = 0.0;
-    //     } else {
-    //       set_angular_velocity(msg, twist_msg);
-    //     }
-    //     break;
-    //   case Mode::DPAD:
-    //     if(!l2_pressed && !r2_pressed) {
-    //       twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
-    //       twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
-    //       twist_msg->angular.z = 0.0;  // No angular movement in DPAD mode
-    //     } else {
-    //       set_angular_velocity(msg, twist_msg);
-    //     }
-    //     break;
-    //   case Mode::STOP:
-    //     twist_msg->linear.x = 0.0;
-    //     twist_msg->linear.y = 0.0;
-    //     twist_msg->angular.z = 0.0;  // No movement in STOP mode
-    //     break;
-    //   default:
-    // }
-
-    // 角度差分を正しく計算（-πからπの範囲に正規化） - DPADモード専用
-    // double error = yaw_ - init_yaw_;
-    // // 角度の連続性を考慮した正規化
-    // while (error > M_PI) error -= 2.0 * M_PI;
-    // while (error < -M_PI) error += 2.0 * M_PI;
-
-    switch (mode_) {
-      case Mode::STOP:
-        twist_msg->linear.x = 0.0;
-        twist_msg->linear.y = 0.0;
-        twist_msg->angular.z = 0.0;
-        break;
-      case Mode::JOY:
-        {
-          // 移動は常に有効
-          twist_msg->linear.x = applyDeadzone(msg->axes[linear_x_axis_]) * linear_x_scale_;
-          twist_msg->linear.y = applyDeadzone(msg->axes[linear_y_axis_]) * linear_y_scale_;
-          
-                    // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中も十分な値に
-          bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-          double angular_deadzone = is_moving ? 0.3 : 0.15;  // 現実的な値に戻す
-          
-          twist_msg->angular.z = applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
-          // twist_msg->angular.z = get_angular_velocity(msg);
-        }
-        break;
-      case Mode::DPAD:
-        {
-          // DPADモード専用：角度差分を正しく計算（-πからπの範囲に正規化）
-          double error = yaw_ - init_yaw_;
-          // 角度の連続性を考慮した正規化
-          while (error > M_PI) error -= 2.0 * M_PI;
-          while (error < -M_PI) error += 2.0 * M_PI;
-          
-          if (!l2_pressed && !r2_pressed) {
-            twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
-            twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
-            // IMUのデータをもとにP制御で補正をかける
-            // デッドバンドを設けてエラーが小さい時は補正しない
-            if (std::abs(error) < deadband_) {
-              twist_msg->angular.z = 0.0;
-            } else {
-              twist_msg->angular.z = std::clamp(error * Kp_, -max_angular_correction_, max_angular_correction_);
-            }
-          } else {
-            twist_msg->angular.z = get_angular_velocity(msg);
-          }
-        }
-        break;
-      case Mode::LINETRACE:
-        break;
-      default:
-        RCLCPP_WARN(this->get_logger(), "Unknown mode: %d", static_cast<int>(mode_));
-    }
-
-    // 反転させる
-    if (prev_reverse_button == 0 && msg->buttons[5] == 1) {
-      // twist_msg->linear.x = -twist_msg->linear.x;
-      // twist_msg->linear.y = -twist_msg->linear.y;
-      reverse_flag = !reverse_flag;
-    }
-
-    prev_reverse_button = msg->buttons[5];
-
-    if (reverse_flag) {
-      twist_msg->linear.x = -twist_msg->linear.x;
-      twist_msg->linear.y = -twist_msg->linear.y;
-    }
-
-    // cmd_velのpublish
-    if (mode_ != Mode::LINETRACE) {
-      // デバッグ用：回転があった時のみログ出力
-      if (std::abs(twist_msg->angular.z) > 0.001) {  
-        double raw_angular = msg->axes[angular_axis_];
-        bool is_moving_debug = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-        double angular_deadzone_debug = is_moving_debug ? 0.3 : 0.15;
-        RCLCPP_WARN(this->get_logger(), "UNWANTED ROTATION: Mode=%s, angular.z=%.3f (raw[%d]=%.3f, deadzone=%.2f, moving=%s)", 
-                    mode_to_string(mode_).c_str(), twist_msg->angular.z, angular_axis_, 
-                    raw_angular, angular_deadzone_debug, is_moving_debug ? "YES" : "NO");
-      }
-      cmd_vel_publisher_->publish(std::move(twist_msg));
-    }
-
-    // Map joystick axes to velocity commands
-    // auto twist_msg = set_velocity(msg);
-    // auto twist_msg = set_angular_velocity(msg);
-
-    // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
-    // angular.z=%.2f",
-    //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
-
-    // Publish the velocity command
-
-    // auto dpad_msg = std::make_unique<custom_interfaces::msg::CmdDpad>();
-    // dpad_msg->up = msg->buttons[11];
-    // dpad_msg->down = msg->buttons[12];
-    // dpad_msg->left = msg->buttons[13];
-    // dpad_msg->right = msg->buttons[14];
-
-    auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
-    // UpperMotor.msgのフィールド設定
-
-    // システム準備状態（L2 + R2ボタン同時押し）
-    // 浮動小数点比較なので閾値を使用
-    upper_msg->is_system_ready = (msg->axes[4] < -0.9 && msg->axes[5] < -0.9);
-
-    // square button (射出)
-    if (msg->buttons[2] == 1) {
-      upper_msg->is_throwing_on = true;
-    } else {
-      upper_msg->is_throwing_on = false;
-    }
-
-    // circle button (押出)
-    if (msg->buttons[1] == 1) {
-      upper_msg->is_ejection_on = true;
-    } else {
-      upper_msg->is_ejection_on = false;
-    }
-
-    // 昇降制御（方向パッド）
-    if (msg->buttons[3] == 1) {         // triangle
-      upper_msg->elevation_mode = 1;    // 上昇
-    } else if (msg->buttons[0] == 1) {  // x
-      upper_msg->elevation_mode = 0;    // 下降
-    } else {
-      upper_msg->elevation_mode = 2;  // 停止
-    }
-
-    //  一旦廃止
-    // // Check for state changes
-    // if (msg->buttons[1] == 1 && prev_throwing_on == false) {
-    //   prev_throwing_on = true;
-    //   RCLCPP_INFO(this->get_logger(), "Throwing on");
-    // } else if (msg->buttons[3] == 1 && prev_throwing_on == true) {
-    //   prev_throwing_on = false;
-    //   RCLCPP_INFO(this->get_logger(), "Throwing off");
-    // } else if (msg->buttons[0] == 1 && prev_ejection_on == false) {
-    //   prev_ejection_on = true;
-    //   RCLCPP_INFO(this->get_logger(), "Ejection on");
-    // } else if (msg->buttons[2] == 1 && prev_ejection_on == true) {
-    //   prev_ejection_on = false;
-    //   RCLCPP_INFO(this->get_logger(), "Ejection off");
-    // } else if (msg->buttons[10] == 1 && prev_elevation_on == false) {
-    //   prev_elevation_on = true;
-    //   RCLCPP_INFO(this->get_logger(), "Elevation on");
-    // } else if (msg->buttons[9] == 1 && prev_elevation_on == true) {
-    //   prev_elevation_on = false;
-    //   RCLCPP_INFO(this->get_logger(), "Elevation off");
-    // }
-
-    // // Always set current state to the message
-    // upper_msg->is_throwing_on = prev_throwing_on;
-    // upper_msg->is_ejection_on = prev_ejection_on;
-    // upper_msg->is_elevation_on = prev_elevation_on;
-
-    // Always publish current state
-    upper_publisher_->publish(std::move(upper_msg));
-    // cmd_dpad_publisher_->publish(std::move(dpad_msg));
-
+  // ライントレースモードかどうかを変える
+  if (current_linetrace_buttons && !prev_linetrace_buttons_) {
+    // Toggle LINETRACE mode only on button press (not hold)
     if (mode_ == Mode::LINETRACE) {
-      linetrace_msg->data = true;
+      mode_ = Mode::JOY;
+      RCLCPP_INFO(this->get_logger(), "Mode: JOY (from LINETRACE)");
     } else {
-      linetrace_msg->data = false;
+      mode_ = Mode::LINETRACE;
+      RCLCPP_INFO(this->get_logger(), "Mode: LINETRACE");
     }
+  }
 
-    linetrace_publisher_->publish(std::move(linetrace_msg));
+  // もしライントレースモードでなければ、他のモードに切り替えることができる
+  if (mode_ != Mode::LINETRACE) {
+    if (msg->buttons[6] == 1 && mode_ != Mode::JOY) {
+      mode_ = Mode::JOY;
+      RCLCPP_INFO(this->get_logger(), "Mode: JOY");
+    } else if (msg->buttons[15] == 1 && mode_ != Mode::STOP) {
+      mode_ = Mode::STOP;
+      RCLCPP_INFO(this->get_logger(), "Mode: STOP");
+    } else if (msg->buttons[4] == 1 && mode_ != Mode::DPAD) {
+      mode_ = Mode::DPAD;
+      init_yaw_ = yaw_;
+      RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
+    }
+  }
 
-    mode_msg->data = mode_to_string(mode_);
-    mode_publisher_->publish(std::move(mode_msg));
+  // Update previous button state
+  prev_linetrace_buttons_ = current_linetrace_buttons;
+
+  bool l2_pressed = msg->axes[4] < TRIGGER_THRESHOLD;  // L2 trigger
+  bool r2_pressed = msg->axes[5] < TRIGGER_THRESHOLD;  // R2 trigger
+
+  // Initialize the twist message
+  twist_msg->linear.x = 0.0;
+  twist_msg->linear.y = 0.0;
+  twist_msg->angular.z = 0.0;
+
+  // if (r2_pressed && !l2_pressed) {
+  //       // R2: rotate left
+  //       twist_msg->angular.z = -(msg->axes[4] - 1) / 2.0;
+  //     } else if (l2_pressed && !r2_pressed) {
+  //       // L2: rotate right
+  //       twist_msg->angular.z = (msg->axes[5] - 1) / 2.0;
+  //     }
+
+  // switch (mode_){
+  //   case Mode::JOY:
+  //     if(!l2_pressed && !r2_pressed) {
+  //       twist_msg->linear.x = msg->axes[linear_x_axis_] * linear_x_scale_;
+  //       twist_msg->linear.y = msg->axes[linear_y_axis_] * linear_y_scale_;
+  //       twist_msg->angular.z = 0.0;
+  //     } else {
+  //       set_angular_velocity(msg, twist_msg);
+  //     }
+  //     break;
+  //   case Mode::DPAD:
+  //     if(!l2_pressed && !r2_pressed) {
+  //       twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
+  //       twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
+  //       twist_msg->angular.z = 0.0;  // No angular movement in DPAD mode
+  //     } else {
+  //       set_angular_velocity(msg, twist_msg);
+  //     }
+  //     break;
+  //   case Mode::STOP:
+  //     twist_msg->linear.x = 0.0;
+  //     twist_msg->linear.y = 0.0;
+  //     twist_msg->angular.z = 0.0;  // No movement in STOP mode
+  //     break;
+  //   default:
+  // }
+
+  // 角度差分を正しく計算（-πからπの範囲に正規化） - DPADモード専用
+  // double error = yaw_ - init_yaw_;
+  // // 角度の連続性を考慮した正規化
+  // while (error > M_PI) error -= 2.0 * M_PI;
+  // while (error < -M_PI) error += 2.0 * M_PI;
+
+  switch (mode_) {
+    case Mode::STOP:
+      twist_msg->linear.x = 0.0;
+      twist_msg->linear.y = 0.0;
+      twist_msg->angular.z = 0.0;
+      break;
+    case Mode::JOY: {
+      // 移動は常に有効
+      twist_msg->linear.x = applyDeadzone(msg->axes[linear_x_axis_]) * linear_x_scale_;
+      twist_msg->linear.y = applyDeadzone(msg->axes[linear_y_axis_]) * linear_y_scale_;
+
+      // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中も十分な値に
+      bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
+      double angular_deadzone = is_moving ? 0.3 : 0.15;  // 現実的な値に戻す
+
+      twist_msg->angular.z =
+          applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
+      // twist_msg->angular.z = get_angular_velocity(msg);
+    } break;
+    case Mode::DPAD: {
+      // DPADモード専用：角度差分を正しく計算（-πからπの範囲に正規化）
+      double error = yaw_ - init_yaw_;
+      // 角度の連続性を考慮した正規化
+      while (error > M_PI) error -= 2.0 * M_PI;
+      while (error < -M_PI) error += 2.0 * M_PI;
+
+      if (!l2_pressed && !r2_pressed) {
+        twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
+        twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
+        // IMUのデータをもとにP制御で補正をかける
+        // デッドバンドを設けてエラーが小さい時は補正しない
+        if (std::abs(error) < deadband_) {
+          twist_msg->angular.z = 0.0;
+        } else {
+          twist_msg->angular.z =
+              std::clamp(error * Kp_, -max_angular_correction_, max_angular_correction_);
+        }
+      } else {
+        twist_msg->angular.z = get_angular_velocity(msg);
+      }
+    } break;
+    case Mode::LINETRACE:
+      break;
+    default:
+      RCLCPP_WARN(this->get_logger(), "Unknown mode: %d", static_cast<int>(mode_));
+  }
+
+  // 反転させる
+  if (prev_reverse_button == 0 && msg->buttons[5] == 1) {
+    // twist_msg->linear.x = -twist_msg->linear.x;
+    // twist_msg->linear.y = -twist_msg->linear.y;
+    reverse_flag = !reverse_flag;
+  }
+
+  prev_reverse_button = msg->buttons[5];
+
+  if (reverse_flag) {
+    twist_msg->linear.x = -twist_msg->linear.x;
+    twist_msg->linear.y = -twist_msg->linear.y;
+  }
+
+  // cmd_velのpublish
+  if (mode_ != Mode::LINETRACE) {
+    // デバッグ用：回転があった時のみログ出力
+    if (std::abs(twist_msg->angular.z) > 0.001) {
+      double raw_angular = msg->axes[angular_axis_];
+      bool is_moving_debug =
+          (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
+      double angular_deadzone_debug = is_moving_debug ? 0.3 : 0.15;
+      RCLCPP_WARN(
+          this->get_logger(),
+          "UNWANTED ROTATION: Mode=%s, angular.z=%.3f (raw[%d]=%.3f, deadzone=%.2f, moving=%s)",
+          mode_to_string(mode_).c_str(), twist_msg->angular.z, angular_axis_, raw_angular,
+          angular_deadzone_debug, is_moving_debug ? "YES" : "NO");
+    }
+    cmd_vel_publisher_->publish(std::move(twist_msg));
+  }
+
+  // Map joystick axes to velocity commands
+  // auto twist_msg = set_velocity(msg);
+  // auto twist_msg = set_angular_velocity(msg);
+
+  // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
+  // angular.z=%.2f",
+  //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
+
+  // Publish the velocity command
+
+  // auto dpad_msg = std::make_unique<custom_interfaces::msg::CmdDpad>();
+  // dpad_msg->up = msg->buttons[11];
+  // dpad_msg->down = msg->buttons[12];
+  // dpad_msg->left = msg->buttons[13];
+  // dpad_msg->right = msg->buttons[14];
+
+  auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
+  // UpperMotor.msgのフィールド設定
+
+  // システム準備状態（L2 + R2ボタン同時押し）
+  // 浮動小数点比較なので閾値を使用
+  upper_msg->is_system_ready = (msg->axes[4] < -0.9 && msg->axes[5] < -0.9);
+
+  // square button (射出)
+  if (msg->buttons[2] == 1) {
+    upper_msg->is_throwing_on = true;
+  } else {
+    upper_msg->is_throwing_on = false;
+  }
+
+  // circle button (押出)
+  if (msg->buttons[1] == 1) {
+    upper_msg->is_ejection_on = true;
+  } else {
+    upper_msg->is_ejection_on = false;
+  }
+
+  // 昇降制御（方向パッド）
+  if (msg->buttons[3] == 1) {         // triangle
+    upper_msg->elevation_mode = 1;    // 上昇
+  } else if (msg->buttons[0] == 1) {  // x
+    upper_msg->elevation_mode = 0;    // 下降
+  } else {
+    upper_msg->elevation_mode = 2;  // 停止
+  }
+
+  //  一旦廃止
+  // // Check for state changes
+  // if (msg->buttons[1] == 1 && prev_throwing_on == false) {
+  //   prev_throwing_on = true;
+  //   RCLCPP_INFO(this->get_logger(), "Throwing on");
+  // } else if (msg->buttons[3] == 1 && prev_throwing_on == true) {
+  //   prev_throwing_on = false;
+  //   RCLCPP_INFO(this->get_logger(), "Throwing off");
+  // } else if (msg->buttons[0] == 1 && prev_ejection_on == false) {
+  //   prev_ejection_on = true;
+  //   RCLCPP_INFO(this->get_logger(), "Ejection on");
+  // } else if (msg->buttons[2] == 1 && prev_ejection_on == true) {
+  //   prev_ejection_on = false;
+  //   RCLCPP_INFO(this->get_logger(), "Ejection off");
+  // } else if (msg->buttons[10] == 1 && prev_elevation_on == false) {
+  //   prev_elevation_on = true;
+  //   RCLCPP_INFO(this->get_logger(), "Elevation on");
+  // } else if (msg->buttons[9] == 1 && prev_elevation_on == true) {
+  //   prev_elevation_on = false;
+  //   RCLCPP_INFO(this->get_logger(), "Elevation off");
+  // }
+
+  // // Always set current state to the message
+  // upper_msg->is_throwing_on = prev_throwing_on;
+  // upper_msg->is_ejection_on = prev_ejection_on;
+  // upper_msg->is_elevation_on = prev_elevation_on;
+
+  // Always publish current state
+  upper_publisher_->publish(std::move(upper_msg));
+  // cmd_dpad_publisher_->publish(std::move(dpad_msg));
+
+  if (mode_ == Mode::LINETRACE) {
+    linetrace_msg->data = true;
+  } else {
+    linetrace_msg->data = false;
+  }
+
+  linetrace_publisher_->publish(std::move(linetrace_msg));
+
+  mode_msg->data = mode_to_string(mode_);
+  mode_publisher_->publish(std::move(mode_msg));
 }
 
 void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg) {
-    // BNO055からは度（degrees）で来るのでradianに変換
-    roll_ = msg->x * M_PI / 180.0;
-    pitch_ = msg->y * M_PI / 180.0;
-    yaw_ = msg->z * M_PI / 180.0;  // current yaw value in radians
-
-} 
+  // BNO055からは度（degrees）で来るのでradianに変換
+  roll_ = msg->x * M_PI / 180.0;
+  pitch_ = msg->y * M_PI / 180.0;
+  yaw_ = msg->z * M_PI / 180.0;  // current yaw value in radians
+}
 
 double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
-    // L2/R2を押した時の手動回転時は基準値を更新
-    // （ただし、これは意図的な回転なので基準をリセット）
-    static bool was_manual_rotation = false;
-    bool is_manual_rotation = (msg->axes[4] < TRIGGER_THRESHOLD) || (msg->axes[5] < TRIGGER_THRESHOLD);
-    
-    if (!was_manual_rotation && is_manual_rotation) {
-      // 手動回転開始時に基準値を更新
-      init_yaw_ = yaw_;
-    }
-    was_manual_rotation = is_manual_rotation;
+  // L2/R2を押した時の手動回転時は基準値を更新
+  // （ただし、これは意図的な回転なので基準をリセット）
+  static bool was_manual_rotation = false;
+  bool is_manual_rotation =
+      (msg->axes[4] < TRIGGER_THRESHOLD) || (msg->axes[5] < TRIGGER_THRESHOLD);
 
-    if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
-      // R2: rotate right
-      return -(msg->axes[4] - 1);
-    } else if (msg->axes[5] < TRIGGER_THRESHOLD && msg->axes[4] >= TRIGGER_THRESHOLD) {
-      // L2: rotate left
-      return (msg->axes[5] - 1);
-    } else {
-      return 0.0;
-    }
+  if (!was_manual_rotation && is_manual_rotation) {
+    // 手動回転開始時に基準値を更新
+    init_yaw_ = yaw_;
+  }
+  was_manual_rotation = is_manual_rotation;
+
+  if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
+    // R2: rotate right
+    return -(msg->axes[4] - 1);
+  } else if (msg->axes[5] < TRIGGER_THRESHOLD && msg->axes[4] >= TRIGGER_THRESHOLD) {
+    // L2: rotate left
+    return (msg->axes[5] - 1);
+  } else {
+    return 0.0;
+  }
 }
 
 double JoyDriverNode::applyDeadzone(double val, double threshold) {
   return (std::abs(val) < threshold) ? 0.0 : val;
 }
 
-std::string JoyDriverNode::mode_to_string(Mode mode){
-    switch (mode) {
-      case Mode::STOP:
-        return "STOP";
-      case Mode::JOY:
-        return "JOY";
-      case Mode::DPAD:
-        return "DPAD";
-      case Mode::LINETRACE:
-        return "LINETRACE";
-      default:
-        return "UNKNOWN";
-    }
+std::string JoyDriverNode::mode_to_string(Mode mode) {
+  switch (mode) {
+    case Mode::STOP:
+      return "STOP";
+    case Mode::JOY:
+      return "JOY";
+    case Mode::DPAD:
+      return "DPAD";
+    case Mode::LINETRACE:
+      return "LINETRACE";
+    default:
+      return "UNKNOWN";
+  }
 }
-
