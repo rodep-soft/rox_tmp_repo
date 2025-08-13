@@ -297,15 +297,6 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
   if (mode_ != Mode::LINETRACE) {
     // デバッグ用：回転があった時のみログ出力
     if (std::abs(twist_msg->angular.z) > 0.001) {
-      double raw_angular = msg->axes[angular_axis_];
-      bool is_moving_debug =
-          (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-      double angular_deadzone_debug = is_moving_debug ? 0.3 : 0.15;
-      RCLCPP_WARN(
-          this->get_logger(),
-          "UNWANTED ROTATION: Mode=%s, angular.z=%.3f (raw[%d]=%.3f, deadzone=%.2f, moving=%s)",
-          mode_to_string(mode_).c_str(), twist_msg->angular.z, angular_axis_, raw_angular,
-          angular_deadzone_debug, is_moving_debug ? "YES" : "NO");
     }
     cmd_vel_publisher_->publish(std::move(twist_msg));
   }
