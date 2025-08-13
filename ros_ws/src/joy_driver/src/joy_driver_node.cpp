@@ -212,7 +212,9 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       
       // 手動回転中フラグを外部で管理
       static bool was_manual_rotating = false;
+      static bool waiting_for_target_update = false;
       static auto manual_rotation_end_time = std::chrono::steady_clock::now();
+      static double target_update_yaw = 0.0;
       
       // **手動回転中は一切の補正を停止**
       if (std::abs(manual_angular) > 0.01) {
@@ -221,6 +223,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         prev_yaw_error_ = 0.0;
         twist_msg->angular.z = -manual_angular;  // 手動回転の符号を反転
         was_manual_rotating = true;  // 手動回転中フラグを設定
+        waiting_for_target_update = false;  // 更新待機状態をリセット
         
         // 手動回転中のデバッグログ
         RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
@@ -229,30 +232,43 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         // 手動回転終了直後の処理
         manual_rotation_end_time = std::chrono::steady_clock::now();
         was_manual_rotating = false;
+        waiting_for_target_update = true;  // 目標角度更新待機状態に設定
+        target_update_yaw = yaw_;  // 現在のIMU値を記録
         
-        // 目標角度を即座に更新（IMUの遅延を考慮せず）
-        double old_target = init_yaw_;
-        init_yaw_ = yaw_;  // 現在の向きを新しい基準に設定
+        // PID状態をリセット
         integral_error_ = 0.0;
         prev_yaw_error_ = 0.0;
         
-        RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                             "TARGET UPDATE (manual end): old=%.1f° -> new=%.1f° (current=%.1f°)", 
-                             old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI, yaw_ * 180.0 / M_PI);
-        
         // 手動回転終了直後はPID補正を無効化
         twist_msg->angular.z = 0.0;
-      } else if (std::abs(manual_angular) < 0.01 && is_moving) {
-        // 手動回転終了から一定時間後のみPID補正を開始
+        
+        RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "MANUAL ROTATION END: waiting for IMU stabilization (temp_yaw=%.1f°)", 
+                             target_update_yaw * 180.0 / M_PI);
+      } else if (waiting_for_target_update) {
+        // 手動回転終了後、IMU安定化待機中
         auto current_time = std::chrono::steady_clock::now();
         auto time_since_manual_end = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - manual_rotation_end_time);
         
-        if (time_since_manual_end.count() < 200) {
-          // 手動回転終了から200ms以内はPID補正を無効化
+        if (time_since_manual_end.count() < 300) {
+          // 300ms間は目標角度更新を待機
           twist_msg->angular.z = 0.0;
           integral_error_ = 0.0;
           prev_yaw_error_ = 0.0;
         } else {
+          // 300ms経過後、目標角度を更新
+          double old_target = init_yaw_;
+          init_yaw_ = yaw_;  // 安定したIMU値で目標角度を更新
+          waiting_for_target_update = false;
+          
+          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "TARGET UPDATE (stabilized): old=%.1f° -> new=%.1f° (current=%.1f°)", 
+                               old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI, yaw_ * 180.0 / M_PI);
+          
+          // PID補正を開始
+          twist_msg->angular.z = 0.0;  // 初回は補正なし
+        }
+      } else if (std::abs(manual_angular) < 0.01 && is_moving && !waiting_for_target_update) {
         
         // 動作開始時にPID状態をリセット（切り返し対応）
         static bool was_moving = false;
@@ -312,7 +328,6 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
                                std::abs(yaw_drift_deg), 
                                (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
                                pid_correction, twist_msg->angular.z);
-        }
         }
       } else {
         // 移動停止時の処理（手動回転後の重複更新を防止）
