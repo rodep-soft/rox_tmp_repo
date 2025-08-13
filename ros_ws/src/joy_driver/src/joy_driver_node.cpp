@@ -42,11 +42,11 @@ void JoyDriverNode::declare_parameters() {
   this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
   this->declare_parameter<int>("angular_axis", 2);
 
-  this->declare_parameter<double>("Kp", 0.3);   // 比例ゲイン
-  this->declare_parameter<double>("Ki", 0.05); // 積分ゲイン（定常偏差除去）
-  this->declare_parameter<double>("Kd", 0.1);  // 微分ゲイン（振動抑制）
-  this->declare_parameter<double>("deadband", 0.05);  // 角度補正のデッドバンド（rad）
-  this->declare_parameter<double>("max_angular_correction", 0.5);  // PID制御の最大角速度出力
+  this->declare_parameter<double>("Kp", 0.15);  // 比例ゲイン（より控えめに）
+  this->declare_parameter<double>("Ki", 0.01);  // 積分ゲイン（より控えめに）
+  this->declare_parameter<double>("Kd", 0.02);  // 微分ゲイン（より控えめに）
+  this->declare_parameter<double>("deadband", 0.1);   // デッドバンドを大きく（rad）
+  this->declare_parameter<double>("max_angular_correction", 0.3);  // 最大補正を制限
 }
 
 void JoyDriverNode::get_parameters() {
@@ -221,6 +221,13 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         
         // PID補正を適用（角度+角速度フィードバック制御）
         twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor * 0.7);
+        
+        // デバッグ出力（補正時のみ）
+        if (std::abs(twist_msg->angular.z) > 0.01) {
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "JOY correction: error=%.3f, ang_vel=%.3f, correction=%.3f", 
+                               error, filtered_angular_vel_z_, twist_msg->angular.z);
+        }
       } else {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
         integral_error_ = 0.0;
@@ -244,6 +251,13 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         
         // DPADモードでは最大強度で角度+角速度補正を適用
         twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, 1.0);
+        
+        // デバッグ出力（補正時のみ）
+        if (std::abs(twist_msg->angular.z) > 0.01) {
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "DPAD correction: error=%.3f, ang_vel=%.3f, correction=%.3f", 
+                               error, filtered_angular_vel_z_, twist_msg->angular.z);
+        }
       } else {
         // 手動回転時はPID状態をリセット
         integral_error_ = 0.0;
@@ -383,6 +397,11 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
   pitch_ = msg->y * M_PI / 180.0;
   double raw_yaw = msg->z * M_PI / 180.0;  // current yaw value in radians
   
+  // IMUデータの確認用ログ（1秒間隔）
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                       "IMU RPY: roll=%.2f°, pitch=%.2f°, yaw=%.2f° (raw=%.2f°)", 
+                       msg->x, msg->y, msg->z, msg->z);
+  
   // ローパスフィルタで角度データを平滑化
   if (filtered_yaw_ == 0.0) {
     // 初回は生データを使用
@@ -401,6 +420,11 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   angular_vel_x_ = msg->angular_velocity.x;
   angular_vel_y_ = msg->angular_velocity.y;
   angular_vel_z_ = msg->angular_velocity.z;
+  
+  // IMU角速度データの確認用ログ（1秒間隔）
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                       "IMU Angular Velocity: x=%.3f, y=%.3f, z=%.3f rad/s", 
+                       angular_vel_x_, angular_vel_y_, angular_vel_z_);
   
   // Z軸角速度にローパスフィルタを適用
   filtered_angular_vel_z_ = YAW_FILTER_ALPHA * angular_vel_z_ + 
@@ -490,7 +514,7 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   // 角速度フィードバック制御を追加（現在の回転を抑制）
   // パラメータで渡された角速度と、フィルタ済み角速度の両方を考慮
   double current_angular_vel = (std::abs(angular_vel_z) > 0.001) ? angular_vel_z : filtered_angular_vel_z_;
-  double velocity_damping = -0.3 * current_angular_vel * velocity_factor;
+  double velocity_damping = -0.1 * current_angular_vel * velocity_factor;  // ダンピングを弱く
   
   // 総合補正値
   double total_correction = angle_correction + velocity_damping;
