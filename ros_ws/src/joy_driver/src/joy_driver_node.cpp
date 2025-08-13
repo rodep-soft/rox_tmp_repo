@@ -210,8 +210,21 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
                              msg->axes[angular_axis_], manual_angular);
       }
       
+      // 手動回転中フラグを外部で管理
+      static bool was_manual_rotating = false;
+      
       // 手動回転入力がない場合、移動中にIMU補正を適用
       if (std::abs(manual_angular) < 0.01 && is_moving) {
+        // 手動回転終了時の目標姿勢更新処理
+        if (was_manual_rotating) {
+          init_yaw_ = yaw_;  // 現在の向きを新しい基準に設定
+          integral_error_ = 0.0;
+          prev_yaw_error_ = 0.0;
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "Manual rotation ended - New target: %.1f°", init_yaw_ * 180.0 / M_PI);
+          was_manual_rotating = false;
+        }
+        
         // 動作開始時にPID状態をリセット（切り返し対応）
         static bool was_moving = false;
         if (!was_moving) {
@@ -265,7 +278,18 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         integral_error_ = 0.0;
         prev_yaw_error_ = 0.0;
         twist_msg->angular.z = manual_angular;
+        was_manual_rotating = true;  // 手動回転中フラグを設定
       } else {
+        // 手動回転終了時の処理（移動停止時）
+        if (was_manual_rotating) {
+          init_yaw_ = yaw_;  // 現在の向きを新しい基準に設定
+          integral_error_ = 0.0;
+          prev_yaw_error_ = 0.0;
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "Manual rotation ended (stopped) - New target: %.1f°", init_yaw_ * 180.0 / M_PI);
+          was_manual_rotating = false;
+        }
+        
         // 移動停止時のフラグリセット＋PID状態クリア
         static bool was_moving = true;
         if (was_moving) {
