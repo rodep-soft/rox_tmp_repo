@@ -227,11 +227,13 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       } else if (std::abs(manual_angular) < 0.01 && is_moving) {
         // 手動回転終了時の目標姿勢更新処理
         if (was_manual_rotating) {
+          double old_target = init_yaw_;
           init_yaw_ = yaw_;  // 現在の向きを新しい基準に設定
           integral_error_ = 0.0;
           prev_yaw_error_ = 0.0;
-          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "Manual rotation ended - New target: %.1f°", init_yaw_ * 180.0 / M_PI);
+          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "TARGET UPDATE: old=%.1f° -> new=%.1f° (current=%.1f°)", 
+                               old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI, yaw_ * 180.0 / M_PI);
           was_manual_rotating = false;
         }
         
@@ -253,6 +255,16 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         
         // 角度誤差を計算（正規化済み）
         double error = normalizeAngle(yaw_ - init_yaw_);
+        
+        // **デバッグ**: 角度計算の詳細
+        static int error_debug_counter = 0;
+        error_debug_counter++;
+        if (error_debug_counter % 50 == 0) {
+          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "ANGLE_CALC: current=%.2f° target=%.2f° raw_error=%.2f° norm_error=%.2f°", 
+                               yaw_ * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI,
+                               (yaw_ - init_yaw_) * 180.0 / M_PI, error * 180.0 / M_PI);
+        }
         
         // 全方向移動時に補正を適用
         double velocity_magnitude = std::sqrt(twist_msg->linear.x * twist_msg->linear.x + 
@@ -286,11 +298,13 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       } else {
         // 手動回転終了時の処理（移動停止時）
         if (was_manual_rotating) {
+          double old_target = init_yaw_;
           init_yaw_ = yaw_;  // 現在の向きを新しい基準に設定
           integral_error_ = 0.0;
           prev_yaw_error_ = 0.0;
-          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "Manual rotation ended (stopped) - New target: %.1f°", init_yaw_ * 180.0 / M_PI);
+          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "TARGET UPDATE (stopped): old=%.1f° -> new=%.1f° (current=%.1f°)", 
+                               old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI, yaw_ * 180.0 / M_PI);
           was_manual_rotating = false;
         }
         
