@@ -203,12 +203,11 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       // 手動回転入力を取得
       double manual_angular = applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
       
-      // ジョイスティックノイズのデバッグ
-      if (std::abs(msg->axes[angular_axis_] * angular_scale_) > 0.5) {
-        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                             "JOYSTICK NOISE: raw[2]=%.3f, scaled=%.3f, deadzone=%.3f, final=%.3f",
-                             msg->axes[angular_axis_], msg->axes[angular_axis_] * angular_scale_, 
-                             angular_deadzone, manual_angular);
+      // ジョイスティックノイズのデバッグ（頻度を大幅削減）
+      if (std::abs(msg->axes[angular_axis_] * angular_scale_) > 1.0) {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                             "JOYSTICK NOISE: raw=%.3f, final=%.3f",
+                             msg->axes[angular_axis_], manual_angular);
       }
       
       // 手動回転入力がない場合、移動中にIMU補正を適用
@@ -227,14 +226,14 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
                                             twist_msg->linear.y * twist_msg->linear.y);
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
-        // PID補正を適用（角度+角速度フィードバック制御）
-        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor * 0.7);
+        // PID補正を適用（強化版：角度+角速度フィードバック制御）
+        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
         
-        // デバッグ出力（補正時のみ）
-        if (std::abs(twist_msg->angular.z) > 0.01) {
-          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "JOY correction: error=%.3f, ang_vel=%.3f, correction=%.3f", 
-                               error, filtered_angular_vel_z_, twist_msg->angular.z);
+        // 重要な補正のみログ出力（頻度削減）
+        if (std::abs(twist_msg->angular.z) > 0.1) {
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
+                               "IMU correction: error=%.1f°, correction=%.3f", 
+                               error * 180.0 / M_PI, twist_msg->angular.z);
         }
       } else {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
@@ -396,10 +395,9 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
   pitch_ = msg->y * M_PI / 180.0;
   double raw_yaw = msg->z * M_PI / 180.0;  // current yaw value in radians
   
-  // IMUデータの確認用ログ（1秒間隔）
-  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                       "IMU RPY: roll=%.2f°, pitch=%.2f°, yaw=%.2f° (raw=%.2f°)", 
-                       msg->x, msg->y, msg->z, msg->z);
+  // IMUデータの確認用ログ（5秒間隔に削減）
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                       "IMU: yaw=%.1f°", msg->z);
   
   // ローパスフィルタで角度データを平滑化
   if (filtered_yaw_ == 0.0) {
@@ -500,8 +498,8 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   double derivative = (dt > 0.001) ? (angle_error - prev_yaw_error_) / dt : 0.0;
   prev_yaw_error_ = angle_error;
 
-  // 速度依存の適応的ゲイン調整
-  double adaptive_kp = Kp_ * velocity_factor;
+  // 速度依存の適応的ゲイン調整（ファクターを強化）
+  double adaptive_kp = Kp_ * velocity_factor * 1.5;  // 比例ゲインを強化
   double adaptive_ki = Ki_ * velocity_factor;
   double adaptive_kd = Kd_ * velocity_factor;
 
@@ -510,12 +508,11 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
                            adaptive_ki * integral_error_ + 
                            adaptive_kd * derivative;
 
-  // 角速度フィードバック制御を追加（現在の回転を抑制）
-  // パラメータで渡された角速度と、フィルタ済み角速度の両方を考慮
+  // 角速度フィードバック制御を強化（現在の回転を強く抑制）
   double current_angular_vel = (std::abs(angular_vel_z) > 0.001) ? angular_vel_z : filtered_angular_vel_z_;
-  double velocity_damping = -0.1 * current_angular_vel * velocity_factor;  // ダンピングを弱く
+  double velocity_damping = -0.3 * current_angular_vel * velocity_factor;  // ダンピングを強化
   
-  // 総合補正値
+  // 総合補正値（より積極的な補正）
   double total_correction = angle_correction + velocity_damping;
 
   // 出力制限
