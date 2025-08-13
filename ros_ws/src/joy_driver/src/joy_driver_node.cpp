@@ -575,7 +575,9 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   // }
 
   // 積分項の計算（ウィンドアップ防止付き）
-  integral_error_ += angle_error * dt;
+  // 大きなエラーに対して積分蓄積を加速
+  double integral_acceleration = (std::abs(angle_error) > 0.2) ? 2.0 : 1.0;  // 11度以上で加速
+  integral_error_ += angle_error * dt * integral_acceleration;
   integral_error_ = std::clamp(integral_error_, -MAX_INTEGRAL_ERROR, MAX_INTEGRAL_ERROR);
 
   // 微分項の計算（角度の変化率）
