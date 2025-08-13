@@ -16,7 +16,13 @@ find_package(std_srvs REQUIRED)
 find_package(std_msgs REQUIRED)
 
 # Add the executable
-add_executable(joy_driver_node src/joy_driver_node.cpp)
+add_executable(joy_driver_node src/main.cpp src/joy_driver_node.cpp)
+
+# Include directories
+target_include_directories(joy_driver_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
 
 # Set C++ standard
 target_compile_features(joy_driver_node PUBLIC cxx_std_17)
@@ -34,6 +40,11 @@ ament_target_dependencies(joy_driver_node
 # Install the executable
 install(TARGETS joy_driver_node
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install include headers
+install(DIRECTORY include/
+  DESTINATION include
 )
 
 # Configure linting and testing

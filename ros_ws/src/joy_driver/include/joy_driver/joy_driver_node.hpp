@@ -79,7 +79,7 @@ class JoyDriverNode : public rclcpp::Node {
         int angular_axis_;
 
         // PID 
-        double Kp:
+        double Kp_;
         double deadband_;
         double max_angular_correction_;
 

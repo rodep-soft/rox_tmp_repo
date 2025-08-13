@@ -1,4 +1,4 @@
-# include "joy_driver/joy_driver_node.hpp"
+#include "joy_driver/joy_driver_node.hpp"
 
 // Constructor
 JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
@@ -54,7 +54,7 @@ void JoyDriverNode::get_parameters() {
     linear_y_axis_ = this->get_parameter("linear_y_axis").as_int();
     angular_axis_ = this->get_parameter("angular_axis").as_int();
 
-    Kp = this->get_parameter("Kp").as_double();  // 比例ゲイン
+    Kp_ = this->get_parameter("Kp").as_double();  // 比例ゲイン
     deadband_ = this->get_parameter("deadband").as_double();  // デッドバンド
     max_angular_correction_ = this->get_parameter("max_angular_correction").as_double();  // 最大角速度補正
  
@@ -199,7 +199,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           if (std::abs(error) < deadband_) {
             twist_msg->angular.z = 0.0;
           } else {
-            twist_msg->angular.z = std::clamp(error * Kp, -max_angular_correction_, max_angular_correction_);
+            twist_msg->angular.z = std::clamp(error * Kp_, -max_angular_correction_, max_angular_correction_);
           }
         } else {
           twist_msg->angular.z = get_angular_velocity(msg);
@@ -350,7 +350,7 @@ double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPt
     }
 }
 
-static double JoyDriverNode::applyDeadzone(double val, double threshold) {
+double JoyDriverNode::applyDeadzone(double val, double threshold) {
   return (std::abs(val) < threshold) ? 0.0 : val;
 }
 
