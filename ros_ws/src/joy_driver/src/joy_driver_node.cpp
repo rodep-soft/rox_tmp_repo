@@ -403,6 +403,11 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
   pitch_ = msg->y * M_PI / 180.0;
   double raw_yaw = msg->z * M_PI / 180.0;  // current yaw value in radians
   
+  // IMU軸診断：すべての軸を表示して正しい軸を確認
+  RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
+                       "IMU AXES CHECK: X=%.1f°, Y=%.1f°, Z=%.1f° (current yaw=Z)", 
+                       msg->x, msg->y, msg->z);
+  
   // IMUデータの確認用ログ（5秒間隔に削減）
   RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
                        "IMU: yaw=%.1f° (change_rate=%.3f°/s)", msg->z, 
