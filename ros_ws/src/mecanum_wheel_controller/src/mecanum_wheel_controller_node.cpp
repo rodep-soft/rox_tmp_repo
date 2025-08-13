@@ -105,15 +105,10 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
   const double vy = gain * vy_.load();
   const double wz = gain * wz_.load();
 
-  // 重要: 実際に受信している回転指令を診断ログ
-  if (std::abs(wz) > 0.1) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                         "MOTOR CMD: wz=%.3f (this should correct drift!)", wz);
-  }
-
   const double lxy_sum = wheel_base_x_ + wheel_base_y_;
   const double rad_to_rpm = 60.0 / (2.0 * M_PI);
 
+  // 標準メカナムホイール運動学（物理的配置に合わせる）
   const double wheel_front_left_vel = (vx - vy - lxy_sum * wz) / wheel_radius_;
   const double wheel_front_right_vel = (vx + vy + lxy_sum * wz) / wheel_radius_;
   const double wheel_rear_left_vel = (vx + vy - lxy_sum * wz) / wheel_radius_;
@@ -124,6 +119,14 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
   int16_t rpm_front_right = static_cast<int16_t>(wheel_front_right_vel * rad_to_rpm * -1);
   int16_t rpm_rear_left = static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm);
   int16_t rpm_rear_right = static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm * -1);
+
+  // 重要: 実際に受信している回転指令を診断ログ
+  if (std::abs(wz) > 0.1) {
+    RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                         "MOTOR CMD: wz=%.3f -> FL=%d,FR=%d,RL=%d,RR=%d (%s rotation)", 
+                         wz, rpm_front_left, rpm_front_right, rpm_rear_left, rpm_rear_right,
+                         (wz > 0) ? "LEFT" : "RIGHT");
+  }
 
   // フィードバック待ちのシーケンシャル送信
   std::vector<std::pair<uint8_t, int16_t>> commands = {{motor_ids_[0], rpm_front_left},
