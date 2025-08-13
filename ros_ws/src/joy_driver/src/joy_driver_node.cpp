@@ -254,7 +254,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         last_correction_time_ = current_time;
         
         // 角度誤差を計算（正規化済み）
-        double error = normalizeAngle(yaw_ - init_yaw_);
+        // **修正**: PID制御では「目標角度 - 現在角度」が正しい符号
+        double error = normalizeAngle(init_yaw_ - yaw_);
         
         // **デバッグ**: 角度計算の詳細
         static int error_debug_counter = 0;
@@ -263,7 +264,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                                "ANGLE_CALC: current=%.2f° target=%.2f° raw_error=%.2f° norm_error=%.2f°", 
                                yaw_ * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI,
-                               (yaw_ - init_yaw_) * 180.0 / M_PI, error * 180.0 / M_PI);
+                               (init_yaw_ - yaw_) * 180.0 / M_PI, error * 180.0 / M_PI);
         }
         
         // 全方向移動時に補正を適用
