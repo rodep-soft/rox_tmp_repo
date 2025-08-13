@@ -229,11 +229,14 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         // PID補正を適用（強化版：角度+角速度フィードバック制御）
         twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
         
-        // 重要な補正のみログ出力（頻度削減）
-        if (std::abs(twist_msg->angular.z) > 0.1) {
-          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
-                               "IMU correction: error=%.1f°, correction=%.3f", 
-                               error * 180.0 / M_PI, twist_msg->angular.z);
+        // 旋回ずれの監視ログ（重要な情報のみ）
+        double yaw_drift_deg = error * 180.0 / M_PI;
+        if (std::abs(yaw_drift_deg) > 2.0) {  // 2度以上のずれを検出
+          RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                               "DRIFT DETECTED: %.1f° %s, correction=%.3f", 
+                               std::abs(yaw_drift_deg), 
+                               (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
+                               twist_msg->angular.z);
         }
       } else {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
