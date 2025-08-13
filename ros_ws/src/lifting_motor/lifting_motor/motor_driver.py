@@ -74,10 +74,11 @@ class MotorDriver:
     def ejection_stop(self):
         self.ejection_motor.stop()
 
-    def elevation_forward(self, speed=1.0):
+    # 0.95でギリギリ。1.0は怖い
+    def elevation_forward(self, speed=0.95):
         self.elevation_motor.forward(speed=speed)
 
-    def elevation_backward(self, speed=0.7):
+    def elevation_backward(self, speed=0.3):
         self.elevation_motor.backward(speed=speed)
 
     def elevation_stop(self):

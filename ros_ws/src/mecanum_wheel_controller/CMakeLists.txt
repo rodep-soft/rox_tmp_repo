@@ -16,7 +16,17 @@ find_package(std_srvs REQUIRED)
 find_package(custom_interfaces REQUIRED)
 
 # Add the executable
-add_executable(mecanum_wheel_controller_node src/mecanum_wheel_controller_node.cpp)
+add_executable(mecanum_wheel_controller_node 
+  src/main.cpp 
+  src/mecanum_wheel_controller_node.cpp 
+  src/motor_controller.cpp
+)
+
+# Include directories
+target_include_directories(mecanum_wheel_controller_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
 
 # Set C++ standard
 target_compile_features(mecanum_wheel_controller_node PUBLIC cxx_std_17)
