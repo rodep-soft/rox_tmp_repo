@@ -190,7 +190,7 @@ void MotorController::process_feedback_packet(const std::vector<uint8_t>& packet
     // uint8_t error_code = packet[8];
 
     // モーターIDと速度のみを出力
-    RCLCPP_INFO(logger_, "Motor ID: %d, Velocity: %d", motor_id, velocity);
+    RCLCPP_DEBUG(logger_, "Motor ID: %d, Velocity: %d", motor_id, velocity);
     
     // フィードバック受信を記録
     feedback_received_time_ = std::chrono::steady_clock::now();
