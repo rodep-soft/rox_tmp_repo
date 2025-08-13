@@ -38,9 +38,11 @@ void JoyDriverNode::declare_parameters() {
   this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
   this->declare_parameter<int>("angular_axis", 2);
 
-  this->declare_parameter<double>("Kp", 0.3);  // DPADモードのずれを補正する比例ゲイン
+  this->declare_parameter<double>("Kp", 0.3);   // 比例ゲイン
+  this->declare_parameter<double>("Ki", 0.05); // 積分ゲイン（定常偏差除去）
+  this->declare_parameter<double>("Kd", 0.1);  // 微分ゲイン（振動抑制）
   this->declare_parameter<double>("deadband", 0.05);  // 角度補正のデッドバンド（rad）
-  this->declare_parameter<double>("max_angular_correction", 0.5);  // P制御の最大角速度出力
+  this->declare_parameter<double>("max_angular_correction", 0.5);  // PID制御の最大角速度出力
 }
 
 void JoyDriverNode::get_parameters() {
@@ -51,10 +53,12 @@ void JoyDriverNode::get_parameters() {
   linear_y_axis_ = this->get_parameter("linear_y_axis").as_int();
   angular_axis_ = this->get_parameter("angular_axis").as_int();
 
-  Kp_ = this->get_parameter("Kp").as_double();              // 比例ゲイン
-  deadband_ = this->get_parameter("deadband").as_double();  // デッドバンド
+  Kp_ = this->get_parameter("Kp").as_double();                     // 比例ゲイン
+  Ki_ = this->get_parameter("Ki").as_double();                     // 積分ゲイン
+  Kd_ = this->get_parameter("Kd").as_double();                     // 微分ゲイン
+  deadband_ = this->get_parameter("deadband").as_double();         // デッドバンド
   max_angular_correction_ =
-      this->get_parameter("max_angular_correction").as_double();  // 最大角速度補正
+      this->get_parameter("max_angular_correction").as_double();   // 最大角速度補正
 
   // パラメータ値をログ出力して確認
   RCLCPP_INFO(
@@ -117,7 +121,11 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
     } else if (msg->buttons[4] == 1 && mode_ != Mode::DPAD) {
       mode_ = Mode::DPAD;
       init_yaw_ = yaw_;
-      RCLCPP_INFO(this->get_logger(), "Mode: DPAD");
+      // PID状態をリセット
+      integral_error_ = 0.0;
+      prev_yaw_error_ = 0.0;
+      last_correction_time_ = 0.0;
+      RCLCPP_INFO(this->get_logger(), "Mode: DPAD (PID Reset)");
     }
   }
 
@@ -188,29 +196,54 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
       double angular_deadzone = is_moving ? 0.3 : 0.15;  // 現実的な値に戻す
 
-      twist_msg->angular.z =
-          applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
-      // twist_msg->angular.z = get_angular_velocity(msg);
+      // 手動回転入力を取得
+      double manual_angular = applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
+      
+      // 手動回転入力がない場合、移動中にIMU補正を適用
+      if (std::abs(manual_angular) < 0.01 && is_moving) {
+        // 現在時刻の取得
+        auto now = this->get_clock()->now();
+        double current_time = now.seconds();
+        double dt = (last_correction_time_ > 0) ? (current_time - last_correction_time_) : 0.02;
+        last_correction_time_ = current_time;
+        
+        // 角度誤差を計算（正規化済み）
+        double error = normalizeAngle(yaw_ - init_yaw_);
+        
+        // 移動速度に基づく適応的ゲイン（速度が大きいほど補正を強く）
+        double velocity_magnitude = std::sqrt(twist_msg->linear.x * twist_msg->linear.x + 
+                                            twist_msg->linear.y * twist_msg->linear.y);
+        double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
+        
+        // PID補正を適用（JOYモードでは控えめに）
+        twist_msg->angular.z = calculatePIDCorrection(error, dt, velocity_factor * 0.7);
+      } else {
+        // 手動回転入力がある場合はそれを優先し、PID状態をリセット
+        integral_error_ = 0.0;
+        prev_yaw_error_ = 0.0;
+        twist_msg->angular.z = manual_angular;
+      }
     } break;
     case Mode::DPAD: {
-      // DPADモード専用：角度差分を正しく計算（-πからπの範囲に正規化）
-      double error = yaw_ - init_yaw_;
-      // 角度の連続性を考慮した正規化
-      while (error > M_PI) error -= 2.0 * M_PI;
-      while (error < -M_PI) error += 2.0 * M_PI;
+      // 角度誤差を計算（正規化済み）
+      double error = normalizeAngle(yaw_ - init_yaw_);
 
       if (!l2_pressed && !r2_pressed) {
         twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
         twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
-        // IMUのデータをもとにP制御で補正をかける
-        // デッドバンドを設けてエラーが小さい時は補正しない
-        if (std::abs(error) < deadband_) {
-          twist_msg->angular.z = 0.0;
-        } else {
-          twist_msg->angular.z =
-              std::clamp(error * Kp_, -max_angular_correction_, max_angular_correction_);
-        }
+        
+        // 現在時刻の取得
+        auto now = this->get_clock()->now();
+        double current_time = now.seconds();
+        double dt = (last_correction_time_ > 0) ? (current_time - last_correction_time_) : 0.02;
+        last_correction_time_ = current_time;
+        
+        // DPADモードでは最大強度でPID補正を適用
+        twist_msg->angular.z = calculatePIDCorrection(error, dt, 1.0);
       } else {
+        // 手動回転時はPID状態をリセット
+        integral_error_ = 0.0;
+        prev_yaw_error_ = 0.0;
         twist_msg->angular.z = get_angular_velocity(msg);
       }
     } break;
@@ -344,7 +377,19 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
   // BNO055からは度（degrees）で来るのでradianに変換
   roll_ = msg->x * M_PI / 180.0;
   pitch_ = msg->y * M_PI / 180.0;
-  yaw_ = msg->z * M_PI / 180.0;  // current yaw value in radians
+  double raw_yaw = msg->z * M_PI / 180.0;  // current yaw value in radians
+  
+  // ローパスフィルタで角度データを平滑化
+  if (filtered_yaw_ == 0.0) {
+    // 初回は生データを使用
+    filtered_yaw_ = raw_yaw;
+  } else {
+    // 角度の連続性を考慮したフィルタリング
+    double yaw_diff = normalizeAngle(raw_yaw - filtered_yaw_);
+    filtered_yaw_ = normalizeAngle(filtered_yaw_ + YAW_FILTER_ALPHA * yaw_diff);
+  }
+  
+  yaw_ = filtered_yaw_;
 }
 
 double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
@@ -355,8 +400,11 @@ double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPt
       (msg->axes[4] < TRIGGER_THRESHOLD) || (msg->axes[5] < TRIGGER_THRESHOLD);
 
   if (!was_manual_rotation && is_manual_rotation) {
-    // 手動回転開始時に基準値を更新
+    // 手動回転開始時に基準値を更新してPID状態をリセット
     init_yaw_ = yaw_;
+    integral_error_ = 0.0;
+    prev_yaw_error_ = 0.0;
+    last_correction_time_ = 0.0;
   }
   was_manual_rotation = is_manual_rotation;
 
@@ -388,4 +436,42 @@ std::string JoyDriverNode::mode_to_string(Mode mode) {
     default:
       return "UNKNOWN";
   }
+}
+
+double JoyDriverNode::normalizeAngle(double angle) {
+  // -πからπの範囲に正規化（より効率的な実装）
+  angle = std::fmod(angle + M_PI, 2.0 * M_PI);
+  if (angle < 0) angle += 2.0 * M_PI;
+  return angle - M_PI;
+}
+
+double JoyDriverNode::calculatePIDCorrection(double error, double dt, double velocity_factor) {
+  // デッドバンド処理
+  if (std::abs(error) < deadband_) {
+    // デッドバンド内では積分をリセット
+    integral_error_ = 0.0;
+    prev_yaw_error_ = 0.0;
+    return 0.0;
+  }
+
+  // 積分項の計算（ウィンドアップ防止付き）
+  integral_error_ += error * dt;
+  integral_error_ = std::clamp(integral_error_, -MAX_INTEGRAL_ERROR, MAX_INTEGRAL_ERROR);
+
+  // 微分項の計算
+  double derivative = (dt > 0.001) ? (error - prev_yaw_error_) / dt : 0.0;
+  prev_yaw_error_ = error;
+
+  // 速度依存の適応的ゲイン調整
+  double adaptive_kp = Kp_ * velocity_factor;
+  double adaptive_ki = Ki_ * velocity_factor;
+  double adaptive_kd = Kd_ * velocity_factor;
+
+  // PID計算
+  double correction = adaptive_kp * error + 
+                     adaptive_ki * integral_error_ + 
+                     adaptive_kd * derivative;
+
+  // 出力制限
+  return std::clamp(correction, -max_angular_correction_, max_angular_correction_);
 }

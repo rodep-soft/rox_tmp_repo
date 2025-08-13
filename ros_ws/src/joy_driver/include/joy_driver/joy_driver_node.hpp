@@ -31,9 +31,12 @@ class JoyDriverNode : public rclcpp::Node {
 
   // Public helper functions for testing
   static double applyDeadzone(double val, double threshold = 0.05);
+  static double normalizeAngle(double angle);
+  double calculatePIDCorrection(double error, double dt, double velocity_factor = 1.0);
   std::string mode_to_string(Mode mode);
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg);
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg);
+  void keyboard_callback(const std_msgs::msg::String::SharedPtr msg);
 
  private:
   // default Mode
@@ -57,6 +60,7 @@ class JoyDriverNode : public rclcpp::Node {
   // ROS2 Subscription
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
   rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr rpy_subscription_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr keyboard_subscription_;
 
   // ROS2 Publisher
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
@@ -85,8 +89,22 @@ class JoyDriverNode : public rclcpp::Node {
 
   // PID
   double Kp_;
+  double Ki_;
+  double Kd_;
   double deadband_;
   double max_angular_correction_;
+
+  // IMU補正用のフィルタとPID制御変数
+  double filtered_yaw_ = 0.0;
+  double prev_yaw_error_ = 0.0;
+  double integral_error_ = 0.0;
+  double last_correction_time_ = 0.0;
+  
+  // ローパスフィルタ係数（0.0-1.0, 小さいほど平滑化が強い）
+  static constexpr double YAW_FILTER_ALPHA = 0.7;
+  
+  // 積分項のウィンドアップ防止
+  static constexpr double MAX_INTEGRAL_ERROR = 0.5;
 
   // ===== ros2 params END =====
 
