@@ -74,7 +74,7 @@ class MotorDriver:
     def ejection_stop(self):
         self.ejection_motor.stop()
 
-    def elevation_forward(self, speed=1.0):
+    def elevation_forward(self, speed=0.9):
         self.elevation_motor.forward(speed=speed)
 
     def elevation_backward(self, speed=0.3):
