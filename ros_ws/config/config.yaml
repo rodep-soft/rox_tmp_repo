@@ -7,11 +7,11 @@
     linear_x_axis: 1
     linear_y_axis: 0
     angular_axis: 2  
-    Kp: 0.8   # より穏やかな比例制御（振動抑制）
-    Ki: 0.05  # 積分項をさらに控えめに（オーバーシュート防止）
-    Kd: 0.15  # 微分項を少し増やして減衰効果を高める
+    Kp: 1.5   # より強い比例制御でドリフトに対抗
+    Ki: 0.1   # 蓄積誤差も補正
+    Kd: 0.2   # 急激な変化を抑制
     deadband: 0.035 # デッドバンド(rad) - 約2度に縮小
-    max_angular_correction: 0.3 # より控えめな補正上限（angular_scale=3.0倍後に0.9rad/s）
+    max_angular_correction: 0.7 # 補正上限を大幅に引き上げ（angular_scale=3.0倍後に2.1rad/s）
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08
