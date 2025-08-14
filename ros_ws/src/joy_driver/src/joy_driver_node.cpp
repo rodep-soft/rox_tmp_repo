@@ -327,16 +327,16 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         std::string control_mode = "NORMAL";
         
         if (is_pure_forward && small_error) {
-          // 前後移動＋小誤差：振動防止のため大幅抑制
-          pid_suppression_factor = (error_magnitude < 0.05) ? 0.05 : 0.1; // 95-90%抑制
+          // 前後移動＋小誤差：軽微抑制のみ（大ドリフト対応）
+          pid_suppression_factor = (error_magnitude < 0.05) ? 0.3 : 0.5; // 70-50%抑制
           control_mode = "FORWARD_STABILIZED";
         } else if (is_pure_forward && medium_error) {
-          // 前後移動＋中誤差：適度な抑制
-          pid_suppression_factor = 0.3; // 70%抑制
+          // 前後移動＋中誤差：積極補正
+          pid_suppression_factor = 0.8; // 20%抑制のみ
           control_mode = "FORWARD_CORRECTING";
         } else if (is_pure_lateral && small_error) {
-          // 横移動＋小誤差：振動防止
-          pid_suppression_factor = (error_magnitude < 0.05) ? 0.08 : 0.15; // 92-85%抑制
+          // 横移動＋小誤差：軽微抑制
+          pid_suppression_factor = (error_magnitude < 0.05) ? 0.4 : 0.6; // 60-40%抑制
           control_mode = "LATERAL_STABILIZED";
         } else if (is_diagonal_move && small_error) {
           // 斜め移動＋小誤差：PID超大幅抑制
@@ -359,17 +359,17 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           pid_suppression_factor = 1.0; // 抑制なし
           control_mode = "STATIONARY_CORRECTING";
         } else if (large_error) {
-          // 大きな誤差：段階的補正（振動防止）
+          // 大きな誤差：強力補正（100度超対応）
           if (error_magnitude > 1.5) { // 86度以上
-            pid_suppression_factor = 0.6; // 段階的補正
-            control_mode = "LARGE_ERROR_GRADUAL";
+            pid_suppression_factor = 1.0; // フル補正（抑制なし）
+            control_mode = "LARGE_ERROR_EMERGENCY";
           } else {
-            pid_suppression_factor = 0.8; // 通常の大誤差補正
+            pid_suppression_factor = 0.9; // 強力補正
             control_mode = "LARGE_ERROR_NORMAL";
           }
         } else {
           // その他：標準制御
-          pid_suppression_factor = 0.5; // より抑制気味
+          pid_suppression_factor = 0.7;
           control_mode = "STANDARD";
         }
         
