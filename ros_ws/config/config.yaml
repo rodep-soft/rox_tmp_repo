@@ -13,8 +13,8 @@
     Ki: 0.15  # 積分ゲイン：大きなドリフト対応
     Kd: 0.05  # 微分ゲイン：安定性確保
     
-    # 制御品質パラメータ（補正力向上）
-    deadband: 0.08 # 動的デッドバンド基準値（約5度）
+    # 制御品質パラメータ（超高感度補正）
+    deadband: 0.03 # 動的デッドバンド基準値（約1.7度）
     max_angular_correction: 2.0 # 最大補正力（大幅強化）
 
     # Mecanum Wheel Controller Parameters

@@ -316,27 +316,28 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         bool is_slow_movement = (velocity_magnitude < 0.3);
         bool is_stationary = (velocity_magnitude < 0.1);
         
-        // 角度誤差の大きさによる制御強度調整（より早期補正）
+        // 角度誤差の大きさによる制御強度調整（超早期補正）
         double error_magnitude = std::abs(error);
-        bool large_error = (error_magnitude > 0.2); // 11度以上（より早期）
-        bool medium_error = (error_magnitude > 0.07 && error_magnitude <= 0.2); // 4-11度
-        bool small_error = (error_magnitude <= 0.07); // 4度以下（より厳密）
+        bool large_error = (error_magnitude > 0.15); // 8.6度以上
+        bool medium_error = (error_magnitude > 0.035 && error_magnitude <= 0.15); // 2-8.6度
+        bool small_error = (error_magnitude > 0.015 && error_magnitude <= 0.035); // 0.9-2度
+        bool micro_error = (error_magnitude <= 0.015); // 0.9度以下（超微細）
         
         // 適応的PID制御戦略
         double pid_suppression_factor = 1.0;
         std::string control_mode = "NORMAL";
         
         if (is_pure_forward && small_error) {
-          // 前後移動＋小誤差：軽微抑制のみ（大ドリフト対応）
-          pid_suppression_factor = (error_magnitude < 0.05) ? 0.3 : 0.5; // 70-50%抑制
+          // 前後移動＋小誤差：微細補正重視（2度以下でも補正）
+          pid_suppression_factor = (error_magnitude < 0.02) ? 0.6 : 0.8; // 40-20%抑制
           control_mode = "FORWARD_STABILIZED";
         } else if (is_pure_forward && medium_error) {
           // 前後移動＋中誤差：積極補正
-          pid_suppression_factor = 0.8; // 20%抑制のみ
+          pid_suppression_factor = 0.9; // 10%抑制のみ
           control_mode = "FORWARD_CORRECTING";
         } else if (is_pure_lateral && small_error) {
-          // 横移動＋小誤差：軽微抑制
-          pid_suppression_factor = (error_magnitude < 0.05) ? 0.4 : 0.6; // 60-40%抑制
+          // 横移動＋小誤差：微細補正
+          pid_suppression_factor = (error_magnitude < 0.02) ? 0.7 : 0.8; // 30-20%抑制
           control_mode = "LATERAL_STABILIZED";
         } else if (is_diagonal_move && small_error) {
           // 斜め移動＋小誤差：PID超大幅抑制
@@ -351,9 +352,9 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           pid_suppression_factor = 0.5; // 50%抑制
           control_mode = "SLOW_MOVEMENT";
         } else if (is_stationary && small_error) {
-          // 停止時＋小誤差：適度な補正
-          pid_suppression_factor = (error_magnitude < 0.03) ? 0.4 : 0.7; // より積極的補正
-          control_mode = "STATIONARY_FINE";
+          // 停止時＋小誤差：超細密補正（1度でも補正）
+          pid_suppression_factor = (error_magnitude < 0.015) ? 0.8 : 0.9; // 軽微抑制
+          control_mode = "STATIONARY_PRECISION";
         } else if (is_stationary && medium_error) {
           // 停止時＋中誤差：フル補正
           pid_suppression_factor = 1.0; // 抑制なし
@@ -366,6 +367,15 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           } else {
             pid_suppression_factor = 0.9; // 強力補正
             control_mode = "LARGE_ERROR_NORMAL";
+          }
+        } else if (micro_error) {
+          // 超微細誤差：精密補正（1度未満でも補正）
+          if (is_stationary) {
+            pid_suppression_factor = 0.6; // 静止時は精密補正
+            control_mode = "MICRO_PRECISION";
+          } else {
+            pid_suppression_factor = 0.3; // 移動時は軽微補正
+            control_mode = "MICRO_MOVING";
           }
         } else {
           // その他：標準制御
