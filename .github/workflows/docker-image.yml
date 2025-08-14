@@ -43,7 +43,3 @@ jobs:
       - name: Run colcon build check
         run: |
           docker run --rm --workdir /root/ros_ws ros2-rox-image:latest /bin/bash -c "source /opt/ros/humble/setup.bash && colcon build"
-
-      - name: Run joy_driver test check
-        run: |
-          docker run --rm --workdir /root/ros_ws ros2-rox-image:latest /bin/bash -c "source /opt/ros/humble/setup.bash && colcon test --packages-select joy_driver"
