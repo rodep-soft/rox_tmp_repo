@@ -389,8 +389,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         double raw_pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, velocity_factor);
         double suppressed_pid_correction = raw_pid_correction * pid_suppression_factor;
         
-        // PID補正値を適用（符号修正：座標系統一）
-        twist_msg->angular.z = suppressed_pid_correction * angular_scale_;  // マイナス符号削除
+        // PID補正値を適用（符号修正：実験的に逆転）
+        twist_msg->angular.z = -suppressed_pid_correction * angular_scale_;  // 符号反転で補正方向修正
         
         // 高品質デバッグ：制御詳細
         if (std::abs(error) > 0.02 || pattern_debug_counter % 100 == 0) {
