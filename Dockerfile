@@ -30,8 +30,8 @@ RUN apt-get update && apt-get upgrade -y && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
 
 # --- Initialize rosdep ---
-RUN rosdep init && \
-    rosdep update
+#RUN rosdep init && \
+RUN rosdep update
 
     
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y

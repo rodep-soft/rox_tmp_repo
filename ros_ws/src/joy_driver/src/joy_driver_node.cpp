@@ -43,10 +43,10 @@ void JoyDriverNode::declare_parameters() {
   this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
   this->declare_parameter<int>("angular_axis", 2);
 
-  this->declare_parameter<double>("Kp", 0.15);  // 比例ゲイン（より控えめに）
-  this->declare_parameter<double>("Ki", 0.01);  // 積分ゲイン（より控えめに）
-  this->declare_parameter<double>("Kd", 0.02);  // 微分ゲイン（より控えめに）
-  this->declare_parameter<double>("deadband", 0.1);   // デッドバンドを大きく（rad）
+  this->declare_parameter<double>("Kp", 0.15);  // 比例ゲイン
+  this->declare_parameter<double>("Ki", 0.01);  // 積分ゲイン
+  this->declare_parameter<double>("Kd", 0.02);  // 微分ゲイン
+  this->declare_parameter<double>("deadband", 0.1);   // デッドバンド
   this->declare_parameter<double>("max_angular_correction", 0.3);  // 最大補正を制限
 }
 
@@ -83,7 +83,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
   // ジョイスティック入力のデバッグ情報（十字キーの状態確認）
   static int debug_counter = 0;
   debug_counter++;
-  if (debug_counter % 100 == 0) {  // 2秒に1回ログ出力（50Hz前提）
+  if (debug_counter % 100 == 0) {  // log
     std::string button_status = "Buttons: ";
     for (size_t i = 0; i < std::min(msg->buttons.size(), size_t(16)); ++i) {
       if (msg->buttons[i]) {
@@ -210,9 +210,10 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
       // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中も十分な値に
       bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-      double angular_deadzone = is_moving ? 0.075 : 0.1;  // ジョイスティックノイズ対策で大幅に増加
+      double angular_deadzone = is_moving ? 0.075 : 0.1;  // ジョイスティックノイズ対策
 
-      // 手動回転入力を取得（ハードウェア配線の関係で符号を逆転）
+      // 手動回転入力を取得
+      // なんで反転させてるんだっけ...?
       double manual_angular = -applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
       
       // ジョイスティックノイズのデバッグ（頻度を大幅削減）
@@ -230,7 +231,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       
       // **手動回転中は一切の補正を停止**
       if (std::abs(manual_angular) > 0.01) {
-        // 手動回転入力がある場合はそれを優先し、高品質PIDリセット
+        // 手動回転入力がある場合はそれを優先し、PIDをリセット\
+        // ????
         if (!was_manual_rotating) {
           resetPIDState("manual_rotation_JOY_start");
         }
