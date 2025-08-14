@@ -198,7 +198,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
       // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中も十分な値に
       bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-      double angular_deadzone = is_moving ? 1.0 : 0.8;  // ジョイスティックノイズ対策で大幅に増加
+      double angular_deadzone = is_moving ? 0.075 : 0.1;  // ジョイスティックノイズ対策で大幅に増加
 
       // 手動回転入力を取得（ハードウェア配線の関係で符号を逆転）
       double manual_angular = -applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
@@ -560,13 +560,13 @@ double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPt
   bool is_manual_rotation =
       (msg->axes[4] < TRIGGER_THRESHOLD) || (msg->axes[5] < TRIGGER_THRESHOLD);
 
-  if (!was_manual_rotation && is_manual_rotation) {
+  // if (!was_manual_rotation && is_manual_rotation) {
     // 手動回転開始時に基準値を更新してPID状態をリセット
     init_yaw_ = yaw_;
     integral_error_ = 0.0;
     prev_yaw_error_ = 0.0;
     last_correction_time_ = 0.0;
-  }
+  // }
   was_manual_rotation = is_manual_rotation;
 
   if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
