@@ -54,5 +54,18 @@ def generate_launch_description():
             executable="lifting_motor",
             name="lifting_motor_node",
             parameters=[]
+        ),
+
+        # robot_localization EKF node for sensor fusion
+        Node(
+            package='robot_localization',
+            executable='ekf_node',
+            name='ekf_filter_node',
+            output='screen',
+            parameters=['config/ekf.yaml'],
+            remappings=[
+                ('odometry/filtered', '/odom/filtered'),
+                ('/diagnostics', '/diagnostics')
+            ]
         )
     ])
