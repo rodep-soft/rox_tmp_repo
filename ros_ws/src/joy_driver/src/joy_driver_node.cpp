@@ -81,9 +81,9 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
   auto mode_msg = std::make_unique<std_msgs::msg::String>();
 
   // ジョイスティック入力のデバッグ情報（十字キーの状態確認）
-  static int debug_counter = 0;
-  debug_counter++;
-  if (debug_counter % 100 == 0) {  // log
+  static int joy_debug_counter = 0;
+  joy_debug_counter++;
+  if (joy_debug_counter % 100 == 0) {  // log
     std::string button_status = "Buttons: ";
     for (size_t i = 0; i < std::min(msg->buttons.size(), size_t(16)); ++i) {
       if (msg->buttons[i]) {
@@ -682,6 +682,23 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
 }
 
 void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
+  // === DEBUG: Madgwick vs Raw Data Analysis ===
+  static int analysis_debug_counter = 0;
+  analysis_debug_counter++;
+  
+  if (analysis_debug_counter % 50 == 0) {  // 毎50回 = 約2.5秒間隔
+    RCLCPP_WARN(this->get_logger(),
+               "=== MADGWICK vs RAW COMPARISON ===");
+    RCLCPP_WARN(this->get_logger(),
+               "MADGWICK INPUT (from /imu/data): X=%.3f, Y=%.3f, Z=%.3f rad/s",
+               msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z);
+    RCLCPP_WARN(this->get_logger(),
+               "VALUES: X=%.1f°/s, Y=%.1f°/s, Z=%.1f°/s",
+               msg->angular_velocity.x * 180.0 / M_PI,
+               msg->angular_velocity.y * 180.0 / M_PI,
+               msg->angular_velocity.z * 180.0 / M_PI);
+  }
+  
   // === Madgwick Filtered IMU Data Processing ===
   // madgwickで既にフィルタリング済みなのでフィルタ不要
   
@@ -773,17 +790,31 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   // 軸選択の状況を表示
   double max_angular_vel = std::max({std::abs(filtered_x), std::abs(filtered_y), std::abs(filtered_z)});
   
-  if (max_angular_vel > 0.5) {
+  // 回転検出時の詳細情報を常に表示
+  if (max_angular_vel > 0.1) {  // 0.1 rad/s = 約5.7°/s以上
     RCLCPP_WARN(this->get_logger(),
                "ROTATION DETECTED! X=%.2f, Y=%.2f, Z=%.2f rad/s | Using %s (%.2f)",
                filtered_x, filtered_y, filtered_z, axis_name.c_str(), vertical_rotation_axis);
   }
   
-  // 定期的デバッグ情報表示
-  static int debug_counter = 0;
-  debug_counter++;
+  // 軸選択と値の詳細情報
+  RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+             "MADGWICK FILTERED: X=%.3f, Y=%.3f, Z=%.3f rad/s | X=%.1f°/s, Y=%.1f°/s, Z=%.1f°/s",
+             filtered_x, filtered_y, filtered_z,
+             filtered_x * 180.0 / M_PI, filtered_y * 180.0 / M_PI, filtered_z * 180.0 / M_PI);
   
-  if (debug_counter % 1000 == 0) {  // 10秒に1回
+  RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+             "ACTIVE AXIS: %s (%.3f rad/s = %.1f°/s)",
+             axis_name.c_str(), vertical_rotation_axis, vertical_rotation_axis * 180.0 / M_PI);
+  
+  RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+             "AXIS MAPPING: angular_velocity.x=BNO055_X, .y=BNO055_Y, .z=BNO055_Z");
+  
+  // 定期的デバッグ情報表示
+  static int detailed_debug_counter = 0;
+  detailed_debug_counter++;
+  
+  if (detailed_debug_counter % 1000 == 0) {  // 10秒に1回
     RCLCPP_WARN(this->get_logger(),
                "MADGWICK FILTERED: X=%.3f, Y=%.3f, Z=%.3f rad/s | X=%.1f°/s, Y=%.1f°/s, Z=%.1f°/s",
                filtered_x, filtered_y, filtered_z,
@@ -811,7 +842,7 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   last_time = current_time;
   
   // ログ（簡素化）
-  if (debug_counter % 500 == 0) {  // 5秒間隔
+  if (detailed_debug_counter % 500 == 0) {  // 5秒間隔
     RCLCPP_INFO(this->get_logger(),
                "IMU: yaw=%.1f° (vel=%.3f°/s) - Using %s",
                yaw_ * 180.0 / M_PI, filtered_angular_vel_x_ * 180.0 / M_PI, axis_name.c_str());
@@ -951,9 +982,9 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   control_history_index_ = (control_history_index_ + 1) % 5;
   
   // 10. 高品質デバッグ情報
-  static int debug_counter = 0;
-  debug_counter++;
-  if (std::abs(filtered_error) > 0.02 && debug_counter % 25 == 0) {
+  static int control_debug_counter = 0;
+  control_debug_counter++;
+  if (std::abs(filtered_error) > 0.02 && control_debug_counter % 25 == 0) {
     double avg_control_effort = 0.0;
     for (int i = 0; i < 5; i++) avg_control_effort += control_effort_history_[i];
     avg_control_effort /= 5.0;
