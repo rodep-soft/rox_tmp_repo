@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cmath>
 #include <functional>
 #include <geometry_msgs/msg/vector3.hpp>
 #include <iostream>
@@ -10,6 +11,10 @@
 #include <vector>
 
 #include "imu/imulib.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 class IMUNode : public rclcpp::Node {
  public:
@@ -54,6 +59,10 @@ class IMUNode : public rclcpp::Node {
     // --- ここからImuメッセージ ---
 
     auto imu_accel_and_gyro_msg = sensor_msgs::msg::Imu();
+    
+    // Set header with timestamp and frame_id
+    imu_accel_and_gyro_msg.header.stamp = this->get_clock()->now();
+    imu_accel_and_gyro_msg.header.frame_id = "imu_link";
 
     Quaternion quat = imu_sensor_.getQuat();
 
@@ -76,10 +85,25 @@ class IMUNode : public rclcpp::Node {
 
     imu_publisher_->publish(imu_accel_and_gyro_msg);
     rpy_publisher_->publish(rpy_msg);
+    
+    // Debug output every 2 seconds
+    static auto last_debug = std::chrono::steady_clock::now();
+    auto current_time = std::chrono::steady_clock::now();
+    if (std::chrono::duration<double>(current_time - last_debug).count() > 2.0) {
+      double yaw_deg = euler[0] * 180.0 / M_PI;
+      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                          "IMU DATA: yaw=%.1f° gyro_z=%.3f accel(%.2f,%.2f,%.2f)",
+                          yaw_deg, gyro[2], accel[0], accel[1], accel[2]);
+      last_debug = current_time;
+    }
   }
 
   void timer_mag_callback() {
     auto mag_msg = sensor_msgs::msg::MagneticField();
+    
+    // Set header with timestamp and frame_id
+    mag_msg.header.stamp = this->get_clock()->now();
+    mag_msg.header.frame_id = "imu_link";
 
     Vector<3> mag = imu_sensor_.getVector(VECTOR_MAGNETOMETER);
 

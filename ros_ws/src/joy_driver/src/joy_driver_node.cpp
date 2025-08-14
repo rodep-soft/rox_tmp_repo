@@ -19,6 +19,11 @@ JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
       "/imu", best_effort_qos,
       std::bind(&JoyDriverNode::imu_callback, this, std::placeholders::_1));
 
+  // EKF filtered odometry subscription
+  ekf_odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
+      "/odom/filtered", best_effort_qos,
+      std::bind(&JoyDriverNode::ekf_odom_callback, this, std::placeholders::_1));
+
   // Create publisher for the /cmd_vel topic
   cmd_vel_publisher_ =
       this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", best_effort_qos);
@@ -41,6 +46,7 @@ void JoyDriverNode::declare_parameters() {
   this->declare_parameter<int>("linear_x_axis", 1);  // Vertical movement
   this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
   this->declare_parameter<int>("angular_axis", 2);
+  this->declare_parameter<bool>("ekf_fusion_enabled", true);  // EKF統合を有効化
 
   this->declare_parameter<double>("Kp", 0.15);  // 比例ゲイン（より控えめに）
   this->declare_parameter<double>("Ki", 0.01);  // 積分ゲイン（より控えめに）
@@ -56,6 +62,7 @@ void JoyDriverNode::get_parameters() {
   linear_x_axis_ = this->get_parameter("linear_x_axis").as_int();
   linear_y_axis_ = this->get_parameter("linear_y_axis").as_int();
   angular_axis_ = this->get_parameter("angular_axis").as_int();
+  ekf_fusion_enabled_ = this->get_parameter("ekf_fusion_enabled").as_bool();
 
   Kp_ = this->get_parameter("Kp").as_double();                     // 比例ゲイン
   Ki_ = this->get_parameter("Ki").as_double();                     // 積分ゲイン
@@ -67,8 +74,8 @@ void JoyDriverNode::get_parameters() {
   // パラメータ値をログ出力して確認
   RCLCPP_INFO(
       this->get_logger(),
-      "Parameters loaded: angular_axis=%d, linear_x_axis=%d, linear_y_axis=%d, angular_scale=%.2f",
-      angular_axis_, linear_x_axis_, linear_y_axis_, angular_scale_);
+      "Parameters loaded: angular_axis=%d, linear_x_axis=%d, linear_y_axis=%d, angular_scale=%.2f, ekf_fusion=%s",
+      angular_axis_, linear_x_axis_, linear_y_axis_, angular_scale_, ekf_fusion_enabled_ ? "enabled" : "disabled");
 }
 
 // Joy main callback function
@@ -78,6 +85,20 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
   auto linetrace_msg = std::make_unique<std_msgs::msg::Bool>();
 
   auto mode_msg = std::make_unique<std_msgs::msg::String>();
+
+  // ジョイスティック入力のデバッグ情報（十字キーの状態確認）
+  static int debug_counter = 0;
+  debug_counter++;
+  if (debug_counter % 100 == 0) {  // 2秒に1回ログ出力（50Hz前提）
+    std::string button_status = "Buttons: ";
+    for (size_t i = 0; i < std::min(msg->buttons.size(), size_t(16)); ++i) {
+      if (msg->buttons[i]) {
+        button_status += std::to_string(i) + "=1 ";
+      }
+    }
+    if (button_status == "Buttons: ") button_status += "none pressed";
+    RCLCPP_INFO(this->get_logger(), "%s | Mode: %s", button_status.c_str(), mode_to_string(mode_).c_str());
+  }
 
   // だめぽ
   // linetrace_msg->data = false;
@@ -124,12 +145,9 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       RCLCPP_INFO(this->get_logger(), "Mode: STOP");
     } else if (msg->buttons[4] == 1 && mode_ != Mode::DPAD) {
       mode_ = Mode::DPAD;
-      init_yaw_ = yaw_;
-      // PID状態をリセット
-      integral_error_ = 0.0;
-      prev_yaw_error_ = 0.0;
-      last_correction_time_ = 0.0;
-      RCLCPP_INFO(this->get_logger(), "Mode: DPAD (PID Reset)");
+      updateTargetOrientation(); // スマートな目標角度更新
+      resetPIDState("mode_switch_to_DPAD"); // 高品質リセット
+      RCLCPP_INFO(this->get_logger(), "Mode: DPAD (Advanced PID Reset)");
     }
   }
 
@@ -198,7 +216,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
       // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中も十分な値に
       bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
-      double angular_deadzone = is_moving ? 1.0 : 0.8;  // ジョイスティックノイズ対策で大幅に増加
+      double angular_deadzone = is_moving ? 0.075 : 0.1;  // ジョイスティックノイズ対策で大幅に増加
 
       // 手動回転入力を取得（ハードウェア配線の関係で符号を逆転）
       double manual_angular = -applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
@@ -218,9 +236,10 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       
       // **手動回転中は一切の補正を停止**
       if (std::abs(manual_angular) > 0.01) {
-        // 手動回転入力がある場合はそれを優先し、PID状態をリセット
-        integral_error_ = 0.0;
-        prev_yaw_error_ = 0.0;
+        // 手動回転入力がある場合はそれを優先し、高品質PIDリセット
+        if (!was_manual_rotating) {
+          resetPIDState("manual_rotation_JOY_start");
+        }
         twist_msg->angular.z = -manual_angular;  // 手動回転の符号を反転
         was_manual_rotating = true;  // 手動回転中フラグを設定
         waiting_for_target_update = false;  // 更新待機状態をリセット
@@ -235,8 +254,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         waiting_for_target_update = true;  // 目標角度更新待機状態に設定
         target_update_yaw = yaw_;  // 現在のIMU値を記録
         
-        // PID状態をリセット
-        integral_error_ = 0.0;
+        // 高品質PIDリセット
+        resetPIDState("manual_rotation_JOY_end");
         prev_yaw_error_ = 0.0;
         
         // 手動回転終了直後はPID補正を無効化
@@ -286,48 +305,154 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         double dt = (last_correction_time_ > 0) ? (current_time - last_correction_time_) : 0.02;
         last_correction_time_ = current_time;
         
-        // 角度誤差を計算（正規化済み）
-        // **修正**: PID制御では「目標角度 - 現在角度」が正しい符号
-        double error = normalizeAngle(init_yaw_ - yaw_);
+        // 角度誤差を計算（統一：現在値 - 目標値）
+        double error = normalizeAngle(yaw_ - init_yaw_);
         
-        // **デバッグ**: 角度計算の詳細
-        static int error_debug_counter = 0;
-        error_debug_counter++;
-        if (error_debug_counter % 50 == 0) {
-          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "ANGLE_CALC: current=%.2f° target=%.2f° raw_error=%.2f° norm_error=%.2f°", 
-                               yaw_ * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI,
-                               (init_yaw_ - yaw_) * 180.0 / M_PI, error * 180.0 / M_PI);
-        }
-        
-        // 全方向移動時に補正を適用
+        // === インテリジェント移動パターン検出とPID抑制 ===
         double velocity_magnitude = std::sqrt(twist_msg->linear.x * twist_msg->linear.x + 
                                             twist_msg->linear.y * twist_msg->linear.y);
+        
+        // 移動方向の分析
+        double forward_ratio = std::abs(twist_msg->linear.x) / (velocity_magnitude + 0.001);
+        double lateral_ratio = std::abs(twist_msg->linear.y) / (velocity_magnitude + 0.001);
+        
+        // 移動パターンの判定
+        bool is_pure_forward = (forward_ratio > 0.9 && velocity_magnitude > 0.5);
+        bool is_pure_lateral = (lateral_ratio > 0.9 && velocity_magnitude > 0.5);
+        bool is_diagonal_move = (forward_ratio > 0.3 && lateral_ratio > 0.3 && velocity_magnitude > 0.5);
+        bool is_slow_movement = (velocity_magnitude < 0.3);
+        bool is_stationary = (velocity_magnitude < 0.1);
+        
+        // 角度誤差の大きさによる制御強度調整（適度な感度調整）
+        double error_magnitude = std::abs(error);
+        bool large_error = (error_magnitude > 0.15); // 8.6度以上
+        bool medium_error = (error_magnitude > 0.04 && error_magnitude <= 0.15); // 2.3-8.6度
+        bool small_error = (error_magnitude > 0.015 && error_magnitude <= 0.04); // 0.9-2.3度
+        bool micro_error = (error_magnitude <= 0.015); // 0.9度以下（微細）
+        
+        // 適応的PID制御戦略
+        double pid_suppression_factor = 1.0;
+        std::string control_mode = "NORMAL";
+        
+        if (is_pure_forward && small_error) {
+          // 前後移動＋小誤差：適度な補正
+          pid_suppression_factor = 0.75; // 25%抑制
+          control_mode = "FORWARD_STABILIZED";
+        } else if (is_pure_forward && medium_error) {
+          // 前後移動＋中誤差：積極補正
+          pid_suppression_factor = 0.9; // 10%抑制
+          control_mode = "FORWARD_CORRECTING";
+        } else if (is_pure_lateral && small_error) {
+          // 横移動＋小誤差：適度な補正
+          pid_suppression_factor = 0.75; // 25%抑制
+          control_mode = "LATERAL_STABILIZED";
+        } else if (is_diagonal_move && small_error) {
+          // 斜め移動＋小誤差：PID超大幅抑制
+          pid_suppression_factor = 0.1; // 90%抑制
+          control_mode = "DIAGONAL_STABILIZED";
+        } else if (is_slow_movement && small_error) {
+          // 低速移動＋小誤差：PID大幅抑制
+          pid_suppression_factor = 0.3; // 70%抑制
+          control_mode = "SLOW_STABILIZED";
+        } else if (is_slow_movement) {
+          // 低速移動：軽度抑制
+          pid_suppression_factor = 0.5; // 50%抑制
+          control_mode = "SLOW_MOVEMENT";
+        } else if (is_stationary && small_error) {
+          // 停止時＋小誤差：超細密補正（1度でも補正）
+          pid_suppression_factor = (error_magnitude < 0.015) ? 0.8 : 0.9; // 軽微抑制
+          control_mode = "STATIONARY_PRECISION";
+        } else if (is_stationary && medium_error) {
+          // 停止時＋中誤差：フル補正
+          pid_suppression_factor = 1.0; // 抑制なし
+          control_mode = "STATIONARY_CORRECTING";
+        } else if (large_error) {
+          // 大きな誤差：強力補正（100度超対応）
+          if (error_magnitude > 1.5) { // 86度以上
+            pid_suppression_factor = 1.0; // フル補正（抑制なし）
+            control_mode = "LARGE_ERROR_EMERGENCY";
+          } else {
+            pid_suppression_factor = 0.9; // 強力補正
+            control_mode = "LARGE_ERROR_NORMAL";
+          }
+        } else if (micro_error) {
+          // 微細誤差：控えめ補正（1度未満は様子見）
+          if (is_stationary) {
+            pid_suppression_factor = 0.6; // 静止時は精密補正
+            control_mode = "MICRO_PRECISION";
+          } else {
+            pid_suppression_factor = 0.5; // 移動時は控えめ補正
+            control_mode = "MICRO_MOVING";
+          }
+        } else {
+          // その他：標準制御
+          pid_suppression_factor = 0.7;
+          control_mode = "STANDARD";
+        }
+        
+        // デバッグ出力（移動パターン解析） - 適度な頻度
+        static int pattern_debug_counter = 0;
+        pattern_debug_counter++;
+        if (pattern_debug_counter % 80 == 0 || (large_error || medium_error)) { // 大きな誤差時は表示
+          RCLCPP_INFO(this->get_logger(),
+                     "Movement Analysis: vel=%.2f, fwd=%.2f, lat=%.2f, err=%.1f°, mode=%s, suppress=%.1f",
+                     velocity_magnitude, forward_ratio, lateral_ratio, 
+                     error_magnitude * 180.0 / M_PI, control_mode.c_str(), pid_suppression_factor);
+        }
+        
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
-                // PID補正を適用
-        double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
+        // 抑制因子を適用したPID補正
+        double raw_pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, velocity_factor);
+        double suppressed_pid_correction = raw_pid_correction * pid_suppression_factor;
         
-        // PID補正値を適用（符号反転を除去）
-        twist_msg->angular.z = -pid_correction * angular_scale_;
+        // PID補正値を適用（符号修正：実験的に逆転）
+        twist_msg->angular.z = -suppressed_pid_correction * angular_scale_;  // 符号反転で補正方向修正
         
-        // **デバッグ**: 計算過程を詳細表示
-        RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                             "CALC_DEBUG: PID=%.4f, angular_scale=%.2f, RESULT=%.4f", 
-                             pid_correction, angular_scale_, twist_msg->angular.z);
+        // 高品質デバッグ：制御詳細（方向明確化）
+        if (std::abs(error) > 0.02 || pattern_debug_counter % 100 == 0) {
+          std::string error_direction = (error > 0) ? "RIGHT_drift" : "LEFT_drift";
+          std::string correction_direction = (twist_msg->angular.z > 0) ? "→LEFT_correct" : "→RIGHT_correct";
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "Smart PID: %s | %s %.1f° %s | raw_PID=%.3f | final=%.3f",
+                               control_mode.c_str(), error_direction.c_str(), 
+                               std::abs(error) * 180.0 / M_PI, correction_direction.c_str(),
+                               raw_pid_correction, twist_msg->angular.z);
+        }
         
-        // デバッグログ（IMUデータの詳細確認）
-        double yaw_drift_deg = error * 180.0 / M_PI;
-        static int log_counter = 0;
-        log_counter++;
+        // === スマート目標角度更新システム ===
+        static auto last_target_update_time = std::chrono::steady_clock::now();
+        static std::string last_movement_pattern = "";
+        auto target_update_time = std::chrono::steady_clock::now();
+        auto time_since_update = std::chrono::duration_cast<std::chrono::seconds>(target_update_time - last_target_update_time);
         
-        if (std::abs(yaw_drift_deg) > 0.5 && log_counter % 10 == 0) {  
-          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "IMU_CHECK: yaw=%.2f° init=%.2f° error=%.2f° %s, PID=%.4f, FINAL=%.4f", 
-                               yaw_ * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI,
-                               std::abs(yaw_drift_deg), 
-                               (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
-                               pid_correction, twist_msg->angular.z);
+        // 安定した移動パターンが続いている場合の自動目標更新
+        bool should_update_target = false;
+        if (time_since_update.count() > 5 && // 5秒以上経過
+            (control_mode == "FORWARD_STABILIZED" || control_mode == "LATERAL_STABILIZED") &&
+            control_mode == last_movement_pattern && // 同じパターンが継続
+            error_magnitude < 0.15) { // 誤差が8.6度以下
+          should_update_target = true;
+        }
+        
+        if (should_update_target) {
+          double old_target = init_yaw_;
+          updateTargetOrientation();
+          last_target_update_time = target_update_time;
+          RCLCPP_WARN(this->get_logger(),
+                     "Auto target update: %.1f° -> %.1f° (pattern: %s, duration: %lds)",
+                     old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI, 
+                     control_mode.c_str(), time_since_update.count());
+        }
+        last_movement_pattern = control_mode;
+        
+        // 簡潔なデバッグログ
+        static int simplified_log_counter = 0;
+        simplified_log_counter++;
+        if (std::abs(error) > 0.05 && simplified_log_counter % 25 == 0) {  
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                               "Control: %s | err=%.1f° | correction=%.3f", 
+                               control_mode.c_str(), error * 180.0 / M_PI, twist_msg->angular.z);
         }
       } else {
         // 移動停止時の処理（手動回転後の重複更新を防止）
@@ -351,6 +476,14 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
         twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
         
+        // DPADボタン状態のデバッグ出力
+        if (msg->buttons[11] || msg->buttons[12] || msg->buttons[13] || msg->buttons[14]) {
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 200,
+                               "DPAD buttons: UP=%d, DOWN=%d, LEFT=%d, RIGHT=%d -> vel_x=%.3f, vel_y=%.3f", 
+                               msg->buttons[11], msg->buttons[12], msg->buttons[13], msg->buttons[14],
+                               twist_msg->linear.x, twist_msg->linear.y);
+        }
+        
         // 現在時刻の取得
         auto now = this->get_clock()->now();
         double current_time = now.seconds();
@@ -359,19 +492,26 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         
         // DPADモードでは最大強度で角度+角速度補正を適用
         // 符号修正：エラーと同じ方向に補正して打ち消す
-        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, 1.0);
+        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, 1.0);
         
         // デバッグ出力（補正時のみ）
         if (std::abs(twist_msg->angular.z) > 0.01) {
           RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                                "DPAD correction: error=%.3f, ang_vel=%.3f, correction=%.3f", 
-                               error, filtered_angular_vel_z_, twist_msg->angular.z);
+                               error, filtered_angular_vel_x_, twist_msg->angular.z);
         }
       } else {
-        // 手動回転時はPID状態をリセット
-        integral_error_ = 0.0;
-        prev_yaw_error_ = 0.0;
+        // 手動回転時：インテリジェントなPIDリセットと目標更新
+        static bool was_manual_rotation = false;
+        if (!was_manual_rotation) {
+          resetPIDState("manual_rotation_start");
+          was_manual_rotation = true;
+        }
         twist_msg->angular.z = get_angular_velocity(msg);
+        
+        // 手動回転終了時に目標角度を更新
+        static auto last_manual_time = std::chrono::steady_clock::now();
+        last_manual_time = std::chrono::steady_clock::now();
       }
     } break;
     case Mode::LINETRACE:
@@ -494,35 +634,34 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 }
 
 void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg) {
+  // EKFデータが利用可能な場合は、EKFのyawを優先使用
+  if (ekf_data_received_) {
+    // robot_localizationのEKFデータを使用（高精度）
+    yaw_ = ekf_yaw_;
+    
+    // BNO055の他のデータは引き続き取得
+    roll_ = msg->x * M_PI / 180.0;
+    pitch_ = msg->y * M_PI / 180.0;
+    
+    static int ekf_debug_counter = 0;
+    if (ekf_debug_counter++ % 200 == 0) {
+      RCLCPP_INFO(this->get_logger(),
+                 "Using EKF yaw: %.1f° (Madgwick X: %.1f°)", 
+                 ekf_yaw_ * 180.0 / M_PI, msg->x);
+    }
+    return;
+  }
+  
+  // 応急処置：EKFが利用できない場合はMadgwickフィルタ済みデータを一時使用
   // BNO055からは度（degrees）で来るのでradianに変換
   roll_ = msg->x * M_PI / 180.0;
   pitch_ = msg->y * M_PI / 180.0;
   
-  // 重要: 正しい軸はX軸だった！（テストで確認済み）
-  double raw_yaw = msg->x * M_PI / 180.0;  // X軸を使用するように修正
+  // ★座標系修正★：X軸角度データの方向統一
+  double raw_yaw = -msg->x * M_PI / 180.0;  // X軸角度も反転（ラジアンに変換）
   
-  // IMU軸診断：すべての軸を表示して正しい軸を確認
-  RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
-                       "IMU RAW DATA: X=%.1f°, Y=%.1f°, Z=%.1f° (using X for yaw)", 
-                       msg->x, msg->y, msg->z);
-  
-  // IMUデータの詳細確認用ログ（変化量も表示）
-  static double prev_x = 0.0, prev_y = 0.0, prev_z = 0.0;
-  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                       "IMU ANALYSIS: X=%.2f°(Δ%.2f), Y=%.2f°(Δ%.2f), Z=%.2f°(Δ%.2f)", 
-                       msg->x, msg->x - prev_x,
-                       msg->y, msg->y - prev_y, 
-                       msg->z, msg->z - prev_z);
-  prev_x = msg->x; prev_y = msg->y; prev_z = msg->z;
-  
-  // IMUデータの確認用ログ（5秒間隔に削減）
-  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                       "IMU: yaw=%.1f° (change_rate=%.3f°/s)", msg->x,  // X軸を表示
-                       (last_yaw_log_time_ > 0) ? (msg->x - last_yaw_log_) / 5.0 : 0.0);
-  
-  // ログ用の前回値を保存（X軸を使用）
-  last_yaw_log_ = msg->x;
-  last_yaw_log_time_ = this->get_clock()->now().seconds();
+  RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                       "EMERGENCY FALLBACK: Using Madgwick X-axis yaw=%.1f° (EKF not available)", msg->x);
   
   // ローパスフィルタで角度データを平滑化
   if (filtered_yaw_ == 0.0) {
@@ -538,36 +677,67 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
 }
 
 void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
-  // 角速度データを取得（既にrad/s）
-  angular_vel_x_ = msg->angular_velocity.x;
+  // robot_localizationのEKFを使用するため、シンプルなIMUデータ取得のみ
+  
+  // 生の角速度データを取得（座標系修正）
+  angular_vel_x_ = -msg->angular_velocity.x;  // X軸反転（左旋回が正）
   angular_vel_y_ = msg->angular_velocity.y;
   angular_vel_z_ = msg->angular_velocity.z;
   
-  // IMU角速度データの確認用ログ（1秒間隔）
-  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                       "IMU Angular Velocity: x=%.3f, y=%.3f, z=%.3f rad/s", 
-                       angular_vel_x_, angular_vel_y_, angular_vel_z_);
+  // 簡単なローパスフィルタを適用（ノイズ除去）
+  static double prev_filtered_angular_vel_x = 0.0;
+  const double filter_alpha = 0.3;
+  filtered_angular_vel_x_ = filter_alpha * angular_vel_x_ + (1.0 - filter_alpha) * prev_filtered_angular_vel_x;
+  prev_filtered_angular_vel_x = filtered_angular_vel_x_;
   
-  // Z軸角速度にローパスフィルタを適用
-  filtered_angular_vel_z_ = YAW_FILTER_ALPHA * angular_vel_z_ + 
-                           (1.0 - YAW_FILTER_ALPHA) * filtered_angular_vel_z_;
+  // 応急処置：EKFが利用できない場合のフォールバック
+  if (!ekf_data_received_) {
+    // Quaternionからyaw角を計算（フォールバック）
+    auto quat = msg->orientation;
+    double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
+    double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
+    double fallback_yaw = std::atan2(siny_cosp, cosy_cosp);
+    
+    // フォールバックyawをフィルタリング（一時的）
+    static double fallback_filtered_yaw = 0.0;
+    if (fallback_filtered_yaw == 0.0) {
+      fallback_filtered_yaw = fallback_yaw;
+    } else {
+      double yaw_diff = normalizeAngle(fallback_yaw - fallback_filtered_yaw);
+      fallback_filtered_yaw = normalizeAngle(fallback_filtered_yaw + 0.1 * yaw_diff);
+    }
+    
+    yaw_ = fallback_filtered_yaw;
+    
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                        "EMERGENCY: Using raw IMU orientation yaw=%.1f° (EKF not available)",
+                        yaw_ * 180.0 / M_PI);
+  }
+  
+  // デバッグ出力（間欠的）
+  static int debug_counter = 0;
+  debug_counter++;
+  if (debug_counter % 500 == 0) {  // 5秒間隔
+    RCLCPP_INFO(this->get_logger(),
+               "IMU+EKF: angular_vel_x=%.3f rad/s (%.1f°/s) | EKF available: %s | yaw=%.1f°",
+               filtered_angular_vel_x_, filtered_angular_vel_x_ * 180.0 / M_PI,
+               ekf_data_received_ ? "YES" : "NO", yaw_ * 180.0 / M_PI);
+  }
 }
 
 double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
   // L2/R2を押した時の手動回転時は基準値を更新
   // （ただし、これは意図的な回転なので基準をリセット）
-  static bool was_manual_rotation = false;
   bool is_manual_rotation =
       (msg->axes[4] < TRIGGER_THRESHOLD) || (msg->axes[5] < TRIGGER_THRESHOLD);
 
-  if (!was_manual_rotation && is_manual_rotation) {
-    // 手動回転開始時に基準値を更新してPID状態をリセット
+  // 手動回転開始時に基準値を更新してPID状態をリセット
+  if (is_manual_rotation) {
     init_yaw_ = yaw_;
     integral_error_ = 0.0;
     prev_yaw_error_ = 0.0;
     last_correction_time_ = 0.0;
   }
-  was_manual_rotation = is_manual_rotation;
 
   if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
     // R2: rotate right
@@ -606,55 +776,245 @@ double JoyDriverNode::normalizeAngle(double angle) {
   return angle - M_PI;
 }
 
-double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_z, double dt, double velocity_factor) {
-  // デッドバンド処理を一時無効化（すべての誤差に対して補正を適用）
-  // if (std::abs(angle_error) < deadband_) {
-  //   integral_error_ = 0.0;
-  //   prev_yaw_error_ = 0.0;
-  //   return 0.0;
-  // }
-
-  // 積分項の計算（ウィンドアップ防止付き）
-  // 大きなエラーに対して積分蓄積を加速（振動抑制のため緩和）
-  double integral_acceleration = (std::abs(angle_error) > 0.3) ? 1.5 : 1.0;  // 17度以上で1.5倍加速
-  integral_error_ += angle_error * dt * integral_acceleration;
-  integral_error_ = std::clamp(integral_error_, -MAX_INTEGRAL_ERROR, MAX_INTEGRAL_ERROR);
-
-  // 微分項の計算（角度の変化率）
-  double derivative = (dt > 0.001) ? (angle_error - prev_yaw_error_) / dt : 0.0;
-  prev_yaw_error_ = angle_error;
-
-  // 速度依存の適応的ゲイン調整（適切な値に調整）
-  double adaptive_kp = Kp_ * velocity_factor;        // 標準の比例ゲイン
-  double adaptive_ki = Ki_ * velocity_factor;        // 標準の積分ゲイン
-  double adaptive_kd = Kd_ * velocity_factor;        // 標準の微分ゲイン
-
-  // 角度ベースのPID計算（標準的なPID制御）
-  double angle_correction = adaptive_kp * angle_error + 
-                           adaptive_ki * integral_error_ + 
-                           adaptive_kd * derivative;
-
-  // 角速度フィードバック制御を適切に調整（現在の回転を適度に抑制）
-  double current_angular_vel = (std::abs(angular_vel_z) > 0.001) ? angular_vel_z : filtered_angular_vel_z_;
-  double velocity_damping = -0.1 * current_angular_vel * velocity_factor;  // ダンピングを適度に
+double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_x, double dt, double velocity_factor) {
+  // === EKF統合：最高品質の姿勢制御システム ===
   
-  // 総合補正値
-  double total_correction = angle_correction + velocity_damping;
+  // EKFデータが利用可能で有効な場合、より正確な角速度を使用
+  double effective_angular_vel = angular_vel_x;
+  if (ekf_fusion_enabled_ && ekf_data_received_) {
+    // EKFの角速度の方が信頼性が高い（特にZ軸ハードウェア故障時）
+    effective_angular_vel = ekf_angular_velocity_z_;
+    
+    // デバッグ出力（間欠的）
+    static int debug_count = 0;
+    if (debug_count++ % 100 == 0) {
+      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                          "EKF CONTROL: Using EKF angular_vel=%.3f vs IMU=%.3f rad/s",
+                          ekf_angular_velocity_z_, angular_vel_x);
+    }
+  }
   
-  // 微小補正も含めた詳細ログ
+  // 1. 角度誤差のレート制限（急激な変化を抑制）
+  double error_change = angle_error - prev_yaw_error_;
+  if (dt > 0.001) {
+    double error_rate = error_change / dt;
+    if (std::abs(error_rate) > error_rate_limit_) {
+      error_change = std::copysign(error_rate_limit_ * dt, error_change);
+      angle_error = prev_yaw_error_ + error_change;
+    }
+  }
+  
+  // 2. 適応的フィルタリング（ノイズ抑制）
+  double filter_alpha = YAW_FILTER_ALPHA;
+  if (std::abs(error_change) > 0.1) {
+    filter_alpha = std::min(0.8, YAW_FILTER_ALPHA * 2.0); // 大きな変化時は応答速度向上
+  }
+  last_filtered_error_ = filter_alpha * angle_error + (1.0 - filter_alpha) * last_filtered_error_;
+  double filtered_error = last_filtered_error_;
+  
+  // 3. 動的デッドバンド（状況に応じて調整）
+  adaptive_deadband_ = deadband_ * (1.0 + 0.5 * velocity_factor); // 速度に応じてデッドバンド調整
+  if (std::abs(filtered_error) < adaptive_deadband_) {
+    // 微小誤差の場合は積分項のみ維持（ドリフト補正）
+    integral_error_ *= 0.95; // 緩やかに減衰
+    return -0.05 * integral_error_; // 微小ドリフト補正
+  }
+  
+  // 4. 改良された積分項計算（インテリジェントウィンドアップ防止）
+  double integral_gain_modifier = 1.0;
+  if (std::abs(filtered_error) > 0.5) { // 大きな誤差では積分を抑制
+    integral_gain_modifier = 0.5;
+  }
+  integral_error_ += filtered_error * dt * integral_gain_modifier;
+  
+  // ウィンドアップ防止（動的制限）
+  double max_integral = MAX_INTEGRAL_ERROR * (1.0 + velocity_factor);
+  integral_error_ = std::clamp(integral_error_, -max_integral, max_integral);
+  
+  // 5. 改良された微分項（ノイズフィルタ付き）
+  double raw_derivative = (dt > 0.001) ? error_change / dt : 0.0;
+  velocity_estimate_ = VELOCITY_FILTER_ALPHA * raw_derivative + 
+                      (1.0 - VELOCITY_FILTER_ALPHA) * velocity_estimate_;
+  
+  // 6. 外乱オブザーバー（環境外乱の推定と補正）
+  double expected_response = -(Kp_ * prev_yaw_error_ + Ki_ * integral_error_);
+  double actual_response = -effective_angular_vel; // EKFまたは生IMUの角速度応答
+  disturbance_estimate_ = 0.1 * (actual_response - expected_response) + 0.9 * disturbance_estimate_;
+  
+  // 7. 適応的ゲイン調整（状況に応じて最適化）
+  double error_magnitude = std::abs(filtered_error);
+  double adaptive_kp, adaptive_ki, adaptive_kd;
+  
+  if (error_magnitude < 0.1) { // 微小誤差時：精密制御
+    adaptive_kp = Kp_ * 1.2 * velocity_factor;
+    adaptive_ki = Ki_ * 1.5 * velocity_factor;
+    adaptive_kd = Kd_ * 0.8 * velocity_factor;
+  } else if (error_magnitude < 0.3) { // 中程度誤差：バランス制御
+    adaptive_kp = Kp_ * velocity_factor;
+    adaptive_ki = Ki_ * velocity_factor;
+    adaptive_kd = Kd_ * velocity_factor;
+  } else { // 大きな誤差：高速応答
+    adaptive_kp = Kp_ * 1.5 * velocity_factor;
+    adaptive_ki = Ki_ * 0.7 * velocity_factor; // 積分を抑制
+    adaptive_kd = Kd_ * 1.3 * velocity_factor;
+  }
+  
+  // 8. PID計算（外乱補償付き）
+  double proportional = adaptive_kp * filtered_error;
+  double integral = adaptive_ki * integral_error_;
+  double derivative = adaptive_kd * velocity_estimate_;
+  double disturbance_compensation = 0.3 * disturbance_estimate_; // 外乱補償
+  
+  double total_correction = proportional + integral + derivative + disturbance_compensation;
+  
+  // 9. 出力制限とスルーレート制限
+  total_correction = std::clamp(total_correction, -max_angular_correction_, max_angular_correction_);
+  
+  // 制御履歴の更新（安定性評価用）
+  control_effort_history_[control_history_index_] = total_correction;
+  control_history_index_ = (control_history_index_ + 1) % 5;
+  
+  // 10. 高品質デバッグ情報
   static int debug_counter = 0;
   debug_counter++;
-  if (std::abs(angle_error) > 0.01 && debug_counter % 50 == 0) {  // 0.6度以上の誤差で50回に1回ログ
+  if (std::abs(filtered_error) > 0.02 && debug_counter % 25 == 0) {
+    double avg_control_effort = 0.0;
+    for (int i = 0; i < 5; i++) avg_control_effort += control_effort_history_[i];
+    avg_control_effort /= 5.0;
+    
     RCLCPP_INFO(this->get_logger(), 
-                "PID_DETAIL: err=%.4f°, P=%.4f, I=%.4f, D=%.4f, VelDamp=%.4f, Total=%.4f",
-                angle_error * 180.0 / M_PI, 
-                adaptive_kp * angle_error,
-                adaptive_ki * integral_error_,
-                adaptive_kd * derivative,
-                velocity_damping,
-                total_correction);
+                "Advanced PID: err=%.3f°(raw=%.3f°), P=%.3f, I=%.3f, D=%.3f, Dist=%.3f, Out=%.3f, Avg=%.3f",
+                filtered_error * 180.0 / M_PI, angle_error * 180.0 / M_PI,
+                proportional, integral, derivative, disturbance_compensation, 
+                total_correction, avg_control_effort);
   }
+  
+  prev_yaw_error_ = angle_error;
+  return total_correction;
+}
 
-  // 出力制限
-  return std::clamp(total_correction, -max_angular_correction_, max_angular_correction_);
+void JoyDriverNode::ekf_odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
+  // EKFフィルタ済みの高精度姿勢データを取得
+  ekf_x_ = msg->pose.pose.position.x;
+  ekf_y_ = msg->pose.pose.position.y;
+  
+  // Quaternionからyaw角を計算
+  auto quat = msg->pose.pose.orientation;
+  double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
+  double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
+  double raw_ekf_yaw = std::atan2(siny_cosp, cosy_cosp);
+  
+  // EKFのyaw値に安定化フィルタを適用
+  static double filtered_ekf_yaw = 0.0;
+  static bool ekf_yaw_initialized = false;
+  
+  if (!ekf_yaw_initialized) {
+    filtered_ekf_yaw = raw_ekf_yaw;
+    ekf_yaw_initialized = true;
+  } else {
+    // 急激な変化を抑制するフィルタ
+    double yaw_diff = normalizeAngle(raw_ekf_yaw - filtered_ekf_yaw);
+    
+    // 大きな変化（90度以上）は段階的に適用
+    if (std::abs(yaw_diff) > M_PI / 2) {
+      yaw_diff = std::copysign(M_PI / 2, yaw_diff) * 0.1; // 10%ずつ適用
+    }
+    
+    filtered_ekf_yaw = normalizeAngle(filtered_ekf_yaw + 0.3 * yaw_diff);
+  }
+  
+  ekf_yaw_ = filtered_ekf_yaw;
+  
+  // EKFからの角速度（フィルタ適用）
+  double raw_angular_vel = msg->twist.twist.angular.z;
+  static double filtered_angular_vel = 0.0;
+  filtered_angular_vel = 0.7 * raw_angular_vel + 0.3 * filtered_angular_vel;
+  ekf_angular_velocity_z_ = filtered_angular_vel;
+  
+  ekf_data_received_ = true;
+  
+  // デバッグ出力（間欠的）
+  static auto last_debug = std::chrono::steady_clock::now();
+  auto now = std::chrono::steady_clock::now();
+  if (std::chrono::duration<double>(now - last_debug).count() > 2.0) {
+    RCLCPP_INFO(this->get_logger(),
+                "EKF FILTERED: pos(%.2f,%.2f) raw_yaw=%.1f° filtered_yaw=%.1f° angular_vel_z=%.3f rad/s",
+                ekf_x_, ekf_y_, raw_ekf_yaw * 180.0 / M_PI, ekf_yaw_ * 180.0 / M_PI, ekf_angular_velocity_z_);
+    last_debug = now;
+  }
+}
+
+// === ベストプラクティス：高度なPID制御補助関数 ===
+
+void JoyDriverNode::resetPIDState(const std::string& reason) {
+  // インテリジェントなPIDリセット（段階的リセット）
+  RCLCPP_INFO(this->get_logger(), "PID Reset triggered: %s", reason.c_str());
+  
+  // 積分項の段階的リセット（急激な変化を避ける）
+  for (int i = 0; i < 10; i++) {
+    integral_error_ *= 0.8;
+    if (std::abs(integral_error_) < 0.001) break;
+  }
+  
+  // その他の状態変数をリセット
+  prev_yaw_error_ = 0.0;
+  last_filtered_error_ = 0.0;
+  disturbance_estimate_ *= 0.5; // 外乱推定は部分的に保持
+  velocity_estimate_ = 0.0;
+  acceleration_estimate_ = 0.0;
+  
+  // 制御履歴をクリア
+  for (int i = 0; i < 5; i++) {
+    control_effort_history_[i] = 0.0;
+  }
+  control_history_index_ = 0;
+  
+  // 適応デッドバンドをリセット
+  adaptive_deadband_ = deadband_;
+  
+  RCLCPP_INFO(this->get_logger(), "PID State reset completed");
+}
+
+void JoyDriverNode::updateTargetOrientation() {
+  // スマートな目標角度更新（現在の角度にロック）
+  double old_target = init_yaw_;
+  init_yaw_ = yaw_;
+  
+  // 目標変更の妥当性チェック
+  double angle_change = std::abs(normalizeAngle(init_yaw_ - old_target));
+  if (angle_change > M_PI / 6) { // 30度以上の変化は警告
+    RCLCPP_WARN(this->get_logger(), 
+                "Large target orientation change: %.1f° -> %.1f° (Δ=%.1f°)",
+                old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI, 
+                angle_change * 180.0 / M_PI);
+  } else {
+    RCLCPP_INFO(this->get_logger(), 
+                "Target orientation updated: %.1f° -> %.1f°",
+                old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI);
+  }
+}
+
+bool JoyDriverNode::isSystemStable() const {
+  // 制御システムの安定性評価
+  double avg_control_effort = 0.0;
+  double control_variance = 0.0;
+  
+  // 制御履歴の統計解析
+  for (int i = 0; i < 5; i++) {
+    avg_control_effort += control_effort_history_[i];
+  }
+  avg_control_effort /= 5.0;
+  
+  for (int i = 0; i < 5; i++) {
+    double diff = control_effort_history_[i] - avg_control_effort;
+    control_variance += diff * diff;
+  }
+  control_variance /= 4.0;
+  
+  // 安定性判定基準
+  bool effort_stable = std::abs(avg_control_effort) < 0.3;
+  bool variance_low = control_variance < 0.1;
+  bool error_small = std::abs(last_filtered_error_) < 0.05; // 約3度
+  
+  return effort_stable && variance_low && error_small;
 }

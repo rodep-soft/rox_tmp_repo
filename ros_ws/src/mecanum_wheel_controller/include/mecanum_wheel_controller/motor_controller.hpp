@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -28,6 +29,10 @@ class MotorController {
                                          bool brake = false);
   void send_velocity_commands_parallel(const std::vector<std::pair<uint8_t, int16_t>>& commands,
                                        bool brake = false);
+
+  // Feedback functions  
+  int16_t get_motor_rpm_feedback(uint8_t motor_id) const;
+  bool has_recent_feedback(uint8_t motor_id, int max_age_ms = 100) const;
 
   // Helper functions
   void clear_serial_buffer();
@@ -52,4 +57,8 @@ class MotorController {
 
   std::chrono::steady_clock::time_point feedback_received_time_;
   std::atomic<uint8_t> last_motor_id_{0};
+  
+  // RPM feedback storage (motor_id -> {rpm, timestamp})
+  std::array<std::pair<int16_t, std::chrono::steady_clock::time_point>, 5> motor_feedback_; // Index 0 unused, 1-4 for motors
+  mutable std::mutex feedback_mutex_;
 };
