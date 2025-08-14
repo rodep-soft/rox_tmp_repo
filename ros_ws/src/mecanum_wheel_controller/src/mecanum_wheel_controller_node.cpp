@@ -191,14 +191,24 @@ void MecanumWheelControllerNode::publish_wheel_odometry(double vx, double vy, do
   double actual_vx, actual_vy, actual_wz;
   
   if (has_valid_feedback) {
-    // RPMを角速度に変換（符号と補正を考慮）
+    // RPMを角速度に変換（forward kinematicsと同じ符号処理を適用）
     const double rpm_to_rad = 2.0 * M_PI / 60.0;
-    double wheel_fl_vel = rpm_fl * rpm_to_rad / motor_correction_fl_;
-    double wheel_fr_vel = -rpm_fr * rpm_to_rad / motor_correction_fr_;  // 右側は逆回転
-    double wheel_rl_vel = rpm_rl * rpm_to_rad / motor_correction_rl_;
-    double wheel_rr_vel = -rpm_rr * rpm_to_rad / motor_correction_rr_;  // 右側は逆回転
     
-    // メカナムホイール逆運動学でロボット速度を計算
+    // Forward kinematicsで使用している符号処理と同じにする
+    // 右側モーターは-1を掛けて送信しているので、フィードバックでも逆変換
+    double rpm_fl_corrected = rpm_fl / motor_correction_fl_;
+    double rpm_fr_corrected = -rpm_fr / motor_correction_fr_;  // 右側は符号を戻す
+    double rpm_rl_corrected = rpm_rl / motor_correction_rl_; 
+    double rpm_rr_corrected = -rpm_rr / motor_correction_rr_;  // 右側は符号を戻す
+    
+    // RPMの絶対値が小さい場合は0とみなす（ノイズ除去）
+    const int16_t rpm_threshold = 5;
+    double wheel_fl_vel = (std::abs(rpm_fl_corrected) > rpm_threshold) ? rpm_fl_corrected * rpm_to_rad : 0.0;
+    double wheel_fr_vel = (std::abs(rpm_fr_corrected) > rpm_threshold) ? rpm_fr_corrected * rpm_to_rad : 0.0;
+    double wheel_rl_vel = (std::abs(rpm_rl_corrected) > rpm_threshold) ? rpm_rl_corrected * rpm_to_rad : 0.0;
+    double wheel_rr_vel = (std::abs(rpm_rr_corrected) > rpm_threshold) ? rpm_rr_corrected * rpm_to_rad : 0.0;
+    
+    // メカナムホイール逆運動学でロボット速度を計算（forward kinematicsと対応）
     const double lxy_sum = wheel_base_x_ + wheel_base_y_;
     actual_vx = wheel_radius_ * 0.25 * (wheel_fl_vel + wheel_fr_vel + wheel_rl_vel + wheel_rr_vel);
     actual_vy = wheel_radius_ * 0.25 * (-wheel_fl_vel + wheel_fr_vel + wheel_rl_vel - wheel_rr_vel);
@@ -271,11 +281,18 @@ void MecanumWheelControllerNode::publish_wheel_odometry(double vx, double vy, do
     int16_t rpm_rl = motor_controller_.get_motor_rpm_feedback(3);
     int16_t rpm_rr = motor_controller_.get_motor_rpm_feedback(4);
     
+    // 補正後の値も表示
+    double rpm_fl_corrected = rpm_fl / motor_correction_fl_;
+    double rpm_fr_corrected = -rpm_fr / motor_correction_fr_;
+    double rpm_rl_corrected = rpm_rl / motor_correction_rl_; 
+    double rpm_rr_corrected = -rpm_rr / motor_correction_rr_;
+    
     RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
                         "WHEEL ODOM: pos(%.2f,%.2f,%.1f°) cmd_vel(%.2f,%.2f,%.2f) actual_vel(%.2f,%.2f,%.2f) "
-                        "rpm_fb(%d,%d,%d,%d) valid_fb=%s dt=%.3f",
+                        "rpm_raw(%d,%d,%d,%d) rpm_corrected(%.0f,%.0f,%.0f,%.0f) valid_fb=%s dt=%.3f",
                         x_, y_, theta_ * 180.0 / M_PI, vx, vy, wz, actual_vx, actual_vy, actual_wz,
-                        rpm_fl, rpm_fr, rpm_rl, rpm_rr, has_valid_feedback ? "YES" : "NO", dt);
+                        rpm_fl, rpm_fr, rpm_rl, rpm_rr, rpm_fl_corrected, rpm_fr_corrected, 
+                        rpm_rl_corrected, rpm_rr_corrected, has_valid_feedback ? "YES" : "NO", dt);
     last_debug = current_time;
   }
 }
