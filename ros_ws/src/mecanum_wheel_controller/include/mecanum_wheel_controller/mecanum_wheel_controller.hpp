@@ -30,7 +30,9 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
   void timer_send_velocity_callback();
   void stop_all_motors();
-  void publish_wheel_odometry(double vx, double vy, double wz);
+  void publish_wheel_odometry(double vx, double vy, double wz, 
+                              int16_t rpm_sent_fl, int16_t rpm_sent_fr, 
+                              int16_t rpm_sent_rl, int16_t rpm_sent_rr);
   void calculate_robot_velocity_from_feedback(double& vx, double& vy, double& wz);
 
   // ROS2 components

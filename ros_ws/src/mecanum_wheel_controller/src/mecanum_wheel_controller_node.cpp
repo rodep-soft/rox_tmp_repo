@@ -167,11 +167,13 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
 
   motor_controller_.send_velocity_commands_sequential(commands, static_cast<bool>(brake_));
   
-  // Publish wheel odometry based on commanded velocities
-  publish_wheel_odometry(vx, vy, wz);
+  // Publish wheel odometry based on actually sent RPM values
+  publish_wheel_odometry(vx, vy, wz, rpm_front_left, rpm_front_right, rpm_rear_left, rpm_rear_right);
 }
 
-void MecanumWheelControllerNode::publish_wheel_odometry(double vx, double vy, double wz) {
+void MecanumWheelControllerNode::publish_wheel_odometry(double vx, double vy, double wz, 
+                                                        int16_t rpm_sent_fl, int16_t rpm_sent_fr, 
+                                                        int16_t rpm_sent_rl, int16_t rpm_sent_rr) {
   auto current_time = std::chrono::steady_clock::now();
   double dt = std::chrono::duration<double>(current_time - last_odom_time_).count();
   last_odom_time_ = current_time;
@@ -276,23 +278,30 @@ void MecanumWheelControllerNode::publish_wheel_odometry(double vx, double vy, do
   // Debug output every 2 seconds
   static auto last_debug = std::chrono::steady_clock::now();
   if (std::chrono::duration<double>(current_time - last_debug).count() > 2.0) {
-    int16_t rpm_fl = motor_controller_.get_motor_rpm_feedback(1);
-    int16_t rpm_fr = motor_controller_.get_motor_rpm_feedback(2);
-    int16_t rpm_rl = motor_controller_.get_motor_rpm_feedback(3);
-    int16_t rpm_rr = motor_controller_.get_motor_rpm_feedback(4);
+    int16_t rpm_fl_fb = motor_controller_.get_motor_rpm_feedback(1);
+    int16_t rpm_fr_fb = motor_controller_.get_motor_rpm_feedback(2);
+    int16_t rpm_rl_fb = motor_controller_.get_motor_rpm_feedback(3);
+    int16_t rpm_rr_fb = motor_controller_.get_motor_rpm_feedback(4);
     
-    // 補正後の値も表示
-    double rpm_fl_corrected = rpm_fl / motor_correction_fl_;
-    double rpm_fr_corrected = -rpm_fr / motor_correction_fr_;
-    double rpm_rl_corrected = rpm_rl / motor_correction_rl_; 
-    double rpm_rr_corrected = -rpm_rr / motor_correction_rr_;
+    // コマンド速度との差分を計算
+    double vx_diff = actual_vx - vx;
+    double vy_diff = actual_vy - vy;
+    double wz_diff = actual_wz - wz;
     
     RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                        "WHEEL ODOM: pos(%.2f,%.2f,%.1f°) cmd_vel(%.2f,%.2f,%.2f) actual_vel(%.2f,%.2f,%.2f) "
-                        "rpm_raw(%d,%d,%d,%d) rpm_corrected(%.0f,%.0f,%.0f,%.0f) valid_fb=%s dt=%.3f",
-                        x_, y_, theta_ * 180.0 / M_PI, vx, vy, wz, actual_vx, actual_vy, actual_wz,
-                        rpm_fl, rpm_fr, rpm_rl, rpm_rr, rpm_fl_corrected, rpm_fr_corrected, 
-                        rpm_rl_corrected, rpm_rr_corrected, has_valid_feedback ? "YES" : "NO", dt);
+                        "ODOM VALIDATION: pos(%.2f,%.2f,%.1f°) dt=%.3f\n"
+                        "  CMD: vx=%.3f vy=%.3f wz=%.3f\n"
+                        "  ODOM: vx=%.3f vy=%.3f wz=%.3f\n" 
+                        "  DIFF: vx=%.3f vy=%.3f wz=%.3f\n"
+                        "  RPM_SENT: FL=%d FR=%d RL=%d RR=%d\n"
+                        "  RPM_FEEDBACK: FL=%d FR=%d RL=%d RR=%d valid=%s",
+                        x_, y_, theta_ * 180.0 / M_PI, dt,
+                        vx, vy, wz,
+                        actual_vx, actual_vy, actual_wz, 
+                        vx_diff, vy_diff, wz_diff,
+                        rpm_sent_fl, rpm_sent_fr, rpm_sent_rl, rpm_sent_rr,
+                        rpm_fl_fb, rpm_fr_fb, rpm_rl_fb, rpm_rr_fb,
+                        has_valid_feedback ? "YES" : "NO");
     last_debug = current_time;
   }
 }
