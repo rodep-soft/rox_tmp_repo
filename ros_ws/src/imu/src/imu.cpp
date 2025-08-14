@@ -66,6 +66,10 @@ class IMUNode : public rclcpp::Node {
     // --- ここからImuメッセージ ---
 
     auto imu_accel_and_gyro_msg = sensor_msgs::msg::Imu();
+    
+    // Set header with current timestamp
+    imu_accel_and_gyro_msg.header.stamp = this->now();
+    imu_accel_and_gyro_msg.header.frame_id = "imu_link";
 
     Quaternion quat = imu_sensor_.getQuat();
 
@@ -136,6 +140,10 @@ class IMUNode : public rclcpp::Node {
 
   void timer_mag_callback() {
     auto mag_msg = sensor_msgs::msg::MagneticField();
+    
+    // Set header with current timestamp
+    mag_msg.header.stamp = this->now();
+    mag_msg.header.frame_id = "imu_link";
 
     Vector<3> mag = imu_sensor_.getVector(VECTOR_MAGNETOMETER);
 
