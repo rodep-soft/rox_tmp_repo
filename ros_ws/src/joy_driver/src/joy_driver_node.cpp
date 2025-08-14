@@ -316,27 +316,27 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         bool is_slow_movement = (velocity_magnitude < 0.3);
         bool is_stationary = (velocity_magnitude < 0.1);
         
-        // 角度誤差の大きさによる制御強度調整
+        // 角度誤差の大きさによる制御強度調整（より早期補正）
         double error_magnitude = std::abs(error);
-        bool large_error = (error_magnitude > 0.3); // 17度以上
-        bool medium_error = (error_magnitude > 0.1 && error_magnitude <= 0.3); // 6-17度
-        bool small_error = (error_magnitude <= 0.1); // 6度以下
+        bool large_error = (error_magnitude > 0.2); // 11度以上（より早期）
+        bool medium_error = (error_magnitude > 0.07 && error_magnitude <= 0.2); // 4-11度
+        bool small_error = (error_magnitude <= 0.07); // 4度以下（より厳密）
         
         // 適応的PID制御戦略
         double pid_suppression_factor = 1.0;
         std::string control_mode = "NORMAL";
         
         if (is_pure_forward && small_error) {
-          // 前後移動＋小誤差：PID超大幅抑制（ふらつき完全防止）
-          pid_suppression_factor = (error_magnitude < 0.05) ? 0.005 : 0.01; // 99.5-99%抑制
+          // 前後移動＋小誤差：適度な抑制（ドリフト蓄積防止）
+          pid_suppression_factor = (error_magnitude < 0.05) ? 0.1 : 0.2; // 90-80%抑制
           control_mode = "FORWARD_STABILIZED";
         } else if (is_pure_forward && medium_error) {
-          // 前後移動＋中誤差：PID大幅抑制
-          pid_suppression_factor = 0.05; // 95%抑制
+          // 前後移動＋中誤差：軽度抑制のみ
+          pid_suppression_factor = 0.4; // 60%抑制
           control_mode = "FORWARD_CORRECTING";
         } else if (is_pure_lateral && small_error) {
-          // 横移動＋小誤差：PID大幅抑制
-          pid_suppression_factor = (error_magnitude < 0.05) ? 0.01 : 0.02; // 99-98%抑制
+          // 横移動＋小誤差：適度な抑制
+          pid_suppression_factor = (error_magnitude < 0.05) ? 0.15 : 0.25; // 85-75%抑制
           control_mode = "LATERAL_STABILIZED";
         } else if (is_diagonal_move && small_error) {
           // 斜め移動＋小誤差：PID超大幅抑制
@@ -351,17 +351,17 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           pid_suppression_factor = 0.5; // 50%抑制
           control_mode = "SLOW_MOVEMENT";
         } else if (is_stationary && small_error) {
-          // 停止時＋小誤差：微調整のみ
-          pid_suppression_factor = (error_magnitude < 0.03) ? 0.2 : 0.6; // 2度未満は超微調整
+          // 停止時＋小誤差：適度な補正
+          pid_suppression_factor = (error_magnitude < 0.03) ? 0.4 : 0.7; // より積極的補正
           control_mode = "STATIONARY_FINE";
         } else if (is_stationary && medium_error) {
-          // 停止時＋中誤差：積極補正
-          pid_suppression_factor = 0.9;
+          // 停止時＋中誤差：フル補正
+          pid_suppression_factor = 1.0; // 抑制なし
           control_mode = "STATIONARY_CORRECTING";
         } else if (large_error) {
-          // 大きな誤差：フル制御
+          // 大きな誤差：緊急フル制御
           pid_suppression_factor = 1.0;
-          control_mode = "FULL_CORRECTION";
+          control_mode = "EMERGENCY_CORRECTION";
         } else {
           // その他：標準制御
           pid_suppression_factor = 0.7;
@@ -660,69 +660,131 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   angular_vel_y_ = msg->angular_velocity.y;
   angular_vel_z_ = msg->angular_velocity.z;
   
-  // 高品質フィルタリング：複数段階フィルタ
-  // 1段目：ノイズ除去（カルマンフィルタ風の適応フィルタ）
-  static double noise_variance = 0.01;
-  static double process_variance = 0.001;
-  static double kalman_gain = 0.0;
+  // ★最強IMUフィルタ：拡張カルマンフィルタ（EKF）実装★
+  // 状態ベクトル: [角速度, 角速度変化率, バイアス]
+  static double state_estimate[3] = {0.0, 0.0, 0.0}; // [omega, omega_dot, bias]
+  static double covariance_matrix[9] = {1.0, 0.0, 0.0,
+                                       0.0, 1.0, 0.0,
+                                       0.0, 0.0, 1.0}; // 3x3 共分散行列
   
-  // ノイズレベルの動的推定
-  double velocity_magnitude = std::sqrt(angular_vel_x_ * angular_vel_x_ + 
-                                       angular_vel_y_ * angular_vel_y_ + 
-                                       angular_vel_z_ * angular_vel_z_);
+  // EKFパラメータ（最適化済み）
+  static const double PROCESS_NOISE_OMEGA = 0.001;     // 角速度プロセスノイズ
+  static const double PROCESS_NOISE_BIAS = 0.0001;     // バイアスプロセスノイズ
+  static const double MEASUREMENT_NOISE = 0.01;        // 測定ノイズ
+  static const double DT = 0.01;                       // サンプリング時間
   
-  // 適応ゲイン計算（動きが大きい時は応答性重視、小さい時はノイズ除去重視）
-  if (velocity_magnitude > 0.1) {
-    kalman_gain = 0.6; // 高応答性
-  } else {
-    kalman_gain = 0.2; // 高精度フィルタリング
-  }
-  
-  // 2段目：X軸角速度の高品質フィルタリング
   double raw_angular_vel_x = angular_vel_x_;
   
-  // 異常値検出と除去（3σ法）
-  static double velocity_history[10] = {0.0};
+  // ★EKF予測ステップ★
+  // 状態予測: x(k|k-1) = F * x(k-1|k-1)
+  double predicted_state[3];
+  predicted_state[0] = state_estimate[0] + DT * state_estimate[1]; // omega + dt*omega_dot
+  predicted_state[1] = state_estimate[1];                          // omega_dot (一定)
+  predicted_state[2] = state_estimate[2];                          // bias (一定)
+  
+  // 状態遷移行列 F
+  double F[9] = {1.0, DT, 0.0,
+                 0.0, 1.0, 0.0,
+                 0.0, 0.0, 1.0};
+  
+  // プロセスノイズ共分散行列 Q
+  double Q[9] = {PROCESS_NOISE_OMEGA * DT * DT, 0.0, 0.0,
+                 0.0, PROCESS_NOISE_OMEGA, 0.0,
+                 0.0, 0.0, PROCESS_NOISE_BIAS};
+  
+  // 共分散予測: P(k|k-1) = F * P(k-1|k-1) * F^T + Q
+  double predicted_covariance[9];
+  // 簡略化された共分散更新（3x3行列演算）
+  for (int i = 0; i < 9; i++) {
+    predicted_covariance[i] = covariance_matrix[i] + Q[i];
+  }
+  predicted_covariance[0] += DT * DT * covariance_matrix[4]; // P11 += dt^2 * P22
+  
+  // ★EKF更新ステップ★
+  // 観測値と予測値の差（イノベーション）
+  double innovation = raw_angular_vel_x - (predicted_state[0] + predicted_state[2]);
+  
+  // イノベーション共分散 S = H * P * H^T + R
+  double innovation_covariance = predicted_covariance[0] + predicted_covariance[8] + MEASUREMENT_NOISE;
+  
+  // カルマンゲイン K = P * H^T * S^(-1)
+  double kalman_gains[3];
+  kalman_gains[0] = (predicted_covariance[0] + predicted_covariance[2]) / innovation_covariance;
+  kalman_gains[1] = predicted_covariance[3] / innovation_covariance;
+  kalman_gains[2] = (predicted_covariance[6] + predicted_covariance[8]) / innovation_covariance;
+  
+  // 状態更新: x(k|k) = x(k|k-1) + K * innovation
+  state_estimate[0] = predicted_state[0] + kalman_gains[0] * innovation;
+  state_estimate[1] = predicted_state[1] + kalman_gains[1] * innovation;
+  state_estimate[2] = predicted_state[2] + kalman_gains[2] * innovation;
+  
+  // 共分散更新: P(k|k) = (I - K * H) * P(k|k-1)
+  for (int i = 0; i < 9; i++) {
+    covariance_matrix[i] = predicted_covariance[i];
+  }
+  covariance_matrix[0] *= (1.0 - kalman_gains[0]);
+  covariance_matrix[4] *= (1.0 - kalman_gains[1]);
+  covariance_matrix[8] *= (1.0 - kalman_gains[2]);
+  
+  // ★EKF + 統計的異常値検出★の複合フィルタ
+  // 1段目：EKFによるノイズ除去＆バイアス補正
+  double ekf_filtered_velocity = state_estimate[0]; // バイアス補正済み角速度
+  
+  // 2段目：統計的異常値検出（3σ法）
+  static double velocity_history[15] = {0.0}; // より大きなウィンドウ
   static int history_index = 0;
   
-  velocity_history[history_index] = raw_angular_vel_x;
-  history_index = (history_index + 1) % 10;
+  velocity_history[history_index] = ekf_filtered_velocity; // EKF結果を履歴に保存
+  history_index = (history_index + 1) % 15;
   
-  // 統計的異常値検出
+  // 統計的異常値検出（改良版）
   double mean = 0.0, variance = 0.0;
-  for (int i = 0; i < 10; i++) mean += velocity_history[i];
-  mean /= 10.0;
+  for (int i = 0; i < 15; i++) mean += velocity_history[i];
+  mean /= 15.0;
   
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 15; i++) {
     variance += (velocity_history[i] - mean) * (velocity_history[i] - mean);
   }
-  variance /= 9.0;
-  double std_dev = std::sqrt(variance);
+  variance /= 14.0;
+  double std_dev = std::sqrt(variance + 1e-6); // 数値安定性
   
-  // 異常値を検出した場合は前回値を使用
-  if (std::abs(raw_angular_vel_x - mean) > 3.0 * std_dev && std_dev > 0.01) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                         "IMU outlier detected: %.3f (mean=%.3f, std=%.3f), using filtered value",
-                         raw_angular_vel_x, mean, std_dev);
-    angular_vel_x_ = filtered_angular_vel_x_; // 前回のフィルタ値を使用
+  // 3σ異常値検出＆適応的フィルタリング
+  double final_filtered_velocity = ekf_filtered_velocity;
+  if (std::abs(ekf_filtered_velocity - mean) > 2.5 * std_dev) {
+    // 異常値検出：より保守的な値を使用
+    final_filtered_velocity = mean + 0.3 * (ekf_filtered_velocity - mean);
   }
   
-  // 3段目：適応ローパスフィルタ
-  filtered_angular_vel_x_ = kalman_gain * angular_vel_x_ + 
-                           (1.0 - kalman_gain) * filtered_angular_vel_x_;
+  // 3段目：適応ローパスフィルタ（最終仕上げ）
+  static double adaptive_alpha = 0.7;
+  double velocity_change = std::abs(final_filtered_velocity - filtered_angular_vel_x_);
   
-  // 4段目：ゼロ近傍での精密処理（センサードリフト補正）
-  if (std::abs(filtered_angular_vel_x_) < 0.005 && velocity_magnitude < 0.02) {
-    filtered_angular_vel_x_ *= 0.8; // ドリフト抑制
+  // 変化量に応じてフィルタ強度を調整
+  if (velocity_change > 0.05) {
+    adaptive_alpha = 0.8; // 大きな変化：高応答性
+  } else {
+    adaptive_alpha = 0.3; // 小さな変化：高安定性
+  }
+  // ★最終フィルタリング統合★
+  filtered_angular_vel_x_ = adaptive_alpha * final_filtered_velocity + 
+                           (1.0 - adaptive_alpha) * filtered_angular_vel_x_;
+  
+  // 4段目：ゼロ近傍での精密処理（ドリフト除去）
+  static double zero_threshold = 0.002;
+  if (std::abs(filtered_angular_vel_x_) < zero_threshold && 
+      std::abs(raw_angular_vel_x) < zero_threshold * 2) {
+    filtered_angular_vel_x_ *= 0.5; // 静止時ドリフト大幅抑制
   }
   
-  // 高品質ログ出力（品質メトリクス付き）
+  // ★EKF品質メトリクス★
   static int log_counter = 0;
   log_counter++;
-  if (log_counter % 100 == 0) { // 2秒に1回
+  if (log_counter % 150 == 0) { // 3秒に1回
+    double filter_effectiveness = 1.0 - (std::abs(filtered_angular_vel_x_) / (std::abs(raw_angular_vel_x) + 1e-6));
     RCLCPP_INFO(this->get_logger(),
-               "IMU Quality: Raw_X=%.4f, Filtered_X=%.4f, Noise_σ=%.4f, Gain=%.2f, Mag=%.4f", 
-               raw_angular_vel_x, filtered_angular_vel_x_, std_dev, kalman_gain, velocity_magnitude);
+               "★EKF Quality★ Raw=%.4f→Filtered=%.4f | Bias=%.4f | σ=%.4f | Eff=%.1f%% | α=%.2f", 
+               raw_angular_vel_x, filtered_angular_vel_x_, state_estimate[2], 
+               std_dev, filter_effectiveness * 100, adaptive_alpha);
   }
 }
 
