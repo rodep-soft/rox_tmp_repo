@@ -91,9 +91,41 @@ class IMUNode : public rclcpp::Node {
     imu_accel_and_gyro_msg.angular_velocity.y = gyro[1];  // BNO055のY軸  
     imu_accel_and_gyro_msg.angular_velocity.z = gyro[2];  // BNO055のZ軸
 
-    // IMU座標軸デバッグ: 大きな角速度を検出したときにログ出力
+    // === HARDWARE FAILURE DETECTION SYSTEM ===
     static int debug_counter = 0;
+    static int hardware_failure_counter = 0;
+    static bool z_axis_hardware_failure = false;
     debug_counter++;
+    
+    // Z軸ジャイロのハードウェア故障検出 (100 rad/s = 5730°/s以上は物理的に不可能)
+    if (std::abs(gyro[2]) > 100.0) {
+        hardware_failure_counter++;
+        if (hardware_failure_counter > 10) {  // 10回連続で異常値なら故障判定
+            if (!z_axis_hardware_failure) {
+                RCLCPP_ERROR(this->get_logger(),
+                           "HARDWARE FAILURE DETECTED: Z-axis gyroscope giving impossible values (%.1f rad/s = %.0f°/s)",
+                           gyro[2], gyro[2] * 180.0 / M_PI);
+                RCLCPP_ERROR(this->get_logger(),
+                           "SWITCHING TO AXIS FALLBACK: Will force Z-axis to 0.0 and rely on X/Y axes");
+                z_axis_hardware_failure = true;
+            }
+        }
+    } else {
+        hardware_failure_counter = 0;  // 正常値でカウンターリセット
+    }
+    
+    // ハードウェア故障時はZ軸を強制的に0にする
+    if (z_axis_hardware_failure) {
+        imu_accel_and_gyro_msg.angular_velocity.z = 0.0;  // 故障軸を0に上書き
+        // 静的カウンターで定期的に警告
+        static int failure_warning_counter = 0;
+        failure_warning_counter++;
+        if (failure_warning_counter % 500 == 0) {  // 5秒ごと
+            RCLCPP_WARN(this->get_logger(),
+                       "Z-AXIS HARDWARE FAILURE: Raw=%.1f°/s, Publishing=0.0°/s (FORCED)",
+                       gyro[2] * 180.0 / M_PI);
+        }
+    }
     
     double max_angular_vel = std::max({std::abs(gyro[0]), std::abs(gyro[1]), std::abs(gyro[2])});
     

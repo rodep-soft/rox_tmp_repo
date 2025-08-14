@@ -17,7 +17,7 @@ JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
   //     std::bind(&JoyDriverNode::rpy_callback, this, std::placeholders::_1));
 
   imu_subscription_ = this->create_subscription<sensor_msgs::msg::Imu>(
-      "/imu/filtered", best_effort_qos,
+      "/imu/data", best_effort_qos,  // Madgwickフィルターの出力を直接受信
       std::bind(&JoyDriverNode::imu_callback, this, std::placeholders::_1));
 
   // Create publisher for the /cmd_vel topic
@@ -701,17 +701,85 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
                filtered_x, filtered_y, filtered_z);
   }
   
-  // IMU座標軸確認用ログ（どの軸が正しいかデバッグ）
+  // === INTELLIGENT AXIS SELECTION SYSTEM ===
+  static bool axis_auto_detection_done = false;
+  static int axis_selection = 2; // 0=X, 1=Y, 2=Z (default Z)
+  static int z_axis_failure_count = 0;
+  static int total_sample_count = 0;
+  
+  total_sample_count++;
+  
+  // Z軸ハードウェア故障検出（自動フォールバック）
+  if (std::abs(filtered_z) > 30.0) {  // 30 rad/s = 1719°/s 以上は異常
+    z_axis_failure_count++;
+  }
+  
+  // 100サンプル中50%以上がZ軸異常なら自動的に別軸に切り替え
+  if (total_sample_count >= 100 && !axis_auto_detection_done) {
+    double z_failure_rate = (double)z_axis_failure_count / total_sample_count;
+    
+    if (z_failure_rate > 0.5) {
+      RCLCPP_ERROR(this->get_logger(),
+                  "Z-AXIS HARDWARE FAILURE CONFIRMED: %.1f%% abnormal readings (>30 rad/s)",
+                  z_failure_rate * 100.0);
+      
+      // X軸とY軸の値を比較して、より適切な軸を選択
+      double avg_x = std::abs(filtered_x);
+      double avg_y = std::abs(filtered_y);
+      
+      if (avg_x > avg_y && avg_x < 10.0) {
+        axis_selection = 0; // X軸を選択
+        RCLCPP_ERROR(this->get_logger(),
+                    "AUTO-SWITCHING TO X-AXIS: X=%.2f rad/s appears more responsive than Y=%.2f rad/s",
+                    filtered_x, filtered_y);
+      } else if (avg_y < 10.0) {
+        axis_selection = 1; // Y軸を選択  
+        RCLCPP_ERROR(this->get_logger(),
+                    "AUTO-SWITCHING TO Y-AXIS: Y=%.2f rad/s appears more suitable than X=%.2f rad/s",
+                    filtered_y, filtered_x);
+      } else {
+        RCLCPP_ERROR(this->get_logger(),
+                    "ALL AXES SHOWING ABNORMAL VALUES - USING Z-AXIS WITH HEAVY FILTERING");
+        axis_selection = 2; // フィルタリング済みZ軸を継続使用
+      }
+    } else {
+      RCLCPP_INFO(this->get_logger(),
+                 "Z-AXIS APPEARS HEALTHY: %.1f%% normal readings - continuing with Z-axis",
+                 (1.0 - z_failure_rate) * 100.0);
+      axis_selection = 2;
+    }
+    axis_auto_detection_done = true;
+  }
+  
+  // 選択された軸を使用
+  double vertical_rotation_axis;
+  std::string axis_name;
+  
+  switch (axis_selection) {
+    case 0:
+      vertical_rotation_axis = filtered_x;
+      axis_name = "X-AXIS";
+      break;
+    case 1:
+      vertical_rotation_axis = filtered_y;
+      axis_name = "Y-AXIS";
+      break;
+    default:
+      vertical_rotation_axis = filtered_z;
+      axis_name = "Z-AXIS";
+      break;
+  }
+  
+  // 軸選択の状況を表示
+  if (max_angular_vel > 0.5) {
+    RCLCPP_WARN(this->get_logger(),
+               "ROTATION DETECTED! X=%.2f, Y=%.2f, Z=%.2f rad/s | Using %s (%.2f)",
+               filtered_x, filtered_y, filtered_z, axis_name.c_str(), vertical_rotation_axis);
+  }
+  
+  // 定期的デバッグ情報表示
   static int debug_counter = 0;
   debug_counter++;
-  
-  double max_angular_vel = std::max({std::abs(filtered_x), std::abs(filtered_y), std::abs(filtered_z)});
-  
-  if (max_angular_vel > 0.5) {  // 0.5 rad/s = 約29°/s以上
-    RCLCPP_WARN(this->get_logger(),
-               "ROTATION DETECTED! X=%.2f, Y=%.2f, Z=%.2f rad/s | Using Z-axis (%.2f)",
-               filtered_x, filtered_y, filtered_z, filtered_z);
-  }
   
   if (debug_counter % 1000 == 0) {  // 10秒に1回
     RCLCPP_WARN(this->get_logger(),
@@ -721,32 +789,11 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
                filtered_y * 180.0 / M_PI,
                filtered_z * 180.0 / M_PI);
     RCLCPP_WARN(this->get_logger(),
-               "AXIS MAPPING: angular_velocity.x=BNO055_X, .y=BNO055_Y, .z=BNO055_Z");
+               "ACTIVE AXIS: %s (%.3f rad/s = %.1f°/s)",
+               axis_name.c_str(), vertical_rotation_axis, vertical_rotation_axis * 180.0 / M_PI);
     RCLCPP_WARN(this->get_logger(),
-               "ROTATION TEST: Manually rotate robot clockwise to verify correct axis");
+               "AXIS MAPPING: angular_velocity.x=BNO055_X, .y=BNO055_Y, .z=BNO055_Z");
   }
-  
-  // ===== 座標軸選択 (BNO055物理配置に依存) =====
-  // 配列インデックスと軸の対応: [0]=X, [1]=Y, [2]=Z （実装で確認済み）
-  // 
-  // IMUの加速度データから垂直軸を推定してヨー軸を決定
-  // 理論上、水平設置なら重力ベクトル（~9.8m/s²）が垂直軸に現れる
-  
-  // 各軸の加速度から垂直軸候補を特定
-  // （注意：Madgwickフィルタ後は重力補正されている可能性）
-  
-  // 一般的なIMU配置:
-  // - Z軸: 垂直方向（重力と平行）→ ヨー回転（水平面内の回転）
-  // - X軸: 前後方向 → ピッチ回転
-  // - Y軸: 左右方向 → ロール回転
-  //
-  // しかしBNO055の取り付け方向により実際の軸は変わる可能性あり
-  
-  // 使用する軸を選択（実機テストに基づいて1つを選択）
-  // 過去の実機テストでX軸が有効だったため、まずはZ軸を標準として試す
-  double vertical_rotation_axis = filtered_z;   // Z軸テスト（標準的配置） - フィルタリング済み値を使用
-  // double vertical_rotation_axis = -filtered_x;  // X軸（過去の実績）
-  // double vertical_rotation_axis = -filtered_y;  // Y軸テスト用
   
   filtered_angular_vel_x_ = vertical_rotation_axis;
   
@@ -764,8 +811,8 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   // ログ（簡素化）
   if (debug_counter % 500 == 0) {  // 5秒間隔
     RCLCPP_INFO(this->get_logger(),
-               "IMU: yaw=%.1f° (vel_x=%.3f°/s) - Using X-axis",
-               yaw_ * 180.0 / M_PI, filtered_angular_vel_x_ * 180.0 / M_PI);
+               "IMU: yaw=%.1f° (vel=%.3f°/s) - Using %s",
+               yaw_ * 180.0 / M_PI, filtered_angular_vel_x_ * 180.0 / M_PI, axis_name.c_str());
   }
 }
 

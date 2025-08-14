@@ -30,8 +30,7 @@ def generate_launch_description():
                 'bias_alpha': 0.1
             }],
             remappings=[
-                ('imu/data_raw', '/imu/data'),
-                ('imu/data', '/imu/filtered')
+                ('imu/data_raw', '/imu/data')  # IMUの生データをMadgwickに入力
             ]
         ),
 
