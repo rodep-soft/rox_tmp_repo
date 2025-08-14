@@ -26,8 +26,12 @@ RUN apt-get update && apt-get upgrade -y && \
     ros-humble-demo-nodes-cpp \
     ros-humble-foxglove-bridge \
     libgpiod-dev \
+    qtbase5-dev \
+    qtdeclarative5-dev \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
+
+#sudo apt install qtbase5-dev qtdeclarative5-dev
 
 # --- Initialize rosdep ---
 #RUN rosdep init && \
