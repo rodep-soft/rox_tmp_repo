@@ -7,15 +7,15 @@
     linear_x_axis: 1
     linear_y_axis: 0
     angular_axis: 2  
-    # IMU based Advanced PID controller params (Anti-Wobble Optimized)
-    # 基本PIDゲイン（ふらつき抑制最適化）
-    Kp: 1.2   # 比例ゲイン：応答性と安定性の最適バランス
-    Ki: 0.15  # 積分ゲイン：ドリフト補正（抑制）
-    Kd: 0.05  # 微分ゲイン：オーバーシュート防止
+    # IMU based Advanced PID controller params (Ultra-Smooth Optimized)
+    # 基本PIDゲイン（ふらつき完全抑制最適化）
+    Kp: 1.0   # 比例ゲイン：安定性優先
+    Ki: 0.12  # 積分ゲイン：ドリフト補正（さらに抑制）
+    Kd: 0.04  # 微分ゲイン：オーバーシュート完全防止
     
-    # 制御品質パラメータ（安定性重視）
-    deadband: 0.015 # 動的デッドバンド基準値（約0.86度）
-    max_angular_correction: 1.5 # 最大補正力（安全性重視）
+    # 制御品質パラメータ（超安定性重視）
+    deadband: 0.02 # 動的デッドバンド基準値（約1.15度）
+    max_angular_correction: 1.2 # 最大補正力（さらに保守的）
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08
