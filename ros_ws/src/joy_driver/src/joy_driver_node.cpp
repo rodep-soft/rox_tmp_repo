@@ -255,13 +255,13 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         auto current_time = std::chrono::steady_clock::now();
         auto time_since_manual_end = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - manual_rotation_end_time);
         
-        if (time_since_manual_end.count() < 500) {
-          // 500ms間は目標角度更新を待機
+        if (time_since_manual_end.count() < 200) {
+          // 200ms間は目標角度更新を待機
           twist_msg->angular.z = 0.0;
           integral_error_ = 0.0;
           prev_yaw_error_ = 0.0;
         } else {
-          // 500ms経過後、目標角度を更新
+          // 経過後、目標角度を更新
           double old_target = init_yaw_;
           init_yaw_ = yaw_;  // 安定したIMU値で目標角度を更新
           waiting_for_target_update = false;
