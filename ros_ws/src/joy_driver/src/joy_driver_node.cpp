@@ -327,28 +327,28 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         std::string control_mode = "NORMAL";
         
         if (is_pure_forward && small_error) {
-          // 前後移動＋小誤差：PID大幅抑制（ふらつき防止）
-          pid_suppression_factor = (error_magnitude < 0.05) ? 0.05 : 0.1; // さらに細かく調整
+          // 前後移動＋小誤差：PID超大幅抑制（ふらつき完全防止）
+          pid_suppression_factor = (error_magnitude < 0.05) ? 0.005 : 0.01; // 99.5-99%抑制
           control_mode = "FORWARD_STABILIZED";
         } else if (is_pure_forward && medium_error) {
-          // 前後移動＋中誤差：PID軽度抑制
-          pid_suppression_factor = 0.3;
+          // 前後移動＋中誤差：PID大幅抑制
+          pid_suppression_factor = 0.05; // 95%抑制
           control_mode = "FORWARD_CORRECTING";
         } else if (is_pure_lateral && small_error) {
-          // 横移動＋小誤差：PID中程度抑制
-          pid_suppression_factor = (error_magnitude < 0.05) ? 0.1 : 0.2;
+          // 横移動＋小誤差：PID大幅抑制
+          pid_suppression_factor = (error_magnitude < 0.05) ? 0.01 : 0.02; // 99-98%抑制
           control_mode = "LATERAL_STABILIZED";
         } else if (is_diagonal_move && small_error) {
-          // 斜め移動＋小誤差：PID軽度抑制
-          pid_suppression_factor = 0.4;
+          // 斜め移動＋小誤差：PID超大幅抑制
+          pid_suppression_factor = 0.1; // 90%抑制
           control_mode = "DIAGONAL_STABILIZED";
         } else if (is_slow_movement && small_error) {
-          // 低速移動＋小誤差：穏やか制御
-          pid_suppression_factor = 0.6;
+          // 低速移動＋小誤差：PID大幅抑制
+          pid_suppression_factor = 0.3; // 70%抑制
           control_mode = "SLOW_STABILIZED";
         } else if (is_slow_movement) {
-          // 低速移動：通常制御
-          pid_suppression_factor = 0.8;
+          // 低速移動：軽度抑制
+          pid_suppression_factor = 0.5; // 50%抑制
           control_mode = "SLOW_MOVEMENT";
         } else if (is_stationary && small_error) {
           // 停止時＋小誤差：微調整のみ
