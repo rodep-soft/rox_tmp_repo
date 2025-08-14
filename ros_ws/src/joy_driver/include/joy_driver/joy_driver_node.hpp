@@ -41,6 +41,11 @@ class JoyDriverNode : public rclcpp::Node {
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg);
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg);
   void keyboard_callback(const std_msgs::msg::String::SharedPtr msg);
+  
+  // Advanced PID control functions (Best Practices)
+  void resetPIDState(const std::string& reason = "manual");
+  void updateTargetOrientation();
+  bool isSystemStable() const;
 
  private:
   // default Mode
@@ -105,11 +110,22 @@ class JoyDriverNode : public rclcpp::Node {
   double integral_error_ = 0.0;
   double last_correction_time_ = 0.0;
   
+  // Advanced PID control variables (Best Practices)
+  double error_rate_limit_ = 5.0;  // rad/s - 角度誤差変化率制限
+  double last_filtered_error_ = 0.0;
+  double disturbance_estimate_ = 0.0;  // 外乱推定値
+  double adaptive_deadband_ = 0.02;   // 動的デッドバンド
+  double control_effort_history_[5] = {0.0}; // 制御履歴（安定性評価用）
+  int control_history_index_ = 0;
+  double velocity_estimate_ = 0.0;    // 速度推定（カルマンフィルタ風）
+  double acceleration_estimate_ = 0.0; // 加速度推定
+  
   // ローパスフィルタ係数（0.0-1.0, 小さいほど平滑化が強い）
-  static constexpr double YAW_FILTER_ALPHA = 0.5;  // より強い平滑化
+  static constexpr double YAW_FILTER_ALPHA = 0.3;  // より強い平滑化
+  static constexpr double VELOCITY_FILTER_ALPHA = 0.4;  // 速度フィルタ
   
   // 積分項のウィンドアップ防止
-  static constexpr double MAX_INTEGRAL_ERROR = 0.5;
+  static constexpr double MAX_INTEGRAL_ERROR = 0.3;  // より保守的
 
   // ===== ros2 params END =====
 
