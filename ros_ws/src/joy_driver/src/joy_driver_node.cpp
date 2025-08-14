@@ -327,16 +327,16 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         std::string control_mode = "NORMAL";
         
         if (is_pure_forward && small_error) {
-          // 前後移動＋小誤差：適度な抑制（ドリフト蓄積防止）
-          pid_suppression_factor = (error_magnitude < 0.05) ? 0.1 : 0.2; // 90-80%抑制
+          // 前後移動＋小誤差：振動防止のため大幅抑制
+          pid_suppression_factor = (error_magnitude < 0.05) ? 0.05 : 0.1; // 95-90%抑制
           control_mode = "FORWARD_STABILIZED";
         } else if (is_pure_forward && medium_error) {
-          // 前後移動＋中誤差：軽度抑制のみ
-          pid_suppression_factor = 0.4; // 60%抑制
+          // 前後移動＋中誤差：適度な抑制
+          pid_suppression_factor = 0.3; // 70%抑制
           control_mode = "FORWARD_CORRECTING";
         } else if (is_pure_lateral && small_error) {
-          // 横移動＋小誤差：適度な抑制
-          pid_suppression_factor = (error_magnitude < 0.05) ? 0.15 : 0.25; // 85-75%抑制
+          // 横移動＋小誤差：振動防止
+          pid_suppression_factor = (error_magnitude < 0.05) ? 0.08 : 0.15; // 92-85%抑制
           control_mode = "LATERAL_STABILIZED";
         } else if (is_diagonal_move && small_error) {
           // 斜め移動＋小誤差：PID超大幅抑制
@@ -359,12 +359,17 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           pid_suppression_factor = 1.0; // 抑制なし
           control_mode = "STATIONARY_CORRECTING";
         } else if (large_error) {
-          // 大きな誤差：緊急フル制御
-          pid_suppression_factor = 1.0;
-          control_mode = "EMERGENCY_CORRECTION";
+          // 大きな誤差：段階的補正（振動防止）
+          if (error_magnitude > 1.5) { // 86度以上
+            pid_suppression_factor = 0.6; // 段階的補正
+            control_mode = "LARGE_ERROR_GRADUAL";
+          } else {
+            pid_suppression_factor = 0.8; // 通常の大誤差補正
+            control_mode = "LARGE_ERROR_NORMAL";
+          }
         } else {
           // その他：標準制御
-          pid_suppression_factor = 0.7;
+          pid_suppression_factor = 0.5; // より抑制気味
           control_mode = "STANDARD";
         }
         
@@ -384,8 +389,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         double raw_pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, velocity_factor);
         double suppressed_pid_correction = raw_pid_correction * pid_suppression_factor;
         
-        // PID補正値を適用（抑制因子込み）
-        twist_msg->angular.z = -suppressed_pid_correction * angular_scale_;
+        // PID補正値を適用（符号修正：座標系統一）
+        twist_msg->angular.z = suppressed_pid_correction * angular_scale_;  // マイナス符号削除
         
         // 高品質デバッグ：制御詳細
         if (std::abs(error) > 0.02 || pattern_debug_counter % 100 == 0) {

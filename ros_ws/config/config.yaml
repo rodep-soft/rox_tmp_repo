@@ -8,14 +8,14 @@
     linear_y_axis: 0
     angular_axis: 2  
     # IMU based Advanced PID controller params (Ultra-Fast & Stable)
-    # 基本PIDゲイン（超高速応答＋超安定性）
-    Kp: 2.0   # 比例ゲイン：超高速応答
-    Ki: 0.12  # 積分ゲイン：高速ドリフト補正
-    Kd: 0.03  # 微分ゲイン：より敏感
+    # 基本PIDゲイン（振動抑制＋安定性重視）
+    Kp: 1.0   # 比例ゲイン：振動防止のため低減
+    Ki: 0.05  # 積分ゲイン：過補正防止
+    Kd: 0.01  # 微分ゲイン：最小限
     
-    # 制御品質パラメータ（移動中補正完全最小化）
-    deadband: 0.025 # 動的デッドバンド基準値（約1.4度）
-    max_angular_correction: 1.2 # 最大補正力（より高速）
+    # 制御品質パラメータ（過補正防止）
+    deadband: 0.05 # 動的デッドバンド基準値（約3度）
+    max_angular_correction: 0.8 # 最大補正力（振動防止）
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08
