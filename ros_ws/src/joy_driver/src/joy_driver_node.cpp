@@ -406,7 +406,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
         // 抑制因子を適用したPID補正
-        double raw_pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_yaw_, dt, velocity_factor);
+        double raw_pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, velocity_factor);
         double suppressed_pid_correction = raw_pid_correction * pid_suppression_factor;
         
         // PID補正値を適用（符号修正：実験的に逆転）
@@ -495,13 +495,13 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         
         // DPADモードでは最大強度で角度+角速度補正を適用
         // 符号修正：エラーと同じ方向に補正して打ち消す
-        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_yaw_, dt, 1.0);
+        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, 1.0);
         
         // デバッグ出力（補正時のみ）
         if (std::abs(twist_msg->angular.z) > 0.01) {
           RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                                "DPAD correction: error=%.3f, ang_vel=%.3f, correction=%.3f", 
-                               error, filtered_angular_vel_yaw_, twist_msg->angular.z);
+                               error, filtered_angular_vel_x_, twist_msg->angular.z);
         }
       } else {
         // 手動回転時：インテリジェントなPIDリセットと目標更新
@@ -718,12 +718,12 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   // しかしBNO055の取り付け方向により実際の軸は変わる可能性あり
   
   // 使用する軸を選択（実機テストに基づいて1つを選択）
-  // 標準的なIMU配置ではZ軸が垂直回転軸（ヨー軸）
-  double vertical_rotation_axis = msg->angular_velocity.z;   // Z軸使用（標準的配置）
-  // double vertical_rotation_axis = -msg->angular_velocity.x;  // X軸（過去の実績、要再検証）
+  // 過去の実機テストでX軸が有効だったため、まずはZ軸を標準として試す
+  double vertical_rotation_axis = msg->angular_velocity.z;   // Z軸テスト（標準的配置）
+  // double vertical_rotation_axis = -msg->angular_velocity.x;  // X軸（過去の実績）
   // double vertical_rotation_axis = -msg->angular_velocity.y;  // Y軸テスト用
   
-  filtered_angular_vel_yaw_ = vertical_rotation_axis;
+  filtered_angular_vel_x_ = vertical_rotation_axis;
   
   // 簡易軸テスト: 大きな回転を検出した時に全軸を表示
   double max_angular_vel = std::max({std::abs(msg->angular_velocity.x), 
@@ -734,7 +734,7 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
     RCLCPP_WARN(this->get_logger(),
                "ROTATION DETECTED! X=%.2f, Y=%.2f, Z=%.2f rad/s | Using Z-axis (%.2f)",
                msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z,
-               filtered_angular_vel_yaw_);
+               vertical_rotation_axis);
   }
   
   // ヨー角積分
@@ -743,7 +743,7 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   
   double dt = (current_time - last_time).seconds();
   if (dt > 0.001 && dt < 0.1) {
-    yaw_ += filtered_angular_vel_yaw_ * dt;
+    yaw_ += filtered_angular_vel_x_ * dt;
     yaw_ = normalizeAngle(yaw_);
   }
   last_time = current_time;
@@ -752,7 +752,7 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   if (debug_counter % 500 == 0) {  // 5秒間隔
     RCLCPP_INFO(this->get_logger(),
                "IMU: yaw=%.1f° (vel_x=%.3f°/s) - Using X-axis",
-               yaw_ * 180.0 / M_PI, filtered_angular_vel_yaw_ * 180.0 / M_PI);
+               yaw_ * 180.0 / M_PI, filtered_angular_vel_x_ * 180.0 / M_PI);
   }
 }
 

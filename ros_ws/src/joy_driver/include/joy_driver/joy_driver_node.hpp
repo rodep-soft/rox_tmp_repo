@@ -135,8 +135,8 @@ class JoyDriverNode : public rclcpp::Node {
   double yaw_ = 0.0;
 
   // Angular velocities from IMU (rad/s) - simplified for madgwick filtering
-  double angular_vel_x_ = 0.0;         // Raw X-axis angular velocity (unused)
-  double filtered_angular_vel_yaw_ = 0.0; // Filtered YAW axis angular velocity (from Z-axis)
+  double angular_vel_x_ = 0.0;         // Raw X-axis angular velocity  
+  double filtered_angular_vel_x_ = 0.0; // Madgwick filtered angular velocity
 
   // 初期化時のyaw値
   // これはロボットの初期姿勢を基準にするための値
