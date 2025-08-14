@@ -39,26 +39,26 @@ ekf_filter_node:
     world_frame: odom
     
     # Sensor inputs
-    # Wheel odometry from mecanum_wheel_controller
-    odom0: /wheel/odom
+    # Wheel odometry from mecanum_wheel_controller (DISABLED for debugging)
+    # odom0: /wheel/odom
     
     # IMU from BNO055 (raw data with hardware failure detection)
     imu0: /imu/data
     
-    # Wheel odometry configuration:
+    # Wheel odometry configuration (DISABLED):
     # We trust position and linear velocities from wheels, but not orientation (use IMU for that)
     # x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
-    odom0_config: [true,  true,  false,
-                   false, false, false,
-                   true,  true,  false,
-                   false, false, false,
-                   false, false, false]
+    # odom0_config: [true,  true,  false,
+    #                false, false, false,
+    #                true,  true,  false,
+    #                false, false, false,
+    #                false, false, false]
     
-    # For imu0 (raw BNO055 data) - Conservative settings:
+    # For imu0 (raw BNO055 data) - IMU only configuration:
     # - We don't trust position (x,y,z): false, false, false
-    # - We trust yaw orientation but with low weight: false, false, true
+    # - We trust yaw orientation: false, false, true
     # - We don't trust linear velocities: false, false, false  
-    # - We trust yaw angular velocity but with low weight: false, false, true
+    # - We trust yaw angular velocity: false, false, true
     # - We don't trust linear accelerations due to noise: false, false, false
     imu0_config: [false, false, false,
                   false, false, true,
@@ -67,20 +67,17 @@ ekf_filter_node:
                   false, false, false]
     
     # Remove gravitational acceleration
-    odom0_remove_gravitational_acceleration: false
     imu0_remove_gravitational_acceleration: true
     
-    # Queue sizes for buffering
-    odom0_queue_size: 10
-    imu0_queue_size: 5
+    # Queue sizes for buffering (IMU only)
+    imu0_queue_size: 10
     
-    # Throttle frequencies
-    odom0_throttle_frequency: 30.0
-    imu0_throttle_frequency: 30.0
+    # Throttle frequencies (IMU only)
+    imu0_throttle_frequency: 50.0
     
         # Rejection thresholds: Data with variance above this threshold will be rejected
-    odom0_pose_rejection_threshold: 5.0
-    odom0_twist_rejection_threshold: 1.0
+    # odom0_pose_rejection_threshold: 5.0
+    # odom0_twist_rejection_threshold: 1.0
     imu0_pose_rejection_threshold: 0.8
     imu0_twist_rejection_threshold: 0.8
     imu0_linear_acceleration_rejection_threshold: 0.8
@@ -88,12 +85,12 @@ ekf_filter_node:
     # Frame IDs
     imu0_nodelay: false
     
-    # Differential mode
-    odom0_differential: false
+    # Differential mode (IMU only)
+    # odom0_differential: false
     imu0_differential: false
     
-    # Relative mode
-    odom0_relative: false
+    # Relative mode (IMU only)
+    # odom0_relative: false
     imu0_relative: false
     
     # Use control input (we're not using it)
