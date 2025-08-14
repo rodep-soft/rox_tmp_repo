@@ -1,4 +1,5 @@
 #include "mecanum_wheel_controller/mecanum_wheel_controller.hpp"
+#include <algorithm>
 
 MecanumWheelControllerNode::MecanumWheelControllerNode()
     : Node("mecanum_wheel_controller"), motor_controller_(this->get_logger()),
@@ -136,6 +137,25 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
   int16_t rpm_front_right = static_cast<int16_t>(wheel_front_right_vel * rad_to_rpm * -1 * motor_correction_fr_);
   int16_t rpm_rear_left = static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm * motor_correction_rl_);
   int16_t rpm_rear_right = static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm * -1 * motor_correction_rr_);
+
+  // RPM制限を適用（モーターの物理的制限）
+  const int16_t max_rpm = 300;  // DDSM115の一般的な制限値
+  int16_t rpm_fl_orig = rpm_front_left, rpm_fr_orig = rpm_front_right;
+  int16_t rpm_rl_orig = rpm_rear_left, rpm_rr_orig = rpm_rear_right;
+  
+  rpm_front_left = std::clamp(rpm_front_left, static_cast<int16_t>(-max_rpm), max_rpm);
+  rpm_front_right = std::clamp(rpm_front_right, static_cast<int16_t>(-max_rpm), max_rpm);
+  rpm_rear_left = std::clamp(rpm_rear_left, static_cast<int16_t>(-max_rpm), max_rpm);
+  rpm_rear_right = std::clamp(rpm_rear_right, static_cast<int16_t>(-max_rpm), max_rpm);
+  
+  // RPM制限が発生した場合は警告
+  if (rpm_fl_orig != rpm_front_left || rpm_fr_orig != rpm_front_right ||
+      rpm_rl_orig != rpm_rear_left || rpm_rr_orig != rpm_rear_right) {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                         "RPM CLAMP: FL %d->%d FR %d->%d RL %d->%d RR %d->%d (max=%d)",
+                         rpm_fl_orig, rpm_front_left, rpm_fr_orig, rpm_front_right,
+                         rpm_rl_orig, rpm_rear_left, rpm_rr_orig, rpm_rear_right, max_rpm);
+  }
 
   // モーター値の詳細ログ（前後移動とゼロ速度変化を監視）
   static int16_t prev_fl = 0, prev_fr = 0, prev_rl = 0, prev_rr = 0;
