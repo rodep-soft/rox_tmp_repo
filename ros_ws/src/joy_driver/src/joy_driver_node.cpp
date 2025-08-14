@@ -299,47 +299,123 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         last_correction_time_ = current_time;
         
         // 角度誤差を計算（正規化済み）
-        // **修正**: PID制御では「目標角度 - 現在角度」が正しい符号
         double error = normalizeAngle(init_yaw_ - yaw_);
         
-        // **デバッグ**: 角度計算の詳細
-        static int error_debug_counter = 0;
-        error_debug_counter++;
-        if (error_debug_counter % 50 == 0) {
-          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "ANGLE_CALC: current=%.2f° target=%.2f° raw_error=%.2f° norm_error=%.2f°", 
-                               yaw_ * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI,
-                               (init_yaw_ - yaw_) * 180.0 / M_PI, error * 180.0 / M_PI);
-        }
-        
-        // 全方向移動時に補正を適用
+        // === インテリジェント移動パターン検出とPID抑制 ===
         double velocity_magnitude = std::sqrt(twist_msg->linear.x * twist_msg->linear.x + 
                                             twist_msg->linear.y * twist_msg->linear.y);
+        
+        // 移動方向の分析
+        double forward_ratio = std::abs(twist_msg->linear.x) / (velocity_magnitude + 0.001);
+        double lateral_ratio = std::abs(twist_msg->linear.y) / (velocity_magnitude + 0.001);
+        
+        // 移動パターンの判定
+        bool is_pure_forward = (forward_ratio > 0.9 && velocity_magnitude > 0.5);
+        bool is_pure_lateral = (lateral_ratio > 0.9 && velocity_magnitude > 0.5);
+        bool is_diagonal_move = (forward_ratio > 0.3 && lateral_ratio > 0.3 && velocity_magnitude > 0.5);
+        bool is_slow_movement = (velocity_magnitude < 0.3);
+        bool is_stationary = (velocity_magnitude < 0.1);
+        
+        // 角度誤差の大きさによる制御強度調整
+        double error_magnitude = std::abs(error);
+        bool large_error = (error_magnitude > 0.3); // 17度以上
+        bool medium_error = (error_magnitude > 0.1 && error_magnitude <= 0.3); // 6-17度
+        bool small_error = (error_magnitude <= 0.1); // 6度以下
+        
+        // 適応的PID制御戦略
+        double pid_suppression_factor = 1.0;
+        std::string control_mode = "NORMAL";
+        
+        if (is_pure_forward && small_error) {
+          // 前後移動＋小誤差：PID大幅抑制（ふらつき防止）
+          pid_suppression_factor = 0.1;
+          control_mode = "FORWARD_STABILIZED";
+        } else if (is_pure_forward && medium_error) {
+          // 前後移動＋中誤差：PID軽度抑制
+          pid_suppression_factor = 0.3;
+          control_mode = "FORWARD_CORRECTING";
+        } else if (is_pure_lateral && small_error) {
+          // 横移動＋小誤差：PID中程度抑制
+          pid_suppression_factor = 0.2;
+          control_mode = "LATERAL_STABILIZED";
+        } else if (is_diagonal_move && small_error) {
+          // 斜め移動＋小誤差：PID軽度抑制
+          pid_suppression_factor = 0.4;
+          control_mode = "DIAGONAL_STABILIZED";
+        } else if (is_slow_movement) {
+          // 低速移動：通常制御
+          pid_suppression_factor = 0.8;
+          control_mode = "SLOW_MOVEMENT";
+        } else if (is_stationary && small_error) {
+          // 停止時＋小誤差：微調整のみ
+          pid_suppression_factor = 0.6;
+          control_mode = "STATIONARY_FINE";
+        } else if (large_error) {
+          // 大きな誤差：フル制御
+          pid_suppression_factor = 1.0;
+          control_mode = "FULL_CORRECTION";
+        }
+        
+        // デバッグ出力（移動パターン解析）
+        static int pattern_debug_counter = 0;
+        pattern_debug_counter++;
+        if (pattern_debug_counter % 100 == 0) {
+          RCLCPP_INFO(this->get_logger(),
+                     "Movement Analysis: vel=%.2f, fwd=%.2f, lat=%.2f, err=%.1f°, mode=%s, suppress=%.1f",
+                     velocity_magnitude, forward_ratio, lateral_ratio, 
+                     error_magnitude * 180.0 / M_PI, control_mode.c_str(), pid_suppression_factor);
+        }
+        
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
-                // PID補正を適用
-        double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, velocity_factor);
+        // 抑制因子を適用したPID補正
+        double raw_pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, velocity_factor);
+        double suppressed_pid_correction = raw_pid_correction * pid_suppression_factor;
         
-        // PID補正値を適用（符号反転を除去）
-        twist_msg->angular.z = -pid_correction * angular_scale_;
+        // PID補正値を適用（抑制因子込み）
+        twist_msg->angular.z = -suppressed_pid_correction * angular_scale_;
         
-        // **デバッグ**: 計算過程を詳細表示
-        RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                             "CALC_DEBUG: PID=%.4f, angular_scale=%.2f, RESULT=%.4f", 
-                             pid_correction, angular_scale_, twist_msg->angular.z);
+        // 高品質デバッグ：制御詳細
+        if (std::abs(error) > 0.02 || pattern_debug_counter % 100 == 0) {
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                               "Smart PID: %s | err=%.1f° | raw_PID=%.3f | suppressed=%.3f | final=%.3f",
+                               control_mode.c_str(), error * 180.0 / M_PI, 
+                               raw_pid_correction, suppressed_pid_correction, twist_msg->angular.z);
+        }
         
-        // デバッグログ（IMUデータの詳細確認）
-        double yaw_drift_deg = error * 180.0 / M_PI;
-        static int log_counter = 0;
-        log_counter++;
+        // === スマート目標角度更新システム ===
+        static auto last_target_update_time = std::chrono::steady_clock::now();
+        static std::string last_movement_pattern = "";
+        auto target_update_time = std::chrono::steady_clock::now();
+        auto time_since_update = std::chrono::duration_cast<std::chrono::seconds>(target_update_time - last_target_update_time);
         
-        if (std::abs(yaw_drift_deg) > 0.5 && log_counter % 10 == 0) {  
-          RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "IMU_CHECK: yaw=%.2f° init=%.2f° error=%.2f° %s, PID=%.4f, FINAL=%.4f", 
-                               yaw_ * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI,
-                               std::abs(yaw_drift_deg), 
-                               (yaw_drift_deg > 0) ? "LEFT" : "RIGHT", 
-                               pid_correction, twist_msg->angular.z);
+        // 安定した移動パターンが続いている場合の自動目標更新
+        bool should_update_target = false;
+        if (time_since_update.count() > 5 && // 5秒以上経過
+            (control_mode == "FORWARD_STABILIZED" || control_mode == "LATERAL_STABILIZED") &&
+            control_mode == last_movement_pattern && // 同じパターンが継続
+            error_magnitude < 0.15) { // 誤差が8.6度以下
+          should_update_target = true;
+        }
+        
+        if (should_update_target) {
+          double old_target = init_yaw_;
+          updateTargetOrientation();
+          last_target_update_time = target_update_time;
+          RCLCPP_WARN(this->get_logger(),
+                     "Auto target update: %.1f° -> %.1f° (pattern: %s, duration: %lds)",
+                     old_target * 180.0 / M_PI, init_yaw_ * 180.0 / M_PI, 
+                     control_mode.c_str(), time_since_update.count());
+        }
+        last_movement_pattern = control_mode;
+        
+        // 簡潔なデバッグログ
+        static int simplified_log_counter = 0;
+        simplified_log_counter++;
+        if (std::abs(error) > 0.05 && simplified_log_counter % 25 == 0) {  
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                               "Control: %s | err=%.1f° | correction=%.3f", 
+                               control_mode.c_str(), error * 180.0 / M_PI, twist_msg->angular.z);
         }
       } else {
         // 移動停止時の処理（手動回転後の重複更新を防止）
