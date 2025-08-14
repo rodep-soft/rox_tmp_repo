@@ -28,10 +28,11 @@ class JoyDriverNode : public rclcpp::Node {
   // Constructor
   JoyDriverNode();
 
-  // Public enum for testing
+  // gtestのためにpublicにしてある
+  // Public enum
   enum class Mode { STOP, JOY, DPAD, LINETRACE };
 
-  // Public helper functions for testing
+  // Public helper functions
   static double applyDeadzone(double val, double threshold = 0.05);
   static double normalizeAngle(double angle);
   double calculatePIDCorrection(double error, double dt, double velocity_factor = 1.0);
