@@ -20,6 +20,7 @@ RUN apt-get update && apt-get upgrade -y && \
     python3.11-distutils \
     python3-pip \
     python3-gpiozero \
+    python3-rosdep \
     libboost-system-dev \
     ros-humble-joy \
     ros-humble-demo-nodes-cpp \
@@ -27,6 +28,10 @@ RUN apt-get update && apt-get upgrade -y && \
     libgpiod-dev \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
+
+# --- Initialize rosdep ---
+RUN rosdep init && \
+    rosdep update
 
     
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -88,6 +93,9 @@ RUN mkdir -p /root/.config/colcon && \
 WORKDIR /root/ros_ws
 
 COPY ./ros_ws/src ./src/
+
+# --- Install workspace dependencies with rosdep ---
+RUN rosdep install --from-paths src --ignore-src -r -y || true
 
 CMD ["bash"]
 
