@@ -54,17 +54,17 @@ ekf_filter_node:
                    false, false, false,
                    false, false, false]
     
-    # For imu0 (raw BNO055 data) - 2D mode optimized:
+    # For imu0 (raw BNO055 data) - Conservative settings:
     # - We don't trust position (x,y,z): false, false, false
-    # - We only trust yaw orientation: false, false, true (2D mode)
+    # - We trust yaw orientation but with low weight: false, false, true
     # - We don't trust linear velocities: false, false, false  
-    # - We only trust yaw angular velocity: false, false, true (2D mode)
-    # - We trust linear accelerations (X,Y only): true, true, false
+    # - We trust yaw angular velocity but with low weight: false, false, true
+    # - We don't trust linear accelerations due to noise: false, false, false
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,
                   false, false, true,
-                  true,  true,  false]
+                  false, false, false]
     
     # Remove gravitational acceleration
     odom0_remove_gravitational_acceleration: false
@@ -78,12 +78,15 @@ ekf_filter_node:
     odom0_throttle_frequency: 30.0
     imu0_throttle_frequency: 30.0
     
-    # Rejection thresholds
+        # Rejection thresholds: Data with variance above this threshold will be rejected
     odom0_pose_rejection_threshold: 5.0
     odom0_twist_rejection_threshold: 1.0
     imu0_pose_rejection_threshold: 0.8
     imu0_twist_rejection_threshold: 0.8
     imu0_linear_acceleration_rejection_threshold: 0.8
+    
+    # Frame IDs
+    imu0_nodelay: false
     
     # Differential mode
     odom0_differential: false
@@ -103,13 +106,13 @@ ekf_filter_node:
                                0.0,  0.0,  0.06, 0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                0.0,  0.0,  0.0,  0.03, 0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                0.0,  0.0,  0.0,  0.0,  0.03, 0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.03, 0.0,   0.0,   0.0,  0.0,  0.0,  0.0,   0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.01, 0.0,   0.0,   0.0,  0.0,  0.0,  0.0,   0.0,  0.0,  0.0,
                                0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.025, 0.0,   0.0,  0.0,  0.0,  0.0,   0.0,  0.0,  0.0,
                                0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.025, 0.0,  0.0,  0.0,  0.0,   0.0,  0.0,  0.0,
                                0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.04, 0.0,  0.0,  0.0,   0.0,  0.0,  0.0,
                                0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.01, 0.0,  0.0,   0.0,  0.0,  0.0,
                                0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.01, 0.0,   0.0,  0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.015, 0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.005, 0.0,  0.0,  0.0,
                                0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,   0.01, 0.0,  0.0,
                                0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,   0.0,  0.01, 0.0,
                                0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,   0.0,  0.0,  0.015]

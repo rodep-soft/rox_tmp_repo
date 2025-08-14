@@ -176,18 +176,44 @@ void MecanumWheelControllerNode::publish_wheel_odometry(double vx, double vy, do
   double dt = std::chrono::duration<double>(current_time - last_odom_time_).count();
   last_odom_time_ = current_time;
 
-  // メカナムホイール運動学に基づく実際の速度計算
-  // Forward kinematics from wheel velocities (commanded velocities)
-  const double lxy_sum = wheel_base_x_ + wheel_base_y_;
+  // 実際のモーターRPMフィードバックを取得
+  int16_t rpm_fl = motor_controller_.get_motor_rpm_feedback(1);  // Front Left
+  int16_t rpm_fr = motor_controller_.get_motor_rpm_feedback(2);  // Front Right  
+  int16_t rpm_rl = motor_controller_.get_motor_rpm_feedback(3);  // Rear Left
+  int16_t rpm_rr = motor_controller_.get_motor_rpm_feedback(4);  // Rear Right
+
+  // フィードバックが新しいかチェック
+  bool has_valid_feedback = motor_controller_.has_recent_feedback(1, 200) &&
+                            motor_controller_.has_recent_feedback(2, 200) &&
+                            motor_controller_.has_recent_feedback(3, 200) &&
+                            motor_controller_.has_recent_feedback(4, 200);
+
+  double actual_vx, actual_vy, actual_wz;
   
-  // 実際のロボット速度（メカナムホイール運動学の逆計算）
-  // これらの値は既にコマンド値として与えられているので、そのまま使用
-  // ただし、将来的にはモーターフィードバックから実際の速度を計算できる
+  if (has_valid_feedback) {
+    // RPMを角速度に変換（符号と補正を考慮）
+    const double rpm_to_rad = 2.0 * M_PI / 60.0;
+    double wheel_fl_vel = rpm_fl * rpm_to_rad / motor_correction_fl_;
+    double wheel_fr_vel = -rpm_fr * rpm_to_rad / motor_correction_fr_;  // 右側は逆回転
+    double wheel_rl_vel = rpm_rl * rpm_to_rad / motor_correction_rl_;
+    double wheel_rr_vel = -rpm_rr * rpm_to_rad / motor_correction_rr_;  // 右側は逆回転
+    
+    // メカナムホイール逆運動学でロボット速度を計算
+    const double lxy_sum = wheel_base_x_ + wheel_base_y_;
+    actual_vx = wheel_radius_ * 0.25 * (wheel_fl_vel + wheel_fr_vel + wheel_rl_vel + wheel_rr_vel);
+    actual_vy = wheel_radius_ * 0.25 * (-wheel_fl_vel + wheel_fr_vel + wheel_rl_vel - wheel_rr_vel);
+    actual_wz = wheel_radius_ * 0.25 * (-wheel_fl_vel + wheel_fr_vel - wheel_rl_vel + wheel_rr_vel) / lxy_sum;
+  } else {
+    // フィードバックが古い場合はコマンド値を使用（フォールバック）
+    actual_vx = vx;
+    actual_vy = vy;
+    actual_wz = wz;
+  }
   
-  // Integrate velocities to get position (robot frame)
-  double delta_x = (vx * std::cos(theta_) - vy * std::sin(theta_)) * dt;
-  double delta_y = (vx * std::sin(theta_) + vy * std::cos(theta_)) * dt;
-  double delta_theta = wz * dt;
+  // ロボットフレームからワールドフレームへの座標変換で位置を積分
+  double delta_x = (actual_vx * std::cos(theta_) - actual_vy * std::sin(theta_)) * dt;
+  double delta_y = (actual_vx * std::sin(theta_) + actual_vy * std::cos(theta_)) * dt;
+  double delta_theta = actual_wz * dt;
 
   x_ += delta_x;
   y_ += delta_y;
@@ -213,13 +239,13 @@ void MecanumWheelControllerNode::publish_wheel_odometry(double vx, double vy, do
   q.setRPY(0, 0, theta_);
   odom_msg.pose.pose.orientation = tf2::toMsg(q);
 
-  // Velocity (in robot frame)
-  odom_msg.twist.twist.linear.x = vx;
-  odom_msg.twist.twist.linear.y = vy;
+  // Velocity (actual calculated velocity in robot frame)
+  odom_msg.twist.twist.linear.x = actual_vx;
+  odom_msg.twist.twist.linear.y = actual_vy;
   odom_msg.twist.twist.linear.z = 0.0;
   odom_msg.twist.twist.angular.x = 0.0;
   odom_msg.twist.twist.angular.y = 0.0;
-  odom_msg.twist.twist.angular.z = wz;
+  odom_msg.twist.twist.angular.z = actual_wz;
 
   // Set covariance based on mecanum wheel characteristics
   std::fill(odom_msg.pose.covariance.begin(), odom_msg.pose.covariance.end(), 0.0);
@@ -240,9 +266,16 @@ void MecanumWheelControllerNode::publish_wheel_odometry(double vx, double vy, do
   // Debug output every 2 seconds
   static auto last_debug = std::chrono::steady_clock::now();
   if (std::chrono::duration<double>(current_time - last_debug).count() > 2.0) {
+    int16_t rpm_fl = motor_controller_.get_motor_rpm_feedback(1);
+    int16_t rpm_fr = motor_controller_.get_motor_rpm_feedback(2);
+    int16_t rpm_rl = motor_controller_.get_motor_rpm_feedback(3);
+    int16_t rpm_rr = motor_controller_.get_motor_rpm_feedback(4);
+    
     RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                        "WHEEL ODOM: pos(%.2f,%.2f,%.1f°) vel(%.2f,%.2f,%.2f) dt=%.3f",
-                        x_, y_, theta_ * 180.0 / M_PI, vx, vy, wz, dt);
+                        "WHEEL ODOM: pos(%.2f,%.2f,%.1f°) cmd_vel(%.2f,%.2f,%.2f) actual_vel(%.2f,%.2f,%.2f) "
+                        "rpm_fb(%d,%d,%d,%d) valid_fb=%s dt=%.3f",
+                        x_, y_, theta_ * 180.0 / M_PI, vx, vy, wz, actual_vx, actual_vy, actual_wz,
+                        rpm_fl, rpm_fr, rpm_rl, rpm_rr, has_valid_feedback ? "YES" : "NO", dt);
     last_debug = current_time;
   }
 }

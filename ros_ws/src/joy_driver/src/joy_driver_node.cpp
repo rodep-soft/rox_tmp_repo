@@ -902,10 +902,34 @@ void JoyDriverNode::ekf_odom_callback(const nav_msgs::msg::Odometry::SharedPtr m
   auto quat = msg->pose.pose.orientation;
   double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
   double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
-  ekf_yaw_ = std::atan2(siny_cosp, cosy_cosp);
+  double raw_ekf_yaw = std::atan2(siny_cosp, cosy_cosp);
   
-  // EKFからの角速度（より安定）
-  ekf_angular_velocity_z_ = msg->twist.twist.angular.z;
+  // EKFのyaw値に安定化フィルタを適用
+  static double filtered_ekf_yaw = 0.0;
+  static bool ekf_yaw_initialized = false;
+  
+  if (!ekf_yaw_initialized) {
+    filtered_ekf_yaw = raw_ekf_yaw;
+    ekf_yaw_initialized = true;
+  } else {
+    // 急激な変化を抑制するフィルタ
+    double yaw_diff = normalizeAngle(raw_ekf_yaw - filtered_ekf_yaw);
+    
+    // 大きな変化（90度以上）は段階的に適用
+    if (std::abs(yaw_diff) > M_PI / 2) {
+      yaw_diff = std::copysign(M_PI / 2, yaw_diff) * 0.1; // 10%ずつ適用
+    }
+    
+    filtered_ekf_yaw = normalizeAngle(filtered_ekf_yaw + 0.3 * yaw_diff);
+  }
+  
+  ekf_yaw_ = filtered_ekf_yaw;
+  
+  // EKFからの角速度（フィルタ適用）
+  double raw_angular_vel = msg->twist.twist.angular.z;
+  static double filtered_angular_vel = 0.0;
+  filtered_angular_vel = 0.7 * raw_angular_vel + 0.3 * filtered_angular_vel;
+  ekf_angular_velocity_z_ = filtered_angular_vel;
   
   ekf_data_received_ = true;
   
@@ -913,9 +937,9 @@ void JoyDriverNode::ekf_odom_callback(const nav_msgs::msg::Odometry::SharedPtr m
   static auto last_debug = std::chrono::steady_clock::now();
   auto now = std::chrono::steady_clock::now();
   if (std::chrono::duration<double>(now - last_debug).count() > 2.0) {
-    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                        "EKF DATA: pos(%.2f,%.2f) yaw=%.1f° angular_vel_z=%.3f rad/s",
-                        ekf_x_, ekf_y_, ekf_yaw_ * 180.0 / M_PI, ekf_angular_velocity_z_);
+    RCLCPP_INFO(this->get_logger(),
+                "EKF FILTERED: pos(%.2f,%.2f) raw_yaw=%.1f° filtered_yaw=%.1f° angular_vel_z=%.3f rad/s",
+                ekf_x_, ekf_y_, raw_ekf_yaw * 180.0 / M_PI, ekf_yaw_ * 180.0 / M_PI, ekf_angular_velocity_z_);
     last_debug = now;
   }
 }

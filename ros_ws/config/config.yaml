@@ -7,15 +7,15 @@
     linear_x_axis: 1
     linear_y_axis: 0
     angular_axis: 2  
-    # IMU based Advanced PID controller params (Balanced Sensitivity)
-    # 基本PIDゲイン（バランス調整済み）
-    Kp: 2.0   # 比例ゲイン：適度な強化
-    Ki: 0.18  # 積分ゲイン：適度な継続補正
-    Kd: 0.05  # 微分ゲイン：安定性確保
+    # IMU based Advanced PID controller params (Stability Focused)
+    # 基本PIDゲイン（安定性重視）
+    Kp: 1.5   # 比例ゲイン：やや抑制
+    Ki: 0.12  # 積分ゲイン：ドリフト補正を適度に
+    Kd: 0.08  # 微分ゲイン：安定性強化
     
-    # 制御品質パラメータ（適度な感度補正）
-    deadband: 0.02 # 動的デッドバンド基準値（約1.1度）
-    max_angular_correction: 1.5 # 最大補正力（適度に調整）
+    # 制御品質パラメータ（ドリフト抑制調整）
+    deadband: 0.05 # 動的デッドバンド基準値（約2.9度）微小ドリフト抑制
+    max_angular_correction: 1.2 # 最大補正力（安定性重視）
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08

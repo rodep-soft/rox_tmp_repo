@@ -184,6 +184,12 @@ void MotorController::process_feedback_packet(const std::vector<uint8_t>& packet
   // uint16_t position = (static_cast<uint16_t>(packet[6]) << 8) | packet[7];
   // uint8_t error_code = packet[8];
 
+  // Store RPM feedback with timestamp
+  if (motor_id >= 1 && motor_id <= 4) {
+    std::lock_guard<std::mutex> lock(feedback_mutex_);
+    motor_feedback_[motor_id] = {velocity, std::chrono::steady_clock::now()};
+  }
+
   // モーターIDと速度のみを出力
   RCLCPP_DEBUG(logger_, "Motor ID: %d, Velocity: %d", motor_id, velocity);
 
@@ -329,4 +335,24 @@ bool MotorController::validate_motor_response(const std::vector<uint8_t>& respon
   RCLCPP_DEBUG(logger_, "Motor %d velocity feedback: %d rpm", expected_id, velocity_feedback);
 
   return true;
+}
+
+int16_t MotorController::get_motor_rpm_feedback(uint8_t motor_id) const {
+  if (motor_id < 1 || motor_id > 4) {
+    return 0;
+  }
+  
+  std::lock_guard<std::mutex> lock(feedback_mutex_);
+  return motor_feedback_[motor_id].first;
+}
+
+bool MotorController::has_recent_feedback(uint8_t motor_id, int max_age_ms) const {
+  if (motor_id < 1 || motor_id > 4) {
+    return false;
+  }
+  
+  std::lock_guard<std::mutex> lock(feedback_mutex_);
+  auto now = std::chrono::steady_clock::now();
+  auto age = std::chrono::duration_cast<std::chrono::milliseconds>(now - motor_feedback_[motor_id].second);
+  return age.count() <= max_age_ms;
 }
