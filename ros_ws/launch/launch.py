@@ -28,7 +28,7 @@ def generate_launch_description():
                 'zeta': 0.0
             }],
             remappings=[
-                ('imu/data_raw', '/imu'),
+                ('imu/data_raw', '/imu/data'),
                 ('imu/data', '/imu/filtered')
             ]
         ),
