@@ -3,13 +3,35 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    return LaunchDescription([
+    # Basic nodes that are always launched
+    nodes = [
         Node(
             package="joy",
             executable="joy_node",
             name="joy_node",
             namespace="",
             output='screen'
+        ),
+
+        # IMU Filter Madgwick (always enabled)
+        Node(
+            package='imu_filter_madgwick',
+            executable='imu_filter_madgwick_node',
+            name='imu_filter_madgwick',
+            output='screen',
+            parameters=[{
+                'use_mag': False,
+                'publish_tf': False,
+                'world_frame': 'enu',
+                'fixed_frame': 'base_link',
+                'gain': 0.01,  # 低いゲインでノイズを抑制
+                'zeta': 0.1,   # ダンピング追加
+                'remove_gravity_vector': True,
+                'bias_alpha': 0.1
+            }],
+            remappings=[
+                ('imu/data_raw', '/imu/data')  # IMUの生データをMadgwickに入力
+            ]
         ),
 
         Node(
@@ -55,4 +77,6 @@ def generate_launch_description():
             name="lifting_motor_node",
             parameters=[]
         )
-    ])
+    ]
+    
+    return LaunchDescription(nodes)

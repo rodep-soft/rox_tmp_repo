@@ -2,6 +2,17 @@ set shell := ["bash", "-c"]
 
 default: build
 
+# Install dependencies using rosdep
+deps:
+    rosdep install --from-paths src --ignore-src -r -y
+
+# Update rosdep database
+deps-update:
+    rosdep update
+
+# Full build with dependencies
+build-full: deps build
+
 build:
     colcon build  --symlink-install
     just source

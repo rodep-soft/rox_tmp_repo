@@ -28,18 +28,24 @@ class JoyDriverNode : public rclcpp::Node {
   // Constructor
   JoyDriverNode();
 
-  // Public enum for testing
+  // gtestのためにpublicにしてある
+  // Public enum
   enum class Mode { STOP, JOY, DPAD, LINETRACE };
 
-  // Public helper functions for testing
+  // Public helper functions
   static double applyDeadzone(double val, double threshold = 0.05);
   static double normalizeAngle(double angle);
   double calculatePIDCorrection(double error, double dt, double velocity_factor = 1.0);
-  double calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_z, double dt, double velocity_factor = 1.0);
+  double calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_x, double dt, double velocity_factor = 1.0);
   std::string mode_to_string(Mode mode);
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg);
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg);
   void keyboard_callback(const std_msgs::msg::String::SharedPtr msg);
+  
+  // Advanced PID control functions (Best Practices)
+  void resetPIDState(const std::string& reason = "manual");
+  void updateTargetOrientation();
+  bool isSystemStable() const;
 
  private:
   // default Mode
@@ -63,7 +69,7 @@ class JoyDriverNode : public rclcpp::Node {
 
   // ROS2 Subscription
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
-  rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr rpy_subscription_;
+  // rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr rpy_subscription_;  // 削除: Madgwick使用
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_subscription_;
 
   // ROS2 Publisher
@@ -104,11 +110,22 @@ class JoyDriverNode : public rclcpp::Node {
   double integral_error_ = 0.0;
   double last_correction_time_ = 0.0;
   
+  // Advanced PID control variables (Best Practices)
+  double error_rate_limit_ = 5.0;  // rad/s - 角度誤差変化率制限
+  double last_filtered_error_ = 0.0;
+  double disturbance_estimate_ = 0.0;  // 外乱推定値
+  double adaptive_deadband_ = 0.02;   // 動的デッドバンド
+  double control_effort_history_[5] = {0.0}; // 制御履歴（安定性評価用）
+  int control_history_index_ = 0;
+  double velocity_estimate_ = 0.0;    // 速度推定（カルマンフィルタ風）
+  double acceleration_estimate_ = 0.0; // 加速度推定
+  
   // ローパスフィルタ係数（0.0-1.0, 小さいほど平滑化が強い）
-  static constexpr double YAW_FILTER_ALPHA = 0.5;  // より強い平滑化
+  static constexpr double YAW_FILTER_ALPHA = 0.3;  // より強い平滑化
+  static constexpr double VELOCITY_FILTER_ALPHA = 0.4;  // 速度フィルタ
   
   // 積分項のウィンドアップ防止
-  static constexpr double MAX_INTEGRAL_ERROR = 0.5;
+  static constexpr double MAX_INTEGRAL_ERROR = 0.3;  // より保守的
 
   // ===== ros2 params END =====
 
@@ -117,11 +134,9 @@ class JoyDriverNode : public rclcpp::Node {
   double roll_ = 0.0;
   double yaw_ = 0.0;
 
-  // Angular velocities from IMU (rad/s)
-  double angular_vel_x_ = 0.0;
-  double angular_vel_y_ = 0.0;
-  double angular_vel_z_ = 0.0;
-  double filtered_angular_vel_z_ = 0.0;
+  // Angular velocities from IMU (rad/s) - simplified for madgwick filtering
+  double angular_vel_x_ = 0.0;         // Raw X-axis angular velocity  
+  double filtered_angular_vel_x_ = 0.0; // Madgwick filtered angular velocity
 
   // 初期化時のyaw値
   // これはロボットの初期姿勢を基準にするための値

@@ -20,13 +20,22 @@ RUN apt-get update && apt-get upgrade -y && \
     python3.11-distutils \
     python3-pip \
     python3-gpiozero \
+    python3-rosdep \
     libboost-system-dev \
     ros-humble-joy \
     ros-humble-demo-nodes-cpp \
     ros-humble-foxglove-bridge \
     libgpiod-dev \
+    qtbase5-dev \
+    qtdeclarative5-dev \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
+
+#sudo apt install qtbase5-dev qtdeclarative5-dev
+
+# --- Initialize rosdep ---
+#RUN rosdep init && \
+RUN rosdep update
 
     
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -88,6 +97,9 @@ RUN mkdir -p /root/.config/colcon && \
 WORKDIR /root/ros_ws
 
 COPY ./ros_ws/src ./src/
+
+# --- Install workspace dependencies with rosdep ---
+RUN rosdep install --from-paths src --ignore-src -r -y || true
 
 CMD ["bash"]
 
