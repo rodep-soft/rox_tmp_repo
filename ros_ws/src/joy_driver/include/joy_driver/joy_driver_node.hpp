@@ -122,7 +122,7 @@ class JoyDriverNode : public rclcpp::Node {
   double angular_vel_x_ = 0.0;
   double angular_vel_y_ = 0.0;
   double angular_vel_z_ = 0.0;
-  double filtered_angular_vel_z_ = 0.0;
+  double filtered_angular_vel_x_ = 0.0;
 
   // 初期化時のyaw値
   // これはロボットの初期姿勢を基準にするための値

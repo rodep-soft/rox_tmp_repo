@@ -204,7 +204,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       // ここのデッドゾーンは要検討
 
       // 手動回転入力を取得
-      double manual_angular = -applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
+      double manual_angular = applyDeadzone(msg->axes[angular_axis_], angular_deadzone) * angular_scale_;
       
       // ジョイスティックノイズのデバッグ（頻度を大幅削減）
       if (std::abs(msg->axes[angular_axis_] * angular_scale_) > 1.0) {
@@ -218,13 +218,15 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       static bool waiting_for_target_update = false;
       static auto manual_rotation_end_time = std::chrono::steady_clock::now();
       static double target_update_yaw = 0.0;
-      
+
+      const double yaw_rate_threshold = 0.5 * M_PI / 180.0; // 0.5 degrees
+
       // **手動回転中は一切の補正を停止**
-      if (std::abs(manual_angular) > 0.05) {
+      if (std::abs(manual_angular) > 0.01) {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
         integral_error_ = 0.0;
         prev_yaw_error_ = 0.0;
-        twist_msg->angular.z = -manual_angular;  // 手動回転の符号を反転
+        // twist_msg->angular.z = -manual_angular;  // 手動回転の符号を反転
         was_manual_rotating = true;  // 手動回転中フラグを設定
         waiting_for_target_update = false;  // 更新待機状態をリセット
         
@@ -245,9 +247,9 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         // 手動回転終了直後はPID補正を無効化
         twist_msg->angular.z = 0.0;
         
-        RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                             "MANUAL ROTATION END: waiting for IMU stabilization (temp_yaw=%.1f°)", 
-                             target_update_yaw * 180.0 / M_PI);
+        // RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+        //                      "MANUAL ROTATION END: waiting for IMU stabilization (temp_yaw=%.1f°)", 
+        //                      target_update_yaw * 180.0 / M_PI);
       } else if (waiting_for_target_update) {
         // 手動回転終了後、IMU安定化待機中
         auto current_time = std::chrono::steady_clock::now();
@@ -274,6 +276,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       } else if (std::abs(manual_angular) < 0.01 && is_moving && !waiting_for_target_update) {
         
         // 動作開始時にPID状態をリセット（切り返し対応）
+        // 必要かは謎。あとで確認
         static bool was_moving = false;
         if (!was_moving) {
           integral_error_ = 0.0;
@@ -309,7 +312,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
         // PID補正を適用
-        double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, velocity_factor);
+        double pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, velocity_factor);
         
         // PID補正値を適用（符号反転を除去）
         twist_msg->angular.z = -pid_correction * angular_scale_;
@@ -362,13 +365,13 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         
         // DPADモードでは最大強度で角度+角速度補正を適用
         // 符号修正：エラーと同じ方向に補正して打ち消す
-        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, 1.0);
+        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, 1.0);
         
         // デバッグ出力（補正時のみ）
         if (std::abs(twist_msg->angular.z) > 0.01) {
           RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                                "DPAD correction: error=%.3f, ang_vel=%.3f, correction=%.3f", 
-                               error, filtered_angular_vel_z_, twist_msg->angular.z);
+                               error, filtered_angular_vel_x_, twist_msg->angular.z);
         }
       } else {
         // 手動回転時はPID状態をリセット
@@ -498,8 +501,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
 void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg) {
   // BNO055からは度（degrees）で来るのでradianに変換
-  roll_ = msg->x * M_PI / 180.0;
-  pitch_ = msg->y * M_PI / 180.0;
+  // roll_ = msg->x * M_PI / 180.0;
+  // pitch_ = msg->y * M_PI / 180.0;
   
   // 重要: 正しい軸はX軸だった！（テストで確認済み）
   double raw_yaw = msg->x * M_PI / 180.0;  // X軸を使用するように修正
@@ -550,10 +553,11 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
   //                      "IMU Angular Velocity: x=%.3f, y=%.3f, z=%.3f rad/s", 
   //                      angular_vel_x_, angular_vel_y_, angular_vel_z_);
-  
-  // Z軸角速度にローパスフィルタを適用
-  filtered_angular_vel_z_ = YAW_FILTER_ALPHA * angular_vel_z_ + 
-                           (1.0 - YAW_FILTER_ALPHA) * filtered_angular_vel_z_;
+
+  // X軸角速度にローパスフィルタを適用
+  filtered_angular_vel_x_ = YAW_FILTER_ALPHA * angular_vel_x_ + 
+                           (1.0 - YAW_FILTER_ALPHA) * filtered_angular_vel_x_;
+
 }
 
 double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
@@ -609,7 +613,7 @@ double JoyDriverNode::normalizeAngle(double angle) {
   return angle - M_PI;
 }
 
-double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_z, double dt, double velocity_factor) {
+double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_x, double dt, double velocity_factor) {
   // デッドバンド処理を一時無効化（すべての誤差に対して補正を適用）
   // if (std::abs(angle_error) < deadband_) {
   //   integral_error_ = 0.0;
@@ -638,7 +642,7 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
                            adaptive_kd * derivative;
 
   // 角速度フィードバック制御を適切に調整（現在の回転を適度に抑制）
-  double current_angular_vel = (std::abs(angular_vel_z) > 0.001) ? angular_vel_z : filtered_angular_vel_z_;
+  double current_angular_vel = (std::abs(angular_vel_x_) > 0.001) ? angular_vel_x_ : filtered_angular_vel_x_;
   double velocity_damping = -0.1 * current_angular_vel * velocity_factor;  // ダンピングを適度に
   
   // 総合補正値
