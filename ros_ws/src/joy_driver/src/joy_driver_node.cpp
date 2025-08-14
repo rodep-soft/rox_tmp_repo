@@ -217,7 +217,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       static bool was_manual_rotating = false;
       static bool waiting_for_target_update = false;
       static auto manual_rotation_end_time = std::chrono::steady_clock::now();
-      static double target_update_yaw = 0.0;
+      // static double target_update_yaw = 0.0; // For debugging
 
       const double yaw_rate_threshold = 0.5 * M_PI / 180.0; // 0.5 degrees
 
@@ -238,7 +238,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         manual_rotation_end_time = std::chrono::steady_clock::now();
         was_manual_rotating = false;
         waiting_for_target_update = true;  // 目標角度更新待機状態に設定
-        target_update_yaw = yaw_;  // 現在のIMU値を記録
+        // target_update_yaw = yaw_;  // 現在のIMU値を記録
         
         // PID状態をリセット
         integral_error_ = 0.0;
