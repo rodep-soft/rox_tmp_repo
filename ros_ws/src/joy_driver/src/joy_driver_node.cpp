@@ -198,7 +198,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       twist_msg->linear.x = applyDeadzone(msg->axes[linear_x_axis_]) * linear_x_scale_;
       twist_msg->linear.y = applyDeadzone(msg->axes[linear_y_axis_]) * linear_y_scale_;
 
-      // 動的デッドゾーン：移動中は回転のデッドゾーンを大きく、停止中も十分な値に
+      // 動的デッドゾーン：移動中は回転のデッドゾーンを小さく、停止中は十分な値に
       bool is_moving = (std::abs(twist_msg->linear.x) > 0.1 || std::abs(twist_msg->linear.y) > 0.1);
       double angular_deadzone = is_moving ? 0.075 : 0.15;
       // ここのデッドゾーンは要検討
@@ -220,7 +220,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       static double target_update_yaw = 0.0;
       
       // **手動回転中は一切の補正を停止**
-      if (std::abs(manual_angular) > 0.01) {
+      if (std::abs(manual_angular) > 0.05) {
         // 手動回転入力がある場合はそれを優先し、PID状態をリセット
         integral_error_ = 0.0;
         prev_yaw_error_ = 0.0;
