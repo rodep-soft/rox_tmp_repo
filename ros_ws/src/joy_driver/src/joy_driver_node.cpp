@@ -613,8 +613,8 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
   roll_ = msg->x * M_PI / 180.0;
   pitch_ = msg->y * M_PI / 180.0;
   
-  // 重要: 正しい軸はX軸だった！（テストで確認済み）
-  double raw_yaw = msg->x * M_PI / 180.0;  // X軸を使用するように修正
+  // ★座標系修正★：X軸角度データの方向統一
+  double raw_yaw = -msg->x * M_PI / 180.0;  // X軸角度も反転（ラジアンに変換）
   
   // IMU軸診断：すべての軸を表示して正しい軸を確認
   RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
@@ -655,8 +655,9 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
 void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   // === ベストプラクティス：高品質IMUデータ処理 ===
   
-  // 生の角速度データを取得（既にrad/s）
-  angular_vel_x_ = msg->angular_velocity.x;
+  // 生の角速度データを取得（座標系修正）
+  // ★座標系修正★：X軸が逆方向だったため符号反転
+  angular_vel_x_ = -msg->angular_velocity.x;  // X軸反転（左旋回が正）
   angular_vel_y_ = msg->angular_velocity.y;
   angular_vel_z_ = msg->angular_velocity.z;
   
@@ -674,6 +675,24 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   static const double DT = 0.01;                       // サンプリング時間
   
   double raw_angular_vel_x = angular_vel_x_;
+  
+  // ★ドリフト蓄積検出システム★（座標系修正確認）
+  static double cumulative_angle_change = 0.0;
+  static int drift_detection_counter = 0;
+  
+  cumulative_angle_change += raw_angular_vel_x * DT;
+  drift_detection_counter++;
+  
+  // 10秒間隔でドリフト監視
+  if (drift_detection_counter >= 1000) {
+    double total_drift_degrees = cumulative_angle_change * 180.0 / M_PI;
+    if (std::abs(total_drift_degrees) > 30.0) {
+      RCLCPP_WARN(this->get_logger(),
+                 "★座標系警告★ 10秒間で%.1f°ドリフト検出！座標系要確認", total_drift_degrees);
+    }
+    cumulative_angle_change = 0.0;
+    drift_detection_counter = 0;
+  }
   
   // ★EKF予測ステップ★
   // 状態予測: x(k|k-1) = F * x(k-1|k-1)
