@@ -1,4 +1,5 @@
 # .github/workflows/docker-build-check.yml
+# main以外のブランチでCIを回すときは、一時的にPull Requestを作成するとよい
 
 name: Docker and Colcon Build Check
 
@@ -6,10 +7,10 @@ name: Docker and Colcon Build Check
 on:
   # mainブランチへのpush時に実行
   push:
-    branches: [ "main", "master", "dev/zyodan" ]
+    branches: [ "main", "master"]
   # mainブランチに対するpull request時に実行
   pull_request:
-    branches: [ "main", "master", "dev/zyodan" ]
+    branches: [ "main", "master"]
 
 jobs:
   build_and_test:
@@ -42,3 +43,7 @@ jobs:
       - name: Run colcon build check
         run: |
           docker run --rm --workdir /root/ros_ws ros2-rox-image:latest /bin/bash -c "source /opt/ros/humble/setup.bash && colcon build"
+
+      - name: Run joy_driver test check
+        run: |
+          docker run --rm --workdir /root/ros_ws ros2-rox-image:latest /bin/bash -c "source /opt/ros/humble/setup.bash && colcon test --packages-select joy_driver"
