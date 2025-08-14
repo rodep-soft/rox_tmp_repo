@@ -634,26 +634,46 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 }
 
 void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg) {
-  // Madgwick廃止：robot_localizationのEKFデータのみを使用
-  if (!ekf_data_received_) {
-    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
-                        "Waiting for EKF data... Madgwick data ignored");
+  // EKFデータが利用可能な場合は、EKFのyawを優先使用
+  if (ekf_data_received_) {
+    // robot_localizationのEKFデータを使用（高精度）
+    yaw_ = ekf_yaw_;
+    
+    // BNO055の他のデータは引き続き取得
+    roll_ = msg->x * M_PI / 180.0;
+    pitch_ = msg->y * M_PI / 180.0;
+    
+    static int ekf_debug_counter = 0;
+    if (ekf_debug_counter++ % 200 == 0) {
+      RCLCPP_INFO(this->get_logger(),
+                 "Using EKF yaw: %.1f° (Madgwick X: %.1f°)", 
+                 ekf_yaw_ * 180.0 / M_PI, msg->x);
+    }
     return;
   }
   
-  // robot_localizationのEKFデータのみを使用
-  yaw_ = ekf_yaw_;
-  
-  // BNO055の他のデータ（roll, pitch）は参考程度に取得
+  // 応急処置：EKFが利用できない場合はMadgwickフィルタ済みデータを一時使用
+  // BNO055からは度（degrees）で来るのでradianに変換
   roll_ = msg->x * M_PI / 180.0;
   pitch_ = msg->y * M_PI / 180.0;
   
-  static int ekf_only_counter = 0;
-  if (ekf_only_counter++ % 200 == 0) {
-    RCLCPP_INFO(this->get_logger(),
-               "EKF-ONLY MODE: yaw=%.1f° (Madgwick ignored)", 
-               ekf_yaw_ * 180.0 / M_PI);
+  // ★座標系修正★：X軸角度データの方向統一
+  double raw_yaw = -msg->x * M_PI / 180.0;  // X軸角度も反転（ラジアンに変換）
+  
+  RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                       "EMERGENCY FALLBACK: Using Madgwick X-axis yaw=%.1f° (EKF not available)", msg->x);
+  
+  // ローパスフィルタで角度データを平滑化
+  if (filtered_yaw_ == 0.0) {
+    // 初回は生データを使用
+    filtered_yaw_ = raw_yaw;
+  } else {
+    // 角度の連続性を考慮したフィルタリング
+    double yaw_diff = normalizeAngle(raw_yaw - filtered_yaw_);
+    filtered_yaw_ = normalizeAngle(filtered_yaw_ + YAW_FILTER_ALPHA * yaw_diff);
   }
+  
+  yaw_ = filtered_yaw_;
 }
 
 void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
@@ -670,11 +690,28 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   filtered_angular_vel_x_ = filter_alpha * angular_vel_x_ + (1.0 - filter_alpha) * prev_filtered_angular_vel_x;
   prev_filtered_angular_vel_x = filtered_angular_vel_x_;
   
-  // Madgwick廃止：EKFデータのみ使用
+  // 応急処置：EKFが利用できない場合のフォールバック
   if (!ekf_data_received_) {
+    // Quaternionからyaw角を計算（フォールバック）
+    auto quat = msg->orientation;
+    double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
+    double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
+    double fallback_yaw = std::atan2(siny_cosp, cosy_cosp);
+    
+    // フォールバックyawをフィルタリング（一時的）
+    static double fallback_filtered_yaw = 0.0;
+    if (fallback_filtered_yaw == 0.0) {
+      fallback_filtered_yaw = fallback_yaw;
+    } else {
+      double yaw_diff = normalizeAngle(fallback_yaw - fallback_filtered_yaw);
+      fallback_filtered_yaw = normalizeAngle(fallback_filtered_yaw + 0.1 * yaw_diff);
+    }
+    
+    yaw_ = fallback_filtered_yaw;
+    
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                        "EKF data not available - waiting for robot_localization");
-    return;
+                        "EMERGENCY: Using raw IMU orientation yaw=%.1f° (EKF not available)",
+                        yaw_ * 180.0 / M_PI);
   }
   
   // デバッグ出力（間欠的）
@@ -682,9 +719,9 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   debug_counter++;
   if (debug_counter % 500 == 0) {  // 5秒間隔
     RCLCPP_INFO(this->get_logger(),
-               "IMU+EKF: angular_vel_x=%.3f rad/s (%.1f°/s) | EKF yaw=%.1f°",
+               "IMU+EKF: angular_vel_x=%.3f rad/s (%.1f°/s) | EKF available: %s | yaw=%.1f°",
                filtered_angular_vel_x_, filtered_angular_vel_x_ * 180.0 / M_PI,
-               ekf_yaw_ * 180.0 / M_PI);
+               ekf_data_received_ ? "YES" : "NO", yaw_ * 180.0 / M_PI);
   }
 }
 
