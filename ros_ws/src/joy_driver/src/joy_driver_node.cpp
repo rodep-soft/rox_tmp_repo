@@ -79,6 +79,20 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
   auto mode_msg = std::make_unique<std_msgs::msg::String>();
 
+  // ジョイスティック入力のデバッグ情報（十字キーの状態確認）
+  static int debug_counter = 0;
+  debug_counter++;
+  if (debug_counter % 100 == 0) {  // 2秒に1回ログ出力（50Hz前提）
+    std::string button_status = "Buttons: ";
+    for (size_t i = 0; i < std::min(msg->buttons.size(), size_t(16)); ++i) {
+      if (msg->buttons[i]) {
+        button_status += std::to_string(i) + "=1 ";
+      }
+    }
+    if (button_status == "Buttons: ") button_status += "none pressed";
+    RCLCPP_INFO(this->get_logger(), "%s | Mode: %s", button_status.c_str(), mode_to_string(mode_).c_str());
+  }
+
   // だめぽ
   // linetrace_msg->data = false;
 
@@ -350,6 +364,14 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       if (!l2_pressed && !r2_pressed) {
         twist_msg->linear.x = (msg->buttons[11] - msg->buttons[12]) * linear_x_scale_ / 2.0;
         twist_msg->linear.y = (msg->buttons[13] - msg->buttons[14]) * linear_y_scale_ / 2.0;
+        
+        // DPADボタン状態のデバッグ出力
+        if (msg->buttons[11] || msg->buttons[12] || msg->buttons[13] || msg->buttons[14]) {
+          RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 200,
+                               "DPAD buttons: UP=%d, DOWN=%d, LEFT=%d, RIGHT=%d -> vel_x=%.3f, vel_y=%.3f", 
+                               msg->buttons[11], msg->buttons[12], msg->buttons[13], msg->buttons[14],
+                               twist_msg->linear.x, twist_msg->linear.y);
+        }
         
         // 現在時刻の取得
         auto now = this->get_clock()->now();
