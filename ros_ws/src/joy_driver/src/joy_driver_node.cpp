@@ -685,17 +685,41 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   // === Madgwick Filtered IMU Data Processing ===
   // madgwickで既にフィルタリング済みなのでフィルタ不要
   
+  // === 異常値フィルタリング ===
+  double max_reasonable_angular_vel = 50.0;  // 50 rad/s = 2865°/s を上限とする
+  double filtered_x = std::clamp(msg->angular_velocity.x, -max_reasonable_angular_vel, max_reasonable_angular_vel);
+  double filtered_y = std::clamp(msg->angular_velocity.y, -max_reasonable_angular_vel, max_reasonable_angular_vel);
+  double filtered_z = std::clamp(msg->angular_velocity.z, -max_reasonable_angular_vel, max_reasonable_angular_vel);
+  
+  // 異常値が検出された場合の警告
+  if (std::abs(msg->angular_velocity.x) > max_reasonable_angular_vel ||
+      std::abs(msg->angular_velocity.y) > max_reasonable_angular_vel ||
+      std::abs(msg->angular_velocity.z) > max_reasonable_angular_vel) {
+    RCLCPP_WARN(this->get_logger(),
+               "ANOMALY DETECTED! Raw: X=%.1f, Y=%.1f, Z=%.1f rad/s | Clamped: X=%.1f, Y=%.1f, Z=%.1f",
+               msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z,
+               filtered_x, filtered_y, filtered_z);
+  }
+  
   // IMU座標軸確認用ログ（どの軸が正しいかデバッグ）
   static int debug_counter = 0;
   debug_counter++;
   
+  double max_angular_vel = std::max({std::abs(filtered_x), std::abs(filtered_y), std::abs(filtered_z)});
+  
+  if (max_angular_vel > 0.5) {  // 0.5 rad/s = 約29°/s以上
+    RCLCPP_WARN(this->get_logger(),
+               "ROTATION DETECTED! X=%.2f, Y=%.2f, Z=%.2f rad/s | Using Z-axis (%.2f)",
+               filtered_x, filtered_y, filtered_z, filtered_z);
+  }
+  
   if (debug_counter % 1000 == 0) {  // 10秒に1回
     RCLCPP_WARN(this->get_logger(),
                "MADGWICK FILTERED: X=%.3f, Y=%.3f, Z=%.3f rad/s | X=%.1f°/s, Y=%.1f°/s, Z=%.1f°/s",
-               msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z,
-               msg->angular_velocity.x * 180.0 / M_PI,
-               msg->angular_velocity.y * 180.0 / M_PI,
-               msg->angular_velocity.z * 180.0 / M_PI);
+               filtered_x, filtered_y, filtered_z,
+               filtered_x * 180.0 / M_PI,
+               filtered_y * 180.0 / M_PI,
+               filtered_z * 180.0 / M_PI);
     RCLCPP_WARN(this->get_logger(),
                "AXIS MAPPING: angular_velocity.x=BNO055_X, .y=BNO055_Y, .z=BNO055_Z");
     RCLCPP_WARN(this->get_logger(),
@@ -720,23 +744,11 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   
   // 使用する軸を選択（実機テストに基づいて1つを選択）
   // 過去の実機テストでX軸が有効だったため、まずはZ軸を標準として試す
-  double vertical_rotation_axis = msg->angular_velocity.z;   // Z軸テスト（標準的配置）
-  // double vertical_rotation_axis = -msg->angular_velocity.x;  // X軸（過去の実績）
-  // double vertical_rotation_axis = -msg->angular_velocity.y;  // Y軸テスト用
+  double vertical_rotation_axis = filtered_z;   // Z軸テスト（標準的配置） - フィルタリング済み値を使用
+  // double vertical_rotation_axis = -filtered_x;  // X軸（過去の実績）
+  // double vertical_rotation_axis = -filtered_y;  // Y軸テスト用
   
   filtered_angular_vel_x_ = vertical_rotation_axis;
-  
-  // 簡易軸テスト: 大きな回転を検出した時に全軸を表示
-  double max_angular_vel = std::max({std::abs(msg->angular_velocity.x), 
-                                     std::abs(msg->angular_velocity.y), 
-                                     std::abs(msg->angular_velocity.z)});
-  
-  if (max_angular_vel > 0.5) {  // 0.5 rad/s = 約29°/s以上で反応
-    RCLCPP_WARN(this->get_logger(),
-               "ROTATION DETECTED! X=%.2f, Y=%.2f, Z=%.2f rad/s | Using Z-axis (%.2f)",
-               msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z,
-               vertical_rotation_axis);
-  }
   
   // ヨー角積分
   auto current_time = this->get_clock()->now();
@@ -760,8 +772,6 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
 double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
   // L2/R2を押した時の手動回転時は基準値を更新
   // （ただし、これは意図的な回転なので基準をリセット）
-  bool is_manual_rotation =
-      (msg->axes[4] < TRIGGER_THRESHOLD) || (msg->axes[5] < TRIGGER_THRESHOLD);
 
   // if (!was_manual_rotation && is_manual_rotation) {
     // 手動回転開始時に基準値を更新してPID状態をリセット

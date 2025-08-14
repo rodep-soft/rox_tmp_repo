@@ -24,8 +24,10 @@ def generate_launch_description():
                 'publish_tf': False,
                 'world_frame': 'enu',
                 'fixed_frame': 'base_link',
-                'gain': 0.1,
-                'zeta': 0.0
+                'gain': 0.01,  # 低いゲインでノイズを抑制
+                'zeta': 0.1,   # ダンピング追加
+                'remove_gravity_vector': True,
+                'bias_alpha': 0.1
             }],
             remappings=[
                 ('imu/data_raw', '/imu/data'),
