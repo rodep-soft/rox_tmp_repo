@@ -7,15 +7,25 @@
     linear_x_axis: 1
     linear_y_axis: 0
     angular_axis: 2  
-    # IMU based Advanced PID controller params (Balanced Sensitivity)
-    # 基本PIDゲイン（バランス調整済み）
-    Kp: 2.0   # 比例ゲイン：適度な強化
-    Ki: 0.18  # 積分ゲイン：適度な継続補正
-    Kd: 0.05  # 微分ゲイン：安定性確保
     
-    # 制御品質パラメータ（適度な感度補正）
+    # ===== IMU 座標軸設定 (実機テスト要) =====
+    # 現在の設定: X軸を垂直回転軸として使用（-符号付き）
+    # BNO055の取り付け方向により正しい軸は変わる可能性がある
+    # テスト手順:
+    # 1. ロボットを時計回りに手動回転
+    # 2. ログで正の値を示す軸を確認
+    # 3. joy_driver_node.cppで該当軸を選択
+    # 結果: [実機テスト後に記録予定]
+    
+    # IMU based Advanced PID controller params (Large Error Enhanced)
+    # 基本PIDゲイン（大誤差対応強化）
+    Kp: 2.8   # 比例ゲイン：大誤差対応強化
+    Ki: 0.22  # 積分ゲイン：継続補正強化
+    Kd: 0.08  # 微分ゲイン：安定性とレスポンス向上
+    
+    # 制御品質パラメータ（超大誤差対応型）
     deadband: 0.02 # 動的デッドバンド基準値（約1.1度）
-    max_angular_correction: 1.5 # 最大補正力（適度に調整）
+    max_angular_correction: 4.5 # 最大補正力（超大誤差対応）
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08

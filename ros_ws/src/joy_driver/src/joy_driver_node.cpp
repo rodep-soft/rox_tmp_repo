@@ -11,9 +11,10 @@ JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
       "/joy", best_effort_qos,
       std::bind(&JoyDriverNode::joy_callback, this, std::placeholders::_1));
 
-  rpy_subscription_ = this->create_subscription<geometry_msgs::msg::Vector3>(
-      "/imu/rpy", best_effort_qos,
-      std::bind(&JoyDriverNode::rpy_callback, this, std::placeholders::_1));
+  // RPYサブスクリプション削除 - Madgwickフィルタを使用しているため不要
+  // rpy_subscription_ = this->create_subscription<geometry_msgs::msg::Vector3>(
+  //     "/imu/rpy", best_effort_qos,
+  //     std::bind(&JoyDriverNode::rpy_callback, this, std::placeholders::_1));
 
   imu_subscription_ = this->create_subscription<sensor_msgs::msg::Imu>(
       "/imu", best_effort_qos,
@@ -316,10 +317,10 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         bool is_slow_movement = (velocity_magnitude < 0.3);
         bool is_stationary = (velocity_magnitude < 0.1);
         
-        // 角度誤差の大きさによる制御強度調整（適度な感度調整）
+        // 角度誤差の大きさによる制御強度調整（大誤差早期検出）
         double error_magnitude = std::abs(error);
-        bool large_error = (error_magnitude > 0.15); // 8.6度以上
-        bool medium_error = (error_magnitude > 0.04 && error_magnitude <= 0.15); // 2.3-8.6度
+        bool large_error = (error_magnitude > 0.12); // 6.9度以上（従来8.6° → 早期化）
+        bool medium_error = (error_magnitude > 0.04 && error_magnitude <= 0.12); // 2.3-6.9度
         bool small_error = (error_magnitude > 0.015 && error_magnitude <= 0.04); // 0.9-2.3度
         bool micro_error = (error_magnitude <= 0.015); // 0.9度以下（微細）
         
@@ -360,12 +361,15 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           pid_suppression_factor = 1.0; // 抑制なし
           control_mode = "STATIONARY_CORRECTING";
         } else if (large_error) {
-          // 大きな誤差：強力補正（100度超対応）
-          if (error_magnitude > 1.5) { // 86度以上
-            pid_suppression_factor = 1.0; // フル補正（抑制なし）
+          // 大きな誤差：超強力補正（7度から即座に対応）
+          if (error_magnitude > 0.7) { // 40度以上
+            pid_suppression_factor = 1.2; // 120%補正（オーバーパワー）
             control_mode = "LARGE_ERROR_EMERGENCY";
+          } else if (error_magnitude > 0.35) { // 20度以上
+            pid_suppression_factor = 1.1; // 110%補正
+            control_mode = "LARGE_ERROR_CRITICAL";
           } else {
-            pid_suppression_factor = 0.9; // 強力補正
+            pid_suppression_factor = 1.0; // 100%補正（抑制なし）
             control_mode = "LARGE_ERROR_NORMAL";
           }
         } else if (micro_error) {
@@ -383,20 +387,26 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           control_mode = "STANDARD";
         }
         
-        // デバッグ出力（移動パターン解析） - 適度な頻度
+        // デバッグ出力（移動パターン解析） - 大誤差時は即座に警告
         static int pattern_debug_counter = 0;
         pattern_debug_counter++;
-        if (pattern_debug_counter % 80 == 0 || (large_error || medium_error)) { // 大きな誤差時は表示
-          RCLCPP_INFO(this->get_logger(),
-                     "Movement Analysis: vel=%.2f, fwd=%.2f, lat=%.2f, err=%.1f°, mode=%s, suppress=%.1f",
-                     velocity_magnitude, forward_ratio, lateral_ratio, 
-                     error_magnitude * 180.0 / M_PI, control_mode.c_str(), pid_suppression_factor);
+        if (pattern_debug_counter % 80 == 0 || (large_error || medium_error)) { // 大・中誤差時は表示
+          if (large_error && error_magnitude > 0.35) { // 20度以上は緊急警告
+            RCLCPP_ERROR(this->get_logger(),
+                        "CRITICAL DRIFT: vel=%.2f, err=%.1f°, mode=%s, suppress=%.1f - EMERGENCY CORRECTION!",
+                        velocity_magnitude, error_magnitude * 180.0 / M_PI, control_mode.c_str(), pid_suppression_factor);
+          } else {
+            RCLCPP_INFO(this->get_logger(),
+                       "Movement Analysis: vel=%.2f, fwd=%.2f, lat=%.2f, err=%.1f°, mode=%s, suppress=%.1f",
+                       velocity_magnitude, forward_ratio, lateral_ratio, 
+                       error_magnitude * 180.0 / M_PI, control_mode.c_str(), pid_suppression_factor);
+          }
         }
         
         double velocity_factor = std::clamp(velocity_magnitude / linear_x_scale_, 0.3, 1.0);
         
         // 抑制因子を適用したPID補正
-        double raw_pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, velocity_factor);
+        double raw_pid_correction = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_yaw_, dt, velocity_factor);
         double suppressed_pid_correction = raw_pid_correction * pid_suppression_factor;
         
         // PID補正値を適用（符号修正：実験的に逆転）
@@ -485,13 +495,13 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         
         // DPADモードでは最大強度で角度+角速度補正を適用
         // 符号修正：エラーと同じ方向に補正して打ち消す
-        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, 1.0);
+        twist_msg->angular.z = calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_yaw_, dt, 1.0);
         
         // デバッグ出力（補正時のみ）
         if (std::abs(twist_msg->angular.z) > 0.01) {
           RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                                "DPAD correction: error=%.3f, ang_vel=%.3f, correction=%.3f", 
-                               error, filtered_angular_vel_x_, twist_msg->angular.z);
+                               error, filtered_angular_vel_yaw_, twist_msg->angular.z);
         }
       } else {
         // 手動回転時：インテリジェントなPIDリセットと目標更新
@@ -627,22 +637,22 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 }
 
 void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg) {
-  // BNO055からは度（degrees）で来るのでradianに変換
-  roll_ = msg->x * M_PI / 180.0;
-  pitch_ = msg->y * M_PI / 180.0;
+  // IMUノード修正後のRPY順序: x=Roll, y=Pitch, z=Yaw
+  roll_ = msg->x * M_PI / 180.0;    // Roll (正しい軸)
+  pitch_ = msg->y * M_PI / 180.0;   // Pitch (正しい軸)
   
-  // ★座標系修正★：X軸角度データの方向統一
-  double raw_yaw = -msg->x * M_PI / 180.0;  // X軸角度も反転（ラジアンに変換）
+  // ★修正★：Z軸がヨー角として正しく設定された
+  double raw_yaw = -msg->z * M_PI / 180.0;  // Z軸をヨー角として使用（符号要確認）
   
-  // IMU軸診断：すべての軸を表示して正しい軸を確認
+  // IMU軸診断：修正後の正しい軸マッピングを確認
   RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
-                       "IMU RAW DATA: X=%.1f°, Y=%.1f°, Z=%.1f° (using X for yaw)", 
+                       "RPY CORRECTED: Roll=%.1f°, Pitch=%.1f°, Yaw=%.1f° (using Z for yaw)", 
                        msg->x, msg->y, msg->z);
   
   // IMUデータの詳細確認用ログ（変化量も表示）
   static double prev_x = 0.0, prev_y = 0.0, prev_z = 0.0;
   RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                       "IMU ANALYSIS: X=%.2f°(Δ%.2f), Y=%.2f°(Δ%.2f), Z=%.2f°(Δ%.2f)", 
+                       "RPY ANALYSIS: Roll=%.2f°(Δ%.2f), Pitch=%.2f°(Δ%.2f), Yaw=%.2f°(Δ%.2f)", 
                        msg->x, msg->x - prev_x,
                        msg->y, msg->y - prev_y, 
                        msg->z, msg->z - prev_z);
@@ -650,11 +660,11 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
   
   // IMUデータの確認用ログ（5秒間隔に削減）
   RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                       "IMU: yaw=%.1f° (change_rate=%.3f°/s)", msg->x,  // X軸を表示
-                       (last_yaw_log_time_ > 0) ? (msg->x - last_yaw_log_) / 5.0 : 0.0);
+                       "IMU: yaw=%.1f° (change_rate=%.3f°/s)", msg->z,  // Z軸を表示
+                       (last_yaw_log_time_ > 0) ? (msg->z - last_yaw_log_) / 5.0 : 0.0);
   
-  // ログ用の前回値を保存（X軸を使用）
-  last_yaw_log_ = msg->x;
+  // ログ用の前回値を保存（Z軸を使用）
+  last_yaw_log_ = msg->z;
   last_yaw_log_time_ = this->get_clock()->now().seconds();
   
   // ローパスフィルタで角度データを平滑化
@@ -671,157 +681,78 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
 }
 
 void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
-  // === ベストプラクティス：高品質IMUデータ処理 ===
+  // === Madgwick Filtered IMU Data Processing ===
+  // madgwickで既にフィルタリング済みなのでフィルタ不要
   
-  // 生の角速度データを取得（座標系修正）
-  // ★座標系修正★：X軸が逆方向だったため符号反転
-  angular_vel_x_ = -msg->angular_velocity.x;  // X軸反転（左旋回が正）
-  angular_vel_y_ = msg->angular_velocity.y;
-  angular_vel_z_ = msg->angular_velocity.z;
+  // IMU座標軸確認用ログ（どの軸が正しいかデバッグ）
+  static int debug_counter = 0;
+  debug_counter++;
   
-  // ★最強IMUフィルタ：拡張カルマンフィルタ（EKF）実装★
-  // 状態ベクトル: [角速度, 角速度変化率, バイアス]
-  static double state_estimate[3] = {0.0, 0.0, 0.0}; // [omega, omega_dot, bias]
-  static double covariance_matrix[9] = {1.0, 0.0, 0.0,
-                                       0.0, 1.0, 0.0,
-                                       0.0, 0.0, 1.0}; // 3x3 共分散行列
-  
-  // EKFパラメータ（最適化済み）
-  static const double PROCESS_NOISE_OMEGA = 0.001;     // 角速度プロセスノイズ
-  static const double PROCESS_NOISE_BIAS = 0.0001;     // バイアスプロセスノイズ
-  static const double MEASUREMENT_NOISE = 0.01;        // 測定ノイズ
-  static const double DT = 0.01;                       // サンプリング時間
-  
-  double raw_angular_vel_x = angular_vel_x_;
-  
-  // ★ドリフト蓄積検出システム★（座標系修正確認）
-  static double cumulative_angle_change = 0.0;
-  static int drift_detection_counter = 0;
-  
-  cumulative_angle_change += raw_angular_vel_x * DT;
-  drift_detection_counter++;
-  
-  // 10秒間隔でドリフト監視
-  if (drift_detection_counter >= 1000) {
-    double total_drift_degrees = cumulative_angle_change * 180.0 / M_PI;
-    if (std::abs(total_drift_degrees) > 30.0) {
-      RCLCPP_WARN(this->get_logger(),
-                 "★座標系警告★ 10秒間で%.1f°ドリフト検出！座標系要確認", total_drift_degrees);
-    }
-    cumulative_angle_change = 0.0;
-    drift_detection_counter = 0;
+  if (debug_counter % 1000 == 0) {  // 10秒に1回
+    RCLCPP_WARN(this->get_logger(),
+               "MADGWICK FILTERED: X=%.3f, Y=%.3f, Z=%.3f rad/s | X=%.1f°/s, Y=%.1f°/s, Z=%.1f°/s",
+               msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z,
+               msg->angular_velocity.x * 180.0 / M_PI,
+               msg->angular_velocity.y * 180.0 / M_PI,
+               msg->angular_velocity.z * 180.0 / M_PI);
+    RCLCPP_WARN(this->get_logger(),
+               "AXIS MAPPING: angular_velocity.x=BNO055_X, .y=BNO055_Y, .z=BNO055_Z");
+    RCLCPP_WARN(this->get_logger(),
+               "ROTATION TEST: Manually rotate robot clockwise to verify correct axis");
   }
   
-  // ★EKF予測ステップ★
-  // 状態予測: x(k|k-1) = F * x(k-1|k-1)
-  double predicted_state[3];
-  predicted_state[0] = state_estimate[0] + DT * state_estimate[1]; // omega + dt*omega_dot
-  predicted_state[1] = state_estimate[1];                          // omega_dot (一定)
-  predicted_state[2] = state_estimate[2];                          // bias (一定)
+  // ===== 座標軸選択 (BNO055物理配置に依存) =====
+  // 配列インデックスと軸の対応: [0]=X, [1]=Y, [2]=Z （実装で確認済み）
+  // 
+  // IMUの加速度データから垂直軸を推定してヨー軸を決定
+  // 理論上、水平設置なら重力ベクトル（~9.8m/s²）が垂直軸に現れる
   
-  // 状態遷移行列 F
-  double F[9] = {1.0, DT, 0.0,
-                 0.0, 1.0, 0.0,
-                 0.0, 0.0, 1.0};
+  // 各軸の加速度から垂直軸候補を特定
+  // （注意：Madgwickフィルタ後は重力補正されている可能性）
   
-  // プロセスノイズ共分散行列 Q
-  double Q[9] = {PROCESS_NOISE_OMEGA * DT * DT, 0.0, 0.0,
-                 0.0, PROCESS_NOISE_OMEGA, 0.0,
-                 0.0, 0.0, PROCESS_NOISE_BIAS};
+  // 一般的なIMU配置:
+  // - Z軸: 垂直方向（重力と平行）→ ヨー回転（水平面内の回転）
+  // - X軸: 前後方向 → ピッチ回転
+  // - Y軸: 左右方向 → ロール回転
+  //
+  // しかしBNO055の取り付け方向により実際の軸は変わる可能性あり
   
-  // 共分散予測: P(k|k-1) = F * P(k-1|k-1) * F^T + Q
-  double predicted_covariance[9];
-  // 簡略化された共分散更新（3x3行列演算）
-  for (int i = 0; i < 9; i++) {
-    predicted_covariance[i] = covariance_matrix[i] + Q[i];
-  }
-  predicted_covariance[0] += DT * DT * covariance_matrix[4]; // P11 += dt^2 * P22
+  // 使用する軸を選択（実機テストに基づいて1つを選択）
+  // 標準的なIMU配置ではZ軸が垂直回転軸（ヨー軸）
+  double vertical_rotation_axis = msg->angular_velocity.z;   // Z軸使用（標準的配置）
+  // double vertical_rotation_axis = -msg->angular_velocity.x;  // X軸（過去の実績、要再検証）
+  // double vertical_rotation_axis = -msg->angular_velocity.y;  // Y軸テスト用
   
-  // ★EKF更新ステップ★
-  // 観測値と予測値の差（イノベーション）
-  double innovation = raw_angular_vel_x - (predicted_state[0] + predicted_state[2]);
+  filtered_angular_vel_yaw_ = vertical_rotation_axis;
   
-  // イノベーション共分散 S = H * P * H^T + R
-  double innovation_covariance = predicted_covariance[0] + predicted_covariance[8] + MEASUREMENT_NOISE;
+  // 簡易軸テスト: 大きな回転を検出した時に全軸を表示
+  double max_angular_vel = std::max({std::abs(msg->angular_velocity.x), 
+                                     std::abs(msg->angular_velocity.y), 
+                                     std::abs(msg->angular_velocity.z)});
   
-  // カルマンゲイン K = P * H^T * S^(-1)
-  double kalman_gains[3];
-  kalman_gains[0] = (predicted_covariance[0] + predicted_covariance[2]) / innovation_covariance;
-  kalman_gains[1] = predicted_covariance[3] / innovation_covariance;
-  kalman_gains[2] = (predicted_covariance[6] + predicted_covariance[8]) / innovation_covariance;
-  
-  // 状態更新: x(k|k) = x(k|k-1) + K * innovation
-  state_estimate[0] = predicted_state[0] + kalman_gains[0] * innovation;
-  state_estimate[1] = predicted_state[1] + kalman_gains[1] * innovation;
-  state_estimate[2] = predicted_state[2] + kalman_gains[2] * innovation;
-  
-  // 共分散更新: P(k|k) = (I - K * H) * P(k|k-1)
-  for (int i = 0; i < 9; i++) {
-    covariance_matrix[i] = predicted_covariance[i];
-  }
-  covariance_matrix[0] *= (1.0 - kalman_gains[0]);
-  covariance_matrix[4] *= (1.0 - kalman_gains[1]);
-  covariance_matrix[8] *= (1.0 - kalman_gains[2]);
-  
-  // ★EKF + 統計的異常値検出★の複合フィルタ
-  // 1段目：EKFによるノイズ除去＆バイアス補正
-  double ekf_filtered_velocity = state_estimate[0]; // バイアス補正済み角速度
-  
-  // 2段目：統計的異常値検出（3σ法）
-  static double velocity_history[15] = {0.0}; // より大きなウィンドウ
-  static int history_index = 0;
-  
-  velocity_history[history_index] = ekf_filtered_velocity; // EKF結果を履歴に保存
-  history_index = (history_index + 1) % 15;
-  
-  // 統計的異常値検出（改良版）
-  double mean = 0.0, variance = 0.0;
-  for (int i = 0; i < 15; i++) mean += velocity_history[i];
-  mean /= 15.0;
-  
-  for (int i = 0; i < 15; i++) {
-    variance += (velocity_history[i] - mean) * (velocity_history[i] - mean);
-  }
-  variance /= 14.0;
-  double std_dev = std::sqrt(variance + 1e-6); // 数値安定性
-  
-  // 3σ異常値検出＆適応的フィルタリング
-  double final_filtered_velocity = ekf_filtered_velocity;
-  if (std::abs(ekf_filtered_velocity - mean) > 2.5 * std_dev) {
-    // 異常値検出：より保守的な値を使用
-    final_filtered_velocity = mean + 0.3 * (ekf_filtered_velocity - mean);
+  if (max_angular_vel > 0.5) {  // 0.5 rad/s = 約29°/s以上で反応
+    RCLCPP_WARN(this->get_logger(),
+               "ROTATION DETECTED! X=%.2f, Y=%.2f, Z=%.2f rad/s | Using Z-axis (%.2f)",
+               msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z,
+               filtered_angular_vel_yaw_);
   }
   
-  // 3段目：適応ローパスフィルタ（最終仕上げ）
-  static double adaptive_alpha = 0.7;
-  double velocity_change = std::abs(final_filtered_velocity - filtered_angular_vel_x_);
+  // ヨー角積分
+  auto current_time = this->get_clock()->now();
+  static auto last_time = current_time;
   
-  // 変化量に応じてフィルタ強度を調整
-  if (velocity_change > 0.05) {
-    adaptive_alpha = 0.8; // 大きな変化：高応答性
-  } else {
-    adaptive_alpha = 0.3; // 小さな変化：高安定性
+  double dt = (current_time - last_time).seconds();
+  if (dt > 0.001 && dt < 0.1) {
+    yaw_ += filtered_angular_vel_yaw_ * dt;
+    yaw_ = normalizeAngle(yaw_);
   }
-  // ★最終フィルタリング統合★
-  filtered_angular_vel_x_ = adaptive_alpha * final_filtered_velocity + 
-                           (1.0 - adaptive_alpha) * filtered_angular_vel_x_;
+  last_time = current_time;
   
-  // 4段目：ゼロ近傍での精密処理（ドリフト除去）
-  static double zero_threshold = 0.002;
-  if (std::abs(filtered_angular_vel_x_) < zero_threshold && 
-      std::abs(raw_angular_vel_x) < zero_threshold * 2) {
-    filtered_angular_vel_x_ *= 0.5; // 静止時ドリフト大幅抑制
-  }
-  
-  // ★EKF品質メトリクス★
-  static int log_counter = 0;
-  log_counter++;
-  if (log_counter % 150 == 0) { // 3秒に1回
-    double filter_effectiveness = 1.0 - (std::abs(filtered_angular_vel_x_) / (std::abs(raw_angular_vel_x) + 1e-6));
+  // ログ（簡素化）
+  if (debug_counter % 500 == 0) {  // 5秒間隔
     RCLCPP_INFO(this->get_logger(),
-               "★EKF Quality★ Raw=%.4f→Filtered=%.4f | Bias=%.4f | σ=%.4f | Eff=%.1f%% | α=%.2f", 
-               raw_angular_vel_x, filtered_angular_vel_x_, state_estimate[2], 
-               std_dev, filter_effectiveness * 100, adaptive_alpha);
+               "IMU: yaw=%.1f° (vel_x=%.3f°/s) - Using X-axis",
+               yaw_ * 180.0 / M_PI, filtered_angular_vel_yaw_ * 180.0 / M_PI);
   }
 }
 

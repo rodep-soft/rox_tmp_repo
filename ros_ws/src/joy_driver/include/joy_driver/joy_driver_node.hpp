@@ -69,7 +69,7 @@ class JoyDriverNode : public rclcpp::Node {
 
   // ROS2 Subscription
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
-  rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr rpy_subscription_;
+  // rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr rpy_subscription_;  // 削除: Madgwick使用
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_subscription_;
 
   // ROS2 Publisher
@@ -134,11 +134,9 @@ class JoyDriverNode : public rclcpp::Node {
   double roll_ = 0.0;
   double yaw_ = 0.0;
 
-  // Angular velocities from IMU (rad/s)
-  double angular_vel_x_ = 0.0;
-  double angular_vel_y_ = 0.0;
-  double angular_vel_z_ = 0.0;
-  double filtered_angular_vel_x_ = 0.0;
+  // Angular velocities from IMU (rad/s) - simplified for madgwick filtering
+  double angular_vel_x_ = 0.0;         // Raw X-axis angular velocity (unused)
+  double filtered_angular_vel_yaw_ = 0.0; // Filtered YAW axis angular velocity (from Z-axis)
 
   // 初期化時のyaw値
   // これはロボットの初期姿勢を基準にするための値
