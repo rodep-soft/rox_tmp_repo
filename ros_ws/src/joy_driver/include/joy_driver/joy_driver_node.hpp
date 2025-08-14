@@ -12,6 +12,8 @@
 
 // ROS messages
 #include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/vector3.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/bool.hpp>
@@ -58,6 +60,7 @@ class JoyDriverNode : public rclcpp::Node {
   // Callback functions
   void rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr msg);
   void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg);
+  void ekf_odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
 
   // Helper functions
   // double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg);  // moved to public
@@ -71,6 +74,7 @@ class JoyDriverNode : public rclcpp::Node {
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_subscription_;
   rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr rpy_subscription_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_subscription_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr ekf_odom_subscription_;
 
   // ROS2 Publisher
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_publisher_;
@@ -96,6 +100,7 @@ class JoyDriverNode : public rclcpp::Node {
   int linear_x_axis_;
   int linear_y_axis_;
   int angular_axis_;
+  bool ekf_fusion_enabled_;
 
   // PID
   double Kp_;
@@ -129,10 +134,17 @@ class JoyDriverNode : public rclcpp::Node {
 
   // ===== ros2 params END =====
 
-  // Euler
+  // Euler angles from IMU (raw data)
   double pitch_ = 0.0;
   double roll_ = 0.0;
   double yaw_ = 0.0;
+
+  // EKF filtered pose data
+  double ekf_yaw_ = 0.0;
+  double ekf_x_ = 0.0;
+  double ekf_y_ = 0.0;
+  double ekf_angular_velocity_z_ = 0.0;
+  bool ekf_data_received_ = false;
 
   // Angular velocities from IMU (rad/s)
   double angular_vel_x_ = 0.0;

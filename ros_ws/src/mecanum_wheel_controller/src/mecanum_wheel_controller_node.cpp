@@ -1,7 +1,8 @@
 #include "mecanum_wheel_controller/mecanum_wheel_controller.hpp"
 
 MecanumWheelControllerNode::MecanumWheelControllerNode()
-    : Node("mecanum_wheel_controller"), motor_controller_(this->get_logger()) {
+    : Node("mecanum_wheel_controller"), motor_controller_(this->get_logger()),
+      x_(0.0), y_(0.0), theta_(0.0) {
   declare_parameters();
   get_parameters();
 
@@ -17,6 +18,10 @@ MecanumWheelControllerNode::MecanumWheelControllerNode()
   brake_service_ = this->create_service<std_srvs::srv::SetBool>(
       "/brake", std::bind(&MecanumWheelControllerNode::brake_service_callback, this,
                           std::placeholders::_1, std::placeholders::_2));
+
+  // Initialize odometry publisher
+  odom_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/wheel/odom", 10);
+  last_odom_time_ = std::chrono::steady_clock::now();
 
   vx_.store(0.0);
   vy_.store(0.0);
@@ -161,6 +166,103 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
                                                        {motor_ids_[3], rpm_rear_right}};
 
   motor_controller_.send_velocity_commands_sequential(commands, static_cast<bool>(brake_));
+  
+  // Publish wheel odometry based on commanded velocities
+  publish_wheel_odometry(vx, vy, wz);
+}
+
+void MecanumWheelControllerNode::publish_wheel_odometry(double vx, double vy, double wz) {
+  auto current_time = std::chrono::steady_clock::now();
+  double dt = std::chrono::duration<double>(current_time - last_odom_time_).count();
+  last_odom_time_ = current_time;
+
+  // メカナムホイール運動学に基づく実際の速度計算
+  // Forward kinematics from wheel velocities (commanded velocities)
+  const double lxy_sum = wheel_base_x_ + wheel_base_y_;
+  
+  // 実際のロボット速度（メカナムホイール運動学の逆計算）
+  // これらの値は既にコマンド値として与えられているので、そのまま使用
+  // ただし、将来的にはモーターフィードバックから実際の速度を計算できる
+  
+  // Integrate velocities to get position (robot frame)
+  double delta_x = (vx * std::cos(theta_) - vy * std::sin(theta_)) * dt;
+  double delta_y = (vx * std::sin(theta_) + vy * std::cos(theta_)) * dt;
+  double delta_theta = wz * dt;
+
+  x_ += delta_x;
+  y_ += delta_y;
+  theta_ += delta_theta;
+
+  // Normalize theta to [-pi, pi]
+  while (theta_ > M_PI) theta_ -= 2.0 * M_PI;
+  while (theta_ < -M_PI) theta_ += 2.0 * M_PI;
+
+  // Create and publish odometry message
+  auto odom_msg = nav_msgs::msg::Odometry();
+  odom_msg.header.stamp = this->get_clock()->now();
+  odom_msg.header.frame_id = "odom";
+  odom_msg.child_frame_id = "base_link";
+
+  // Position
+  odom_msg.pose.pose.position.x = x_;
+  odom_msg.pose.pose.position.y = y_;
+  odom_msg.pose.pose.position.z = 0.0;
+
+  // Orientation (quaternion from yaw)
+  tf2::Quaternion q;
+  q.setRPY(0, 0, theta_);
+  odom_msg.pose.pose.orientation = tf2::toMsg(q);
+
+  // Velocity (in robot frame)
+  odom_msg.twist.twist.linear.x = vx;
+  odom_msg.twist.twist.linear.y = vy;
+  odom_msg.twist.twist.linear.z = 0.0;
+  odom_msg.twist.twist.angular.x = 0.0;
+  odom_msg.twist.twist.angular.y = 0.0;
+  odom_msg.twist.twist.angular.z = wz;
+
+  // Set covariance based on mecanum wheel characteristics
+  std::fill(odom_msg.pose.covariance.begin(), odom_msg.pose.covariance.end(), 0.0);
+  std::fill(odom_msg.twist.covariance.begin(), odom_msg.twist.covariance.end(), 0.0);
+  
+  // Position covariance (higher uncertainty for mecanum wheels due to slippage)
+  odom_msg.pose.covariance[0] = 0.05;   // x (higher due to wheel slippage)
+  odom_msg.pose.covariance[7] = 0.05;   // y (mecanum wheels have lateral slippage)  
+  odom_msg.pose.covariance[35] = 0.1;   // yaw (rotation accuracy depends on wheel calibration)
+  
+  // Velocity covariance
+  odom_msg.twist.covariance[0] = 0.02;   // vx
+  odom_msg.twist.covariance[7] = 0.03;   // vy (higher uncertainty for lateral movement)
+  odom_msg.twist.covariance[35] = 0.05;  // wz
+
+  odom_publisher_->publish(odom_msg);
+  
+  // Debug output every 2 seconds
+  static auto last_debug = std::chrono::steady_clock::now();
+  if (std::chrono::duration<double>(current_time - last_debug).count() > 2.0) {
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                        "WHEEL ODOM: pos(%.2f,%.2f,%.1f°) vel(%.2f,%.2f,%.2f) dt=%.3f",
+                        x_, y_, theta_ * 180.0 / M_PI, vx, vy, wz, dt);
+    last_debug = current_time;
+  }
+}
+
+void MecanumWheelControllerNode::calculate_robot_velocity_from_feedback(double& vx, double& vy, double& wz) {
+  // メカナムホイール逆運動学：モーターフィードバックからロボット速度を計算
+  const double rpm_to_rad = 2.0 * M_PI / 60.0;
+  const double lxy_sum = wheel_base_x_ + wheel_base_y_;
+  
+  // 実際のモーターRPMから車輪角速度に変換（補正係数を考慮）
+  double wheel_fl_vel = (actual_rpm_fl_.load() / motor_correction_fl_) * rpm_to_rad * wheel_radius_;
+  double wheel_fr_vel = (actual_rpm_fr_.load() / (-motor_correction_fr_)) * rpm_to_rad * wheel_radius_;
+  double wheel_rl_vel = (actual_rpm_rl_.load() / motor_correction_rl_) * rpm_to_rad * wheel_radius_;
+  double wheel_rr_vel = (actual_rpm_rr_.load() / (-motor_correction_rr_)) * rpm_to_rad * wheel_radius_;
+  
+  // メカナムホイール逆運動学（forward kinematics）
+  // 4つの車輪速度からロボットの並進・回転速度を計算
+  vx = (wheel_fl_vel + wheel_fr_vel + wheel_rl_vel + wheel_rr_vel) / 4.0;
+  vy = (-wheel_fl_vel + wheel_fr_vel + wheel_rl_vel - wheel_rr_vel) / 4.0;
+  wz = (-wheel_fl_vel + wheel_fr_vel - wheel_rl_vel + wheel_rr_vel) / (4.0 * lxy_sum);
 }
 
 void MecanumWheelControllerNode::stop_all_motors() {

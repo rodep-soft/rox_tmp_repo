@@ -3,6 +3,9 @@
 #include <atomic>
 #include <chrono>
 #include <geometry_msgs/msg/twist.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <std_srvs/srv/set_bool.hpp>
@@ -27,10 +30,13 @@ class MecanumWheelControllerNode : public rclcpp::Node {
 
   void timer_send_velocity_callback();
   void stop_all_motors();
+  void publish_wheel_odometry(double vx, double vy, double wz);
+  void calculate_robot_velocity_from_feedback(double& vx, double& vy, double& wz);
 
   // ROS2 components
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_subscription_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr brake_service_;
+  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher_;
 
   MotorController motor_controller_;
 
@@ -50,6 +56,13 @@ class MecanumWheelControllerNode : public rclcpp::Node {
   double motor_correction_rr_;
 
   std::atomic<double> vx_, vy_, wz_;
+  
+  // Odometry state
+  double x_, y_, theta_;
+  std::chrono::steady_clock::time_point last_odom_time_;
+  
+  // Motor feedback for odometry (future implementation)
+  std::atomic<int16_t> actual_rpm_fl_{0}, actual_rpm_fr_{0}, actual_rpm_rl_{0}, actual_rpm_rr_{0};
 
   std::atomic<std::chrono::time_point<std::chrono::steady_clock>> last_subscription_time_;
   std::string serial_port_;

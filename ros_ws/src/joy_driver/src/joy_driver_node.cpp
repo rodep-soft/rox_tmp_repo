@@ -19,6 +19,11 @@ JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
       "/imu", best_effort_qos,
       std::bind(&JoyDriverNode::imu_callback, this, std::placeholders::_1));
 
+  // EKF filtered odometry subscription
+  ekf_odom_subscription_ = this->create_subscription<nav_msgs::msg::Odometry>(
+      "/odom/filtered", best_effort_qos,
+      std::bind(&JoyDriverNode::ekf_odom_callback, this, std::placeholders::_1));
+
   // Create publisher for the /cmd_vel topic
   cmd_vel_publisher_ =
       this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", best_effort_qos);
@@ -41,6 +46,7 @@ void JoyDriverNode::declare_parameters() {
   this->declare_parameter<int>("linear_x_axis", 1);  // Vertical movement
   this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
   this->declare_parameter<int>("angular_axis", 2);
+  this->declare_parameter<bool>("ekf_fusion_enabled", true);  // EKF統合を有効化
 
   this->declare_parameter<double>("Kp", 0.15);  // 比例ゲイン（より控えめに）
   this->declare_parameter<double>("Ki", 0.01);  // 積分ゲイン（より控えめに）
@@ -56,6 +62,7 @@ void JoyDriverNode::get_parameters() {
   linear_x_axis_ = this->get_parameter("linear_x_axis").as_int();
   linear_y_axis_ = this->get_parameter("linear_y_axis").as_int();
   angular_axis_ = this->get_parameter("angular_axis").as_int();
+  ekf_fusion_enabled_ = this->get_parameter("ekf_fusion_enabled").as_bool();
 
   Kp_ = this->get_parameter("Kp").as_double();                     // 比例ゲイン
   Ki_ = this->get_parameter("Ki").as_double();                     // 積分ゲイン
@@ -67,8 +74,8 @@ void JoyDriverNode::get_parameters() {
   // パラメータ値をログ出力して確認
   RCLCPP_INFO(
       this->get_logger(),
-      "Parameters loaded: angular_axis=%d, linear_x_axis=%d, linear_y_axis=%d, angular_scale=%.2f",
-      angular_axis_, linear_x_axis_, linear_y_axis_, angular_scale_);
+      "Parameters loaded: angular_axis=%d, linear_x_axis=%d, linear_y_axis=%d, angular_scale=%.2f, ekf_fusion=%s",
+      angular_axis_, linear_x_axis_, linear_y_axis_, angular_scale_, ekf_fusion_enabled_ ? "enabled" : "disabled");
 }
 
 // Joy main callback function
@@ -671,175 +678,55 @@ void JoyDriverNode::rpy_callback(const geometry_msgs::msg::Vector3::SharedPtr ms
 }
 
 void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
-  // === ベストプラクティス：高品質IMUデータ処理 ===
+  // robot_localizationのEKFを使用するため、シンプルなIMUデータ取得のみ
   
   // 生の角速度データを取得（座標系修正）
-  // ★座標系修正★：X軸が逆方向だったため符号反転
   angular_vel_x_ = -msg->angular_velocity.x;  // X軸反転（左旋回が正）
   angular_vel_y_ = msg->angular_velocity.y;
   angular_vel_z_ = msg->angular_velocity.z;
   
-  // ★最強IMUフィルタ：拡張カルマンフィルタ（EKF）実装★
-  // 状態ベクトル: [角速度, 角速度変化率, バイアス]
-  static double state_estimate[3] = {0.0, 0.0, 0.0}; // [omega, omega_dot, bias]
-  static double covariance_matrix[9] = {1.0, 0.0, 0.0,
-                                       0.0, 1.0, 0.0,
-                                       0.0, 0.0, 1.0}; // 3x3 共分散行列
+  // 簡単なローパスフィルタを適用（ノイズ除去）
+  static double prev_filtered_angular_vel_x = 0.0;
+  const double filter_alpha = 0.3;
+  filtered_angular_vel_x_ = filter_alpha * angular_vel_x_ + (1.0 - filter_alpha) * prev_filtered_angular_vel_x;
+  prev_filtered_angular_vel_x = filtered_angular_vel_x_;
   
-  // EKFパラメータ（最適化済み）
-  static const double PROCESS_NOISE_OMEGA = 0.001;     // 角速度プロセスノイズ
-  static const double PROCESS_NOISE_BIAS = 0.0001;     // バイアスプロセスノイズ
-  static const double MEASUREMENT_NOISE = 0.01;        // 測定ノイズ
-  static const double DT = 0.01;                       // サンプリング時間
-  
-  double raw_angular_vel_x = angular_vel_x_;
-  
-  // ★ドリフト蓄積検出システム★（座標系修正確認）
-  static double cumulative_angle_change = 0.0;
-  static int drift_detection_counter = 0;
-  
-  cumulative_angle_change += raw_angular_vel_x * DT;
-  drift_detection_counter++;
-  
-  // 10秒間隔でドリフト監視
-  if (drift_detection_counter >= 1000) {
-    double total_drift_degrees = cumulative_angle_change * 180.0 / M_PI;
-    if (std::abs(total_drift_degrees) > 30.0) {
-      RCLCPP_WARN(this->get_logger(),
-                 "★座標系警告★ 10秒間で%.1f°ドリフト検出！座標系要確認", total_drift_degrees);
-    }
-    cumulative_angle_change = 0.0;
-    drift_detection_counter = 0;
+  // EKFが利用可能でない場合のフォールバック：生のorientation
+  if (!ekf_data_received_) {
+    // Quaternionからyaw角を計算（フォールバック）
+    auto quat = msg->orientation;
+    double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
+    double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
+    yaw_ = std::atan2(siny_cosp, cosy_cosp);
+    
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                        "EKF data not available, using raw IMU orientation as fallback");
   }
   
-  // ★EKF予測ステップ★
-  // 状態予測: x(k|k-1) = F * x(k-1|k-1)
-  double predicted_state[3];
-  predicted_state[0] = state_estimate[0] + DT * state_estimate[1]; // omega + dt*omega_dot
-  predicted_state[1] = state_estimate[1];                          // omega_dot (一定)
-  predicted_state[2] = state_estimate[2];                          // bias (一定)
-  
-  // 状態遷移行列 F
-  double F[9] = {1.0, DT, 0.0,
-                 0.0, 1.0, 0.0,
-                 0.0, 0.0, 1.0};
-  
-  // プロセスノイズ共分散行列 Q
-  double Q[9] = {PROCESS_NOISE_OMEGA * DT * DT, 0.0, 0.0,
-                 0.0, PROCESS_NOISE_OMEGA, 0.0,
-                 0.0, 0.0, PROCESS_NOISE_BIAS};
-  
-  // 共分散予測: P(k|k-1) = F * P(k-1|k-1) * F^T + Q
-  double predicted_covariance[9];
-  // 簡略化された共分散更新（3x3行列演算）
-  for (int i = 0; i < 9; i++) {
-    predicted_covariance[i] = covariance_matrix[i] + Q[i];
-  }
-  predicted_covariance[0] += DT * DT * covariance_matrix[4]; // P11 += dt^2 * P22
-  
-  // ★EKF更新ステップ★
-  // 観測値と予測値の差（イノベーション）
-  double innovation = raw_angular_vel_x - (predicted_state[0] + predicted_state[2]);
-  
-  // イノベーション共分散 S = H * P * H^T + R
-  double innovation_covariance = predicted_covariance[0] + predicted_covariance[8] + MEASUREMENT_NOISE;
-  
-  // カルマンゲイン K = P * H^T * S^(-1)
-  double kalman_gains[3];
-  kalman_gains[0] = (predicted_covariance[0] + predicted_covariance[2]) / innovation_covariance;
-  kalman_gains[1] = predicted_covariance[3] / innovation_covariance;
-  kalman_gains[2] = (predicted_covariance[6] + predicted_covariance[8]) / innovation_covariance;
-  
-  // 状態更新: x(k|k) = x(k|k-1) + K * innovation
-  state_estimate[0] = predicted_state[0] + kalman_gains[0] * innovation;
-  state_estimate[1] = predicted_state[1] + kalman_gains[1] * innovation;
-  state_estimate[2] = predicted_state[2] + kalman_gains[2] * innovation;
-  
-  // 共分散更新: P(k|k) = (I - K * H) * P(k|k-1)
-  for (int i = 0; i < 9; i++) {
-    covariance_matrix[i] = predicted_covariance[i];
-  }
-  covariance_matrix[0] *= (1.0 - kalman_gains[0]);
-  covariance_matrix[4] *= (1.0 - kalman_gains[1]);
-  covariance_matrix[8] *= (1.0 - kalman_gains[2]);
-  
-  // ★EKF + 統計的異常値検出★の複合フィルタ
-  // 1段目：EKFによるノイズ除去＆バイアス補正
-  double ekf_filtered_velocity = state_estimate[0]; // バイアス補正済み角速度
-  
-  // 2段目：統計的異常値検出（3σ法）
-  static double velocity_history[15] = {0.0}; // より大きなウィンドウ
-  static int history_index = 0;
-  
-  velocity_history[history_index] = ekf_filtered_velocity; // EKF結果を履歴に保存
-  history_index = (history_index + 1) % 15;
-  
-  // 統計的異常値検出（改良版）
-  double mean = 0.0, variance = 0.0;
-  for (int i = 0; i < 15; i++) mean += velocity_history[i];
-  mean /= 15.0;
-  
-  for (int i = 0; i < 15; i++) {
-    variance += (velocity_history[i] - mean) * (velocity_history[i] - mean);
-  }
-  variance /= 14.0;
-  double std_dev = std::sqrt(variance + 1e-6); // 数値安定性
-  
-  // 3σ異常値検出＆適応的フィルタリング
-  double final_filtered_velocity = ekf_filtered_velocity;
-  if (std::abs(ekf_filtered_velocity - mean) > 2.5 * std_dev) {
-    // 異常値検出：より保守的な値を使用
-    final_filtered_velocity = mean + 0.3 * (ekf_filtered_velocity - mean);
-  }
-  
-  // 3段目：適応ローパスフィルタ（最終仕上げ）
-  static double adaptive_alpha = 0.7;
-  double velocity_change = std::abs(final_filtered_velocity - filtered_angular_vel_x_);
-  
-  // 変化量に応じてフィルタ強度を調整
-  if (velocity_change > 0.05) {
-    adaptive_alpha = 0.8; // 大きな変化：高応答性
-  } else {
-    adaptive_alpha = 0.3; // 小さな変化：高安定性
-  }
-  // ★最終フィルタリング統合★
-  filtered_angular_vel_x_ = adaptive_alpha * final_filtered_velocity + 
-                           (1.0 - adaptive_alpha) * filtered_angular_vel_x_;
-  
-  // 4段目：ゼロ近傍での精密処理（ドリフト除去）
-  static double zero_threshold = 0.002;
-  if (std::abs(filtered_angular_vel_x_) < zero_threshold && 
-      std::abs(raw_angular_vel_x) < zero_threshold * 2) {
-    filtered_angular_vel_x_ *= 0.5; // 静止時ドリフト大幅抑制
-  }
-  
-  // ★EKF品質メトリクス★
-  static int log_counter = 0;
-  log_counter++;
-  if (log_counter % 150 == 0) { // 3秒に1回
-    double filter_effectiveness = 1.0 - (std::abs(filtered_angular_vel_x_) / (std::abs(raw_angular_vel_x) + 1e-6));
+  // デバッグ出力（間欠的）
+  static int debug_counter = 0;
+  debug_counter++;
+  if (debug_counter % 500 == 0) {  // 5秒間隔
     RCLCPP_INFO(this->get_logger(),
-               "★EKF Quality★ Raw=%.4f→Filtered=%.4f | Bias=%.4f | σ=%.4f | Eff=%.1f%% | α=%.2f", 
-               raw_angular_vel_x, filtered_angular_vel_x_, state_estimate[2], 
-               std_dev, filter_effectiveness * 100, adaptive_alpha);
+               "IMU: angular_vel_x=%.3f rad/s (%.1f°/s) | EKF available: %s",
+               filtered_angular_vel_x_, filtered_angular_vel_x_ * 180.0 / M_PI,
+               ekf_data_received_ ? "YES" : "NO");
   }
 }
 
 double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
   // L2/R2を押した時の手動回転時は基準値を更新
   // （ただし、これは意図的な回転なので基準をリセット）
-  static bool was_manual_rotation = false;
   bool is_manual_rotation =
       (msg->axes[4] < TRIGGER_THRESHOLD) || (msg->axes[5] < TRIGGER_THRESHOLD);
 
-  // if (!was_manual_rotation && is_manual_rotation) {
-    // 手動回転開始時に基準値を更新してPID状態をリセット
+  // 手動回転開始時に基準値を更新してPID状態をリセット
+  if (is_manual_rotation) {
     init_yaw_ = yaw_;
     integral_error_ = 0.0;
     prev_yaw_error_ = 0.0;
     last_correction_time_ = 0.0;
-  // }
-  was_manual_rotation = is_manual_rotation;
+  }
 
   if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
     // R2: rotate right
@@ -879,7 +766,22 @@ double JoyDriverNode::normalizeAngle(double angle) {
 }
 
 double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_x, double dt, double velocity_factor) {
-  // === ベストプラクティス：高度なIMU PID制御システム ===
+  // === EKF統合：最高品質の姿勢制御システム ===
+  
+  // EKFデータが利用可能で有効な場合、より正確な角速度を使用
+  double effective_angular_vel = angular_vel_x;
+  if (ekf_fusion_enabled_ && ekf_data_received_) {
+    // EKFの角速度の方が信頼性が高い（特にZ軸ハードウェア故障時）
+    effective_angular_vel = ekf_angular_velocity_z_;
+    
+    // デバッグ出力（間欠的）
+    static int debug_count = 0;
+    if (debug_count++ % 100 == 0) {
+      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                          "EKF CONTROL: Using EKF angular_vel=%.3f vs IMU=%.3f rad/s",
+                          ekf_angular_velocity_z_, angular_vel_x);
+    }
+  }
   
   // 1. 角度誤差のレート制限（急激な変化を抑制）
   double error_change = angle_error - prev_yaw_error_;
@@ -925,7 +827,7 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   
   // 6. 外乱オブザーバー（環境外乱の推定と補正）
   double expected_response = -(Kp_ * prev_yaw_error_ + Ki_ * integral_error_);
-  double actual_response = -angular_vel_x; // 実際の角速度応答
+  double actual_response = -effective_angular_vel; // EKFまたは生IMUの角速度応答
   disturbance_estimate_ = 0.1 * (actual_response - expected_response) + 0.9 * disturbance_estimate_;
   
   // 7. 適応的ゲイン調整（状況に応じて最適化）
@@ -978,6 +880,33 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   
   prev_yaw_error_ = angle_error;
   return total_correction;
+}
+
+void JoyDriverNode::ekf_odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
+  // EKFフィルタ済みの高精度姿勢データを取得
+  ekf_x_ = msg->pose.pose.position.x;
+  ekf_y_ = msg->pose.pose.position.y;
+  
+  // Quaternionからyaw角を計算
+  auto quat = msg->pose.pose.orientation;
+  double siny_cosp = 2 * (quat.w * quat.z + quat.x * quat.y);
+  double cosy_cosp = 1 - 2 * (quat.y * quat.y + quat.z * quat.z);
+  ekf_yaw_ = std::atan2(siny_cosp, cosy_cosp);
+  
+  // EKFからの角速度（より安定）
+  ekf_angular_velocity_z_ = msg->twist.twist.angular.z;
+  
+  ekf_data_received_ = true;
+  
+  // デバッグ出力（間欠的）
+  static auto last_debug = std::chrono::steady_clock::now();
+  auto now = std::chrono::steady_clock::now();
+  if (std::chrono::duration<double>(now - last_debug).count() > 2.0) {
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                        "EKF DATA: pos(%.2f,%.2f) yaw=%.1f° angular_vel_z=%.3f rad/s",
+                        ekf_x_, ekf_y_, ekf_yaw_ * 180.0 / M_PI, ekf_angular_velocity_z_);
+    last_debug = now;
+  }
 }
 
 // === ベストプラクティス：高度なPID制御補助関数 ===

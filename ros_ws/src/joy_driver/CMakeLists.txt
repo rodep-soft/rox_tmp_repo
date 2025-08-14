@@ -11,6 +11,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(custom_interfaces REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -33,6 +34,7 @@ ament_target_dependencies(joy_driver_node
   sensor_msgs
   std_msgs
   geometry_msgs
+  nav_msgs
   custom_interfaces
   std_srvs
 )
