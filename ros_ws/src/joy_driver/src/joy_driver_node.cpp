@@ -17,7 +17,7 @@ JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
   //     std::bind(&JoyDriverNode::rpy_callback, this, std::placeholders::_1));
 
   imu_subscription_ = this->create_subscription<sensor_msgs::msg::Imu>(
-      "/imu", best_effort_qos,
+      "/imu/filtered", best_effort_qos,
       std::bind(&JoyDriverNode::imu_callback, this, std::placeholders::_1));
 
   // Create publisher for the /cmd_vel topic
@@ -231,8 +231,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       
       // **手動回転中は一切の補正を停止**
       if (std::abs(manual_angular) > 0.01) {
-        // 手動回転入力がある場合はそれを優先し、PIDをリセット\
-        // ????
+        // 手動回転入力がある場合はそれを優先し、PIDをリセット
         if (!was_manual_rotating) {
           resetPIDState("manual_rotation_JOY_start");
         }
@@ -761,7 +760,6 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
 double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
   // L2/R2を押した時の手動回転時は基準値を更新
   // （ただし、これは意図的な回転なので基準をリセット）
-  static bool was_manual_rotation = false;
   bool is_manual_rotation =
       (msg->axes[4] < TRIGGER_THRESHOLD) || (msg->axes[5] < TRIGGER_THRESHOLD);
 
@@ -772,7 +770,6 @@ double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPt
     prev_yaw_error_ = 0.0;
     last_correction_time_ = 0.0;
   // }
-  was_manual_rotation = is_manual_rotation;
 
   if (msg->axes[4] < TRIGGER_THRESHOLD && msg->axes[5] >= TRIGGER_THRESHOLD) {
     // R2: rotate right

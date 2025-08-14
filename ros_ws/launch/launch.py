@@ -38,10 +38,7 @@ def generate_launch_description():
             executable="joy_driver_node",
             name="joy_driver_node",
             output='screen',
-            parameters=["config/config.yaml"],
-            remappings=[
-                ('imu', '/imu/filtered')  # Use filtered IMU data
-            ]
+            parameters=["config/config.yaml"]
         ),
 
         Node(
