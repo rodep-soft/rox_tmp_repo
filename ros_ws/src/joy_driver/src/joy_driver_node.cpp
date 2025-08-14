@@ -298,8 +298,8 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         double dt = (last_correction_time_ > 0) ? (current_time - last_correction_time_) : 0.02;
         last_correction_time_ = current_time;
         
-        // 角度誤差を計算（正規化済み）
-        double error = normalizeAngle(init_yaw_ - yaw_);
+        // 角度誤差を計算（統一：現在値 - 目標値）
+        double error = normalizeAngle(yaw_ - init_yaw_);
         
         // === インテリジェント移動パターン検出とPID抑制 ===
         double velocity_magnitude = std::sqrt(twist_msg->linear.x * twist_msg->linear.x + 
@@ -392,12 +392,15 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         // PID補正値を適用（符号修正：実験的に逆転）
         twist_msg->angular.z = -suppressed_pid_correction * angular_scale_;  // 符号反転で補正方向修正
         
-        // 高品質デバッグ：制御詳細
+        // 高品質デバッグ：制御詳細（方向明確化）
         if (std::abs(error) > 0.02 || pattern_debug_counter % 100 == 0) {
+          std::string error_direction = (error > 0) ? "RIGHT_drift" : "LEFT_drift";
+          std::string correction_direction = (twist_msg->angular.z > 0) ? "→LEFT_correct" : "→RIGHT_correct";
           RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                               "Smart PID: %s | err=%.1f° | raw_PID=%.3f | suppressed=%.3f | final=%.3f",
-                               control_mode.c_str(), error * 180.0 / M_PI, 
-                               raw_pid_correction, suppressed_pid_correction, twist_msg->angular.z);
+                               "Smart PID: %s | %s %.1f° %s | raw_PID=%.3f | final=%.3f",
+                               control_mode.c_str(), error_direction.c_str(), 
+                               std::abs(error) * 180.0 / M_PI, correction_direction.c_str(),
+                               raw_pid_correction, twist_msg->angular.z);
         }
         
         // === スマート目標角度更新システム ===
