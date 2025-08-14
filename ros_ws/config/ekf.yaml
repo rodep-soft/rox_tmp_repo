@@ -7,10 +7,10 @@
 ekf_filter_node:
   ros__parameters:
     # The frequency, in Hz, at which the filter will output a position estimate
-    frequency: 50.0
+    frequency: 100.0
     
     # The period, in seconds, after which we consider a sensor to have timed out
-    sensor_timeout: 0.05
+    sensor_timeout: 0.02
     
     # If this is set to true, no 3D information will be used in your state estimate
     two_d_mode: true
@@ -39,45 +39,47 @@ ekf_filter_node:
     world_frame: odom
     
     # Sensor inputs
-    # Wheel odometry from mecanum_wheel_controller (DISABLED for debugging)
-    # odom0: /wheel/odom
+    # Wheel odometry from mecanum_wheel_controller (ENABLED for sensor fusion)
+    odom0: /wheel/odom
     
     # IMU from BNO055 (raw data with hardware failure detection)
     imu0: /imu/data
     
-    # Wheel odometry configuration (DISABLED):
-    # We trust position and linear velocities from wheels, but not orientation (use IMU for that)
+    # Wheel odometry configuration (ENABLED for sensor fusion):
+    # We trust position and linear velocities from wheels, but rely on IMU for orientation
     # x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
-    # odom0_config: [true,  true,  false,
-    #                false, false, false,
-    #                true,  true,  false,
-    #                false, false, false,
-    #                false, false, false]
+    odom0_config: [true,  true,  false,
+                   false, false, false,
+                   true,  true,  false,
+                   false, false, false,
+                   false, false, false]
     
-    # For imu0 (raw BNO055 data) - IMU only configuration:
+    # For imu0 (raw BNO055 data) - More aggressive IMU configuration:
     # - We don't trust position (x,y,z): false, false, false
     # - We trust yaw orientation: false, false, true
     # - We don't trust linear velocities: false, false, false  
     # - We trust yaw angular velocity: false, false, true
-    # - We don't trust linear accelerations due to noise: false, false, false
+    # - We use linear accelerations for better dynamics: true, true, false
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,
                   false, false, true,
-                  false, false, false]
+                  true,  true,  false]
     
     # Remove gravitational acceleration
     imu0_remove_gravitational_acceleration: true
     
-    # Queue sizes for buffering (IMU only)
-    imu0_queue_size: 10
+    # Queue sizes for buffering
+    odom0_queue_size: 10
+    imu0_queue_size: 15
     
-    # Throttle frequencies (IMU only)
-    imu0_throttle_frequency: 50.0
+    # Throttle frequencies - Higher for better responsiveness
+    odom0_throttle_frequency: 50.0
+    imu0_throttle_frequency: 100.0
     
-        # Rejection thresholds: Data with variance above this threshold will be rejected
-    # odom0_pose_rejection_threshold: 5.0
-    # odom0_twist_rejection_threshold: 1.0
+    # Rejection thresholds: Data with variance above this threshold will be rejected
+    odom0_pose_rejection_threshold: 2.0
+    odom0_twist_rejection_threshold: 1.0
     imu0_pose_rejection_threshold: 0.8
     imu0_twist_rejection_threshold: 0.8
     imu0_linear_acceleration_rejection_threshold: 0.8
@@ -85,34 +87,35 @@ ekf_filter_node:
     # Frame IDs
     imu0_nodelay: false
     
-    # Differential mode (IMU only)
-    # odom0_differential: false
+    # Differential mode
+    odom0_differential: false
     imu0_differential: false
     
-    # Relative mode (IMU only)
-    # odom0_relative: false
+    # Relative mode
+    odom0_relative: false
     imu0_relative: false
     
     # Use control input (we're not using it)
     use_control: false
     
-    # Process noise covariance matrix. The values are ordered as x, y, z, roll, pitch, yaw, vx, vy, vz,
+    # Process noise covariance matrix - More dynamic settings for better responsiveness
+    # Ordered as: x, y, z, roll, pitch, yaw, vx, vy, vz,
     # vroll, vpitch, vyaw, ax, ay, az. 
-    process_noise_covariance: [0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
-                               0.0,  0.05, 0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+    process_noise_covariance: [0.1,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.1,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                0.0,  0.0,  0.06, 0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                0.0,  0.0,  0.0,  0.03, 0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                0.0,  0.0,  0.0,  0.0,  0.03, 0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.01, 0.0,   0.0,   0.0,  0.0,  0.0,  0.0,   0.0,  0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.025, 0.0,   0.0,  0.0,  0.0,  0.0,   0.0,  0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.025, 0.0,  0.0,  0.0,  0.0,   0.0,  0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.04, 0.0,  0.0,  0.0,   0.0,  0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.01, 0.0,  0.0,   0.0,  0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.01, 0.0,   0.0,  0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.005, 0.0,  0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,   0.01, 0.0,  0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,   0.0,  0.01, 0.0,
-                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,   0.0,  0.0,  0.015]
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.03, 0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.05,  0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.05,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.04, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.01, 0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.01, 0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.01, 0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.02, 0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.02, 0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.015]
     
     # Initial state covariance matrix (all values must be same type - float)
     initial_estimate_covariance: [1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,   0.0,  0.0,  0.0,
