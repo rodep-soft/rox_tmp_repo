@@ -771,6 +771,8 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
   }
   
   // 軸選択の状況を表示
+  double max_angular_vel = std::max({std::abs(filtered_x), std::abs(filtered_y), std::abs(filtered_z)});
+  
   if (max_angular_vel > 0.5) {
     RCLCPP_WARN(this->get_logger(),
                "ROTATION DETECTED! X=%.2f, Y=%.2f, Z=%.2f rad/s | Using %s (%.2f)",
