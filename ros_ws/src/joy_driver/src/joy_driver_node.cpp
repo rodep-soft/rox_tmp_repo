@@ -107,6 +107,10 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
     // Toggle LINETRACE mode only on button press (not hold)
     if (mode_ == Mode::LINETRACE) {
       mode_ = Mode::JOY;
+      integral_error_ = 0.0;
+      prev_yaw_error_ = 0.0;
+      last_correction_time_ = 0.0;
+      init_yaw_ = yaw_;
       RCLCPP_INFO(this->get_logger(), "Mode: JOY (from LINETRACE)");
     } else {
       mode_ = Mode::LINETRACE;
