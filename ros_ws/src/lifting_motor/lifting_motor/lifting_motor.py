@@ -243,7 +243,7 @@ class LiftingMotorNode(Node):
             #     elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state, self.other_elevaton_speed)
 
             # LINETRACEモードから直接これが実行されることはない。Action越しでの制御になる。
-            elevation_status = self.motor_driver.elevation_control(msg.elevaton_mode, current_state, self.other_elevaton_speed)
+            elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state, self.other_elevaton_speed)
             
             # 昇降制御のログ管理
             if elevation_status == "force_descending" and not self.elevation_warning_logged:
