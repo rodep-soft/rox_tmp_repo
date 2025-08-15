@@ -25,6 +25,8 @@ class LiftingMotorNode(Node):
         # UpperMotor msgのsubscription
         self.subscription = self.create_subscription(UpperMotor, "/upper_motor", self.motor_callback, 10)
 
+        # self.mode_subscription = self.create_subscription(String, "/mode", self.mode_callback, 10)
+
         self.publisher_ = self.create_publisher(String, "/lifting_mode", 10) # led pattern
         
         # State and MotorDriver initialization
@@ -39,6 +41,13 @@ class LiftingMotorNode(Node):
 
         self.elevation_warning_logged = False  # 昇降警告ログのフラグ
         self.ejection_blocking_logged = False  # 押し出しブロック警告ログのフラグ
+
+        # Modeの名前を保持する変数
+        # self.mode = ""
+
+        # LINETRACEモードかどうかで昇降のスピードを変える
+        self.linetrace_elevation_speed = 1.0
+        self.other_elevaton_speed = 0.8
         
         # ハードウェア検証
         # リミットスイッチとモーターの状態の読み取りが可能か確認する
@@ -96,7 +105,7 @@ class LiftingMotorNode(Node):
             
             # 昇降制御実行
             current_state = self.state_machine.get_current_state()
-            elevation_status = self.motor_driver.elevation_control(elevation_mode, current_state)
+            elevation_status = self.motor_driver.elevation_control(elevation_mode, current_state, self.linetrace_elevation_speed)
             self.get_logger().info(f"昇降状態: {elevation_status}, 現在の状態: {current_state.name}")
             
             # フィードバック送信（0.1秒に1回）
@@ -130,6 +139,12 @@ class LiftingMotorNode(Node):
     
     # def cancel_callback(self, goal_handle):
     #     return CancelResponse.ACCEPT
+
+
+    # Modeの値を取得
+    # def mode_callback(self, msg):
+    #     self.mode = msg.data
+
 
 
     # Callback function for UpperMotor messages
@@ -218,8 +233,17 @@ class LiftingMotorNode(Node):
             elif current_state == State.RETURN_TO_MIN:
                 self.motor_driver.ejection_backward()
 
-            # 昇降モーター制御（motor_driverに委譲）
-            elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state)
+            # # 昇降モーター制御（motor_driverに委譲）
+            # # elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state)
+
+            # # LINETRACEモードなら1.0で昇降する。他のモードの時は0.8で若干制限をかける
+            # if self.mode == "LINETRACE":
+            #     elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state, self.linetrace_elevation_speed)
+            # else:
+            #     elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state, self.other_elevaton_speed)
+
+            # LINETRACEモードから直接これが実行されることはない。Action越しでの制御になる。
+            elevation_status = self.motor_driver.elevation_control(msg.elevaton_mode, current_state, self.other_elevaton_speed)
             
             # 昇降制御のログ管理
             if elevation_status == "force_descending" and not self.elevation_warning_logged:
