@@ -75,16 +75,18 @@ class MotorDriver:
         self.ejection_motor.stop()
 
     # 0.95でギリギリ。1.0は怖い
-    def elevation_forward(self, speed=0.95):
+    # これは可変にする。調整が必要
+    def elevation_forward(self, speed=1.0):
         self.elevation_motor.forward(speed=speed)
 
+    # 下げるパラメータは調整の必要はない
     def elevation_backward(self, speed=0.3):
         self.elevation_motor.backward(speed=speed)
 
     def elevation_stop(self):
         self.elevation_motor.stop()
 
-    def elevation_control(self, elevation_mode, current_state):
+    def elevation_control(self, elevation_mode, current_state, elevation_speed=1.0):
         """昇降モーター制御（INIT状態でのみ駆動可能、それ以外は強制的に下降位置へ）"""
         switch_states = self.get_switch_states()
         
@@ -92,7 +94,7 @@ class MotorDriver:
             # INIT状態でのみ自由に昇降可能
             if elevation_mode == 1 and not switch_states["elevation_max"] and switch_states["ejection_min"]:
                 # 上昇（最大リミットに達していない かつ 押し出しが引っ込んでいる場合のみ）
-                self.elevation_forward()
+                self.elevation_forward(speed=elevation_speed)
                 return "elevating"
             elif elevation_mode == 0 and not switch_states["elevation_min"]:
                 # 下降（最小リミットに達していない場合のみ）

@@ -36,7 +36,7 @@ class JoyDriverNode : public rclcpp::Node {
   static double normalizeAngle(double angle);
   double calculatePIDCorrection(double error, double dt, double velocity_factor = 1.0);
   double calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_z, double dt, double velocity_factor = 1.0);
-  std::string mode_to_string(Mode mode);
+  std::string mode_to_string(Mode mode, bool is_gear_down_param);
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg);
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg);
   void keyboard_callback(const std_msgs::msg::String::SharedPtr msg);
@@ -144,4 +144,6 @@ class JoyDriverNode : public rclcpp::Node {
   bool prev_throwing_on = false;
   bool prev_ejection_on = false;
   bool prev_elevation_on = false;
+
+  bool is_gear_down = false;
 };

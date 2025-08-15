@@ -34,10 +34,10 @@ TEST_F(JoyDriverTest, TestApplyDeadzone) {
 
 // Test mode string conversion
 TEST_F(JoyDriverTest, TestModeToString) {
-  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::STOP), "STOP");
-  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::JOY), "JOY");
-  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::DPAD), "DPAD");
-  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::LINETRACE), "LINETRACE");
+  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::STOP, false), "STOP");
+  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::JOY, false), "JOY");
+  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::DPAD, false), "DPAD");
+  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::LINETRACE, false), "LINETRACE");
 }
 
 // Test joystick message processing

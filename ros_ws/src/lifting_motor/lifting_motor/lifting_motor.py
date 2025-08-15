@@ -25,6 +25,8 @@ class LiftingMotorNode(Node):
         # UpperMotor msgのsubscription
         self.subscription = self.create_subscription(UpperMotor, "/upper_motor", self.motor_callback, 10)
 
+        # self.mode_subscription = self.create_subscription(String, "/mode", self.mode_callback, 10)
+
         self.publisher_ = self.create_publisher(String, "/lifting_mode", 10) # led pattern
         
         # State and MotorDriver initialization
@@ -39,6 +41,13 @@ class LiftingMotorNode(Node):
 
         self.elevation_warning_logged = False  # 昇降警告ログのフラグ
         self.ejection_blocking_logged = False  # 押し出しブロック警告ログのフラグ
+
+        # Modeの名前を保持する変数
+        # self.mode = ""
+
+        # LINETRACEモードかどうかで昇降のスピードを変える
+        self.linetrace_elevation_speed = 1.0
+        self.other_elevaton_speed = 0.93
         
         # ハードウェア検証
         # リミットスイッチとモーターの状態の読み取りが可能か確認する
@@ -96,7 +105,7 @@ class LiftingMotorNode(Node):
             
             # 昇降制御実行
             current_state = self.state_machine.get_current_state()
-            elevation_status = self.motor_driver.elevation_control(elevation_mode, current_state)
+            elevation_status = self.motor_driver.elevation_control(elevation_mode, current_state, self.linetrace_elevation_speed)
             self.get_logger().info(f"昇降状態: {elevation_status}, 現在の状態: {current_state.name}")
             
             # フィードバック送信（0.1秒に1回）
@@ -132,6 +141,12 @@ class LiftingMotorNode(Node):
     #     return CancelResponse.ACCEPT
 
 
+    # Modeの値を取得
+    # def mode_callback(self, msg):
+    #     self.mode = msg.data
+
+
+
     # Callback function for UpperMotor messages
     # ここでモーターの制御を行う
     def motor_callback(self, msg):
@@ -162,16 +177,22 @@ class LiftingMotorNode(Node):
                 "is_ejection_maxlim_on": sw["ejection_max"],
                 "is_ejection_minlim_on": sw["ejection_min"],
                 "safety_reset_button": False,  # TODO: 実際のボタン状態に置き換え
-                "emergency_stop": False,       # TODO: 実際の緊急停止状態に置き換え
+                "emergency_stop": throwing_edge,       # TODO: 実際の緊急停止状態に置き換え
             }
 
             # 状態遷移の更新
             self.state_machine.update_state(inputs)
             current_state = self.state_machine.get_current_state()
-            
+
             # 状態が変化したときのみログ出力（ログの削減）
             if self.state_machine.has_state_changed():
                 self.get_logger().info(f"State Changed: {self.state_machine.get_previous_state().name} -> {self.state_machine.get_state_name()}")
+
+
+            # 無理やりSTOPPEDに戻ったとき、またはEmergency STOPが有効化されたときの処理
+            if self.state_machine.just_entered_state(State.STOPPED):
+                self.motor_driver.throwing_off()
+                self.get_logger().info("STOPPED遷移: リレーをOFFにしました")
 
             # TO_MAXに遷移したときの一度だけの処理(副作用)
             # STOPPEDでボタンが押されると、ここでリレーON + 2秒待機 + 押し出し動作開始
@@ -184,6 +205,7 @@ class LiftingMotorNode(Node):
             if self.state_machine.just_entered_state(State.RETURN_TO_MIN):
                 self.motor_driver.throwing_off()  # リレー停止（一度だけ）
                 self.get_logger().info("RETURN_TO_MIN遷移: リレーを停止しました")
+
 
             # # 射出用リレーの制御（状態とエッジ検出に基づく）
             # if throwing_edge:
@@ -211,8 +233,17 @@ class LiftingMotorNode(Node):
             elif current_state == State.RETURN_TO_MIN:
                 self.motor_driver.ejection_backward()
 
-            # 昇降モーター制御（motor_driverに委譲）
-            elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state)
+            # # 昇降モーター制御（motor_driverに委譲）
+            # # elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state)
+
+            # # LINETRACEモードなら1.0で昇降する。他のモードの時は0.8で若干制限をかける
+            # if self.mode == "LINETRACE":
+            #     elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state, self.linetrace_elevation_speed)
+            # else:
+            #     elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state, self.other_elevaton_speed)
+
+            # LINETRACEモードから直接これが実行されることはない。Action越しでの制御になる。
+            elevation_status = self.motor_driver.elevation_control(msg.elevation_mode, current_state, self.other_elevaton_speed)
             
             # 昇降制御のログ管理
             if elevation_status == "force_descending" and not self.elevation_warning_logged:
