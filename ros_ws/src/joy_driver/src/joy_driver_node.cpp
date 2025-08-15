@@ -461,9 +461,9 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
     // twist_msg->linear.x *= 0.8;
     // twist_msg->linear.y *= 0.8;
     // twist_msg->angular.z *= 0.8;
-    this->linear_x_scale_ = 1;
-    this->linear_y_scale_ = 1;
-    this->angular_scale_ = 1;
+    this->linear_x_scale_ = 0.5;
+    this->linear_y_scale_ = 0.5;
+    this->angular_scale_ = 0.5;
 
     is_gear_down = true;
   } else if (msg->buttons[10] == 1) {
