@@ -67,8 +67,10 @@ class LedControlNode(Node):
         # try:
         if mode == "STOP":
             self.start_led_script("red.py")
-        elif mode == "JOY":
+        elif mode == "JOY_FAST":
             self.start_led_script("green.py")
+        elif mode == "JOY_SLOW":
+            self.start_led_script("green_gear_down.py")
         elif mode == "DPAD":
             self.start_led_script("blue.py")
         elif mode == "LINETRACE":

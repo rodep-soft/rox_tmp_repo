@@ -460,10 +460,14 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
     this->linear_x_scale_ = 1;
     this->linear_y_scale_ = 1;
     this->angular_scale_ = 1;
+
+    is_gear_down = true;
   } else if (msg->buttons[10] == 1) {
     this->linear_x_scale_ = 3;
     this->linear_y_scale_ = 3;
     this->angular_scale_ = 3;
+
+    is_gear_down = false;
   }
 
   //  一旦廃止
@@ -505,7 +509,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
   linetrace_publisher_->publish(std::move(linetrace_msg));
 
-  mode_msg->data = mode_to_string(mode_);
+  mode_msg->data = mode_to_string(mode_, is_gear_down);
   mode_publisher_->publish(std::move(mode_msg));
 }
 
@@ -600,12 +604,16 @@ double JoyDriverNode::applyDeadzone(double val, double threshold) {
   return (std::abs(val) < threshold) ? 0.0 : val;
 }
 
-std::string JoyDriverNode::mode_to_string(Mode mode) {
+std::string JoyDriverNode::mode_to_string(Mode mode, bool is_gear_down_param) {
   switch (mode) {
     case Mode::STOP:
       return "STOP";
     case Mode::JOY:
-      return "JOY";
+      if (is_gear_down_param) {
+        return "JOY_SLOW";
+      } else {
+        return "JOY_FAST";
+      }
     case Mode::DPAD:
       return "DPAD";
     case Mode::LINETRACE:
