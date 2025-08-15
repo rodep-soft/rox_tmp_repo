@@ -194,6 +194,8 @@ class LineFollower(Node):
     def upper_function_get_result_callback(self, future):
         result = future.result().result
         self.get_logger().info(f'Result received: success={result.success}, duration={result.actual_duration:.2f}s')
+        if self.is_waiting_for_action:
+            self.send_upper_function_goal(False)
         self.is_waiting_for_action = False
 
     
