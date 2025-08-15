@@ -450,6 +450,20 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
     upper_msg->elevation_mode = 2;  // 停止
   }
 
+  // ギア
+  if (msg->buttons[9] == 1) {
+    // twist_msg->linear.x *= 0.8;
+    // twist_msg->linear.y *= 0.8;
+    // twist_msg->angular.z *= 0.8;
+    this->linear_x_scale_ = 1;
+    this->linear_y_scale_ = 1;
+    this->angular_scale_ = 1;
+  } else if (msg->buttons[10] == 1) {
+    this->linear_x_scale_ = 3;
+    this->linear_y_scale_ = 3;
+    this->angular_scale_ = 3;
+  }
+
   //  一旦廃止
   // // Check for state changes
   // if (msg->buttons[1] == 1 && prev_throwing_on == false) {
