@@ -78,7 +78,7 @@ class LineFollower(Node):
         self.before_goal_gate = None
         self.integral = 0.0
         self.is_enable = False
-        self.lock_flag = False
+        self.is_waiting_for_action = False
         self.is_straight = True
         self.straight_lock_flag = False
         self.get_logger().info("Line Follower Node has been started.")
@@ -126,10 +126,7 @@ class LineFollower(Node):
 
         power = ((6.0 * diff) + (30.0 * derivative) + (0.8 * self.integral))
 
-        # if diff_outer > 0.3:
-        #     self.integral = 0.0
-        # elif diff_outer < 0.1:
-        #     self.straight_lock_flag = False
+      
 
         self.get_logger().info("Publishing Twist: power={}".format(power))
             
@@ -144,11 +141,13 @@ class LineFollower(Node):
         float64.data = diff_outer
 
         if diff_outer < -0.3:
-            self.lock_flag = True
-        # if self.lock_flag == True:
-        #     twist.linear.x = 0.0
-        #     twist.linear.y = 0.0
-        #     twist.angular.z = 0.0
+            self.is_waiting_for_action = True
+            self.send_upper_function_goal(True)
+    
+        if self.is_waiting_for_action == True:
+            twist.linear.x = 0.0
+            twist.linear.y = 0.0
+            twist.angular.z = 0.0
 
 
 
@@ -190,6 +189,7 @@ class LineFollower(Node):
     def upper_function_get_result_callback(self, future):
         result = future.result().result
         self.get_logger().debug(f'Result received: success={result.success}, duration={result.actual_duration:.2f}s')
+        self.is_waiting_for_action = False
 
     
     
