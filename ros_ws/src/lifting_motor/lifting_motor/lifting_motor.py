@@ -47,7 +47,7 @@ class LiftingMotorNode(Node):
 
         # LINETRACEモードかどうかで昇降のスピードを変える
         self.linetrace_elevation_speed = 1.0
-        self.other_elevaton_speed = 0.8
+        self.other_elevaton_speed = 0.9
         
         # ハードウェア検証
         # リミットスイッチとモーターの状態の読み取りが可能か確認する
