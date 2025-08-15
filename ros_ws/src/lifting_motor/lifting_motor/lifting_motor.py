@@ -57,11 +57,7 @@ class LiftingMotorNode(Node):
         )
 
     def goal_callback(self, goal_request):
-
-        if goal_request.is_rising:
-            return GoalResponse.ACCEPT
-        else:
-            return GoalResponse.REJECT
+        return GoalResponse.ACCEPT
 
     def execute_callback(self, goal_handle):
         """昇降アクションの実行"""
@@ -101,9 +97,10 @@ class LiftingMotorNode(Node):
             # 昇降制御実行
             current_state = self.state_machine.get_current_state()
             elevation_status = self.motor_driver.elevation_control(elevation_mode, current_state)
+            self.get_logger().info(f"昇降状態: {elevation_status}, 現在の状態: {current_state.name}")
             
-            # フィードバック送信（1秒に1回）
-            if elapsed - last_feedback_time >= 1.0:
+            # フィードバック送信（0.1秒に1回）
+            if elapsed - last_feedback_time >= 0.1:
                 feedback.elapsed_time = elapsed
                 goal_handle.publish_feedback(feedback)
                 last_feedback_time = elapsed
