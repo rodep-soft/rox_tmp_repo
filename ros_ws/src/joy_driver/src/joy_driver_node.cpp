@@ -384,94 +384,104 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       RCLCPP_WARN(this->get_logger(), "Unknown mode: %d", static_cast<int>(mode_));
   }
 
-  // 反転させる
-  if (prev_reverse_button == 0 && msg->buttons[5] == 1) {
-    // twist_msg->linear.x = -twist_msg->linear.x;
-    // twist_msg->linear.y = -twist_msg->linear.y;
-    reverse_flag = !reverse_flag;
-  }
 
-  prev_reverse_button = msg->buttons[5];
-
-  if (reverse_flag) {
-    twist_msg->linear.x = -twist_msg->linear.x;
-    twist_msg->linear.y = -twist_msg->linear.y;
-  }
-
-  // cmd_velのpublish
+  
   if (mode_ != Mode::LINETRACE) {
-    // 重要: 実際に送信しているcmd_velを診断ログ
-    if (std::abs(twist_msg->angular.z) > 0.1) {
-      RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                           "SENDING: wz=%.3f (should fix 90° drift!)", twist_msg->angular.z);
+    // 反転させる
+    if (prev_reverse_button == 0 && msg->buttons[5] == 1) {
+      // twist_msg->linear.x = -twist_msg->linear.x;
+      // twist_msg->linear.y = -twist_msg->linear.y;
+      reverse_flag = !reverse_flag;
     }
-    cmd_vel_publisher_->publish(std::move(twist_msg));
-  }
 
-  // Map joystick axes to velocity commands
-  // auto twist_msg = set_velocity(msg);
-  // auto twist_msg = set_angular_velocity(msg);
+    prev_reverse_button = msg->buttons[5];
+    // }
 
-  // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
-  // angular.z=%.2f",
-  //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
+    if (reverse_flag) {
+      twist_msg->linear.x = -twist_msg->linear.x;
+      twist_msg->linear.y = -twist_msg->linear.y;
+    }
 
-  // Publish the velocity command
+    // cmd_velのpublish
+    // if (mode_ != Mode::LINETRACE) {
+      // 重要: 実際に送信しているcmd_velを診断ログ
+      if (std::abs(twist_msg->angular.z) > 0.1) {
+        RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                            "SENDING: wz=%.3f (should fix 90° drift!)", twist_msg->angular.z);
+      }
+      cmd_vel_publisher_->publish(std::move(twist_msg));
+    // }
 
-  // auto dpad_msg = std::make_unique<custom_interfaces::msg::CmdDpad>();
-  // dpad_msg->up = msg->buttons[11];
-  // dpad_msg->down = msg->buttons[12];
-  // dpad_msg->left = msg->buttons[13];
-  // dpad_msg->right = msg->buttons[14];
+    // Map joystick axes to velocity commands
+    // auto twist_msg = set_velocity(msg);
+    // auto twist_msg = set_angular_velocity(msg);
 
-  auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
-  // UpperMotor.msgのフィールド設定
+    // RCLCPP_INFO(this->get_logger(), "Publishing cmd_vel: linear.x=%.2f, linear.y=%.2f,
+    // angular.z=%.2f",
+    //             twist_msg->linear.x, twist_msg->linear.y, twist_msg->angular.z);
 
-  // システム準備状態（L2 + R2ボタン同時押し）
-  // 浮動小数点比較なので閾値を使用
-  upper_msg->is_system_ready = (msg->axes[4] < -0.9 && msg->axes[5] < -0.9);
+    // Publish the velocity command
 
+    // auto dpad_msg = std::make_unique<custom_interfaces::msg::CmdDpad>();
+    // dpad_msg->up = msg->buttons[11];
+    // dpad_msg->down = msg->buttons[12];
+    // dpad_msg->left = msg->buttons[13];
+    // dpad_msg->right = msg->buttons[14];
 
-  // circle button 射出&押出自動制御
-  if (msg->buttons[1] == 1) {
-    upper_msg->is_ejection_on = true;
-  } else {
-    upper_msg->is_ejection_on = false;
-  }
+    auto upper_msg = std::make_unique<custom_interfaces::msg::UpperMotor>();
+    // UpperMotor.msgのフィールド設定
 
-  // square button (射出止める)
-  if (msg->buttons[2] == 1) {
-    upper_msg->is_throwing_on = true;
-  } else {
-    upper_msg->is_throwing_on = false;
-  }
+    // システム準備状態（L2 + R2ボタン同時押し）
+    // 浮動小数点比較なので閾値を使用
+    // これはさすがに変えられるようにしたほうがいいのか？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？
+    upper_msg->is_system_ready = (msg->axes[4] < -0.9 && msg->axes[5] < -0.9);
 
 
-  // 昇降制御（方向パッド）
-  if (msg->buttons[3] == 1) {         // triangle
-    upper_msg->elevation_mode = 1;    // 上昇
-  } else if (msg->buttons[0] == 1) {  // x
-    upper_msg->elevation_mode = 0;    // 下降
-  } else {
-    upper_msg->elevation_mode = 2;  // 停止
-  }
+    // circle button 射出&押出自動制御
+    if (msg->buttons[1] == 1) {
+      upper_msg->is_ejection_on = true;
+    } else {
+      upper_msg->is_ejection_on = false;
+    }
 
-  // ギア
-  if (msg->buttons[9] == 1) {
-    // twist_msg->linear.x *= 0.8;
-    // twist_msg->linear.y *= 0.8;
-    // twist_msg->angular.z *= 0.8;
-    this->linear_x_scale_ = 0.5;
-    this->linear_y_scale_ = 0.5;
-    this->angular_scale_ = 0.5;
+    // square button (射出止める)
+    if (msg->buttons[2] == 1) {
+      upper_msg->is_throwing_on = true;
+    } else {
+      upper_msg->is_throwing_on = false;
+    }
 
-    is_gear_down = true;
-  } else if (msg->buttons[10] == 1) {
-    this->linear_x_scale_ = 3;
-    this->linear_y_scale_ = 3;
-    this->angular_scale_ = 3;
 
-    is_gear_down = false;
+    // 昇降制御（方向パッド）
+    if (msg->buttons[3] == 1) {         // triangle
+      upper_msg->elevation_mode = 1;    // 上昇
+    } else if (msg->buttons[0] == 1) {  // x
+      upper_msg->elevation_mode = 0;    // 下降
+    } else {
+      upper_msg->elevation_mode = 2;  // 停止
+    }
+
+    // ギア
+    if (msg->buttons[9] == 1) {
+      // twist_msg->linear.x *= 0.8;
+      // twist_msg->linear.y *= 0.8;
+      // twist_msg->angular.z *= 0.8;
+      this->linear_x_scale_ = 0.5;
+      this->linear_y_scale_ = 0.5;
+      this->angular_scale_ = 0.5;
+
+      is_gear_down = true;
+    } else if (msg->buttons[10] == 1) {
+      this->linear_x_scale_ = 3;
+      this->linear_y_scale_ = 3;
+      this->angular_scale_ = 3;
+
+      is_gear_down = false;
+    }
+
+    // 昇降手動操作のメッセージをpublish
+    upper_publisher_->publish(std::move(upper_msg));
+
   }
 
   //  一旦廃止
@@ -502,7 +512,6 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
   // upper_msg->is_elevation_on = prev_elevation_on;
 
   // Always publish current state
-  upper_publisher_->publish(std::move(upper_msg));
   // cmd_dpad_publisher_->publish(std::move(dpad_msg));
 
   if (mode_ == Mode::LINETRACE) {
