@@ -162,16 +162,22 @@ class LiftingMotorNode(Node):
                 "is_ejection_maxlim_on": sw["ejection_max"],
                 "is_ejection_minlim_on": sw["ejection_min"],
                 "safety_reset_button": False,  # TODO: 実際のボタン状態に置き換え
-                "emergency_stop": False,       # TODO: 実際の緊急停止状態に置き換え
+                "emergency_stop": throwing_edge,       # TODO: 実際の緊急停止状態に置き換え
             }
 
             # 状態遷移の更新
             self.state_machine.update_state(inputs)
             current_state = self.state_machine.get_current_state()
-            
+
             # 状態が変化したときのみログ出力（ログの削減）
             if self.state_machine.has_state_changed():
                 self.get_logger().info(f"State Changed: {self.state_machine.get_previous_state().name} -> {self.state_machine.get_state_name()}")
+
+
+            # 無理やりSTOPPEDに戻ったとき、またはEmergency STOPが有効化されたときの処理
+            if self.state_machine.just_entered_state(State.STOPPED):
+                self.motor_driver.throwing_off()
+                self.get_logger().info("STOPPED遷移: リレーをOFFにしました")
 
             # TO_MAXに遷移したときの一度だけの処理(副作用)
             # STOPPEDでボタンが押されると、ここでリレーON + 2秒待機 + 押し出し動作開始
@@ -184,6 +190,7 @@ class LiftingMotorNode(Node):
             if self.state_machine.just_entered_state(State.RETURN_TO_MIN):
                 self.motor_driver.throwing_off()  # リレー停止（一度だけ）
                 self.get_logger().info("RETURN_TO_MIN遷移: リレーを停止しました")
+
 
             # # 射出用リレーの制御（状態とエッジ検出に基づく）
             # if throwing_edge:

@@ -427,19 +427,21 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
   // 浮動小数点比較なので閾値を使用
   upper_msg->is_system_ready = (msg->axes[4] < -0.9 && msg->axes[5] < -0.9);
 
-  // square button (射出)
+
+  // circle button 射出&押出自動制御
+  if (msg->buttons[1] == 1) {
+    upper_msg->is_ejection_on = true;
+  } else {
+    upper_msg->is_ejection_on = false;
+  }
+
+  // square button (射出止める)
   if (msg->buttons[2] == 1) {
     upper_msg->is_throwing_on = true;
   } else {
     upper_msg->is_throwing_on = false;
   }
 
-  // circle button (押出)
-  if (msg->buttons[1] == 1) {
-    upper_msg->is_ejection_on = true;
-  } else {
-    upper_msg->is_ejection_on = false;
-  }
 
   // 昇降制御（方向パッド）
   if (msg->buttons[3] == 1) {         // triangle
