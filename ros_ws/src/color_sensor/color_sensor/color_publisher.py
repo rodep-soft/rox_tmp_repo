@@ -5,6 +5,7 @@ from color_sensor.tcs34725 import TCS34725
 from std_msgs.msg import Bool
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from rclpy.action import ActionClient
 from std_msgs.msg import ColorRGBA
 from custom_interfaces.action import UpperFunction
 
@@ -29,9 +30,11 @@ class ColorPublisher(Node):
         node_name = f"color_publisher_{tca9548_channel}"
         self.publisher_ = self.create_publisher(ColorRGBA, node_name, 10)
 
+
         timer_period = 0.01  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
         self.get_logger().info("Color Publisher Node has been started.")
+
 
     def timer_callback(self):
         self.tca9548.enable_channel(self.tca9548_channel)
@@ -61,6 +64,7 @@ class LineFollower(Node):
             Bool, "is_linetrace", self.is_enable_callback, 10
         )
         self.cmd_vel_publisher_ = self.create_publisher(Twist, "cmd_vel", 10)
+        self.upper_action_client_ = ActionClient(self, UpperFunction, "upper_function")
 
         self.timer = self.create_timer(0.05, self.publish_twist)
         self.before_diff = None
@@ -113,6 +117,42 @@ class LineFollower(Node):
         self.cmd_vel_publisher_.publish(twist)
         self.before_diff = diff
 
+    def send_upper_function_goal(self, is_rising):
+        goal = UpperFunction.Goal()
+        goal.is_rising = is_rising
+
+        if not self._action_client.wait_for_server(timeout_sec=3.0):
+            self.get_logger().error('Action server not available!')
+            return
+
+        self._send_goal_future = self._action_client.send_goal_async(
+            goal,
+            feedback_callback=self.upper_function_feedback_callback)
+
+        self._send_goal_future.add_done_callback(self.upper_function_goal_response_callback)
+
+    def upper_function_feedback_callback(self, feedback_msg):
+        elapsed = feedback_msg.feedback.elapsed_time
+        self.get_logger().debug(f"Upper function feedback: Elapsed time {elapsed:.2f} seconds")
+
+    def upper_function_goal_response_callback(self, future):
+        goal_handle = future.result()
+
+        if not goal_handle.accepted:
+            self.get_logger().debug('Goal rejected')
+            return
+
+        self.get_logger().debug('Goal accepted')
+
+        self._get_result_future = goal_handle.get_result_async()
+        self._get_result_future.add_done_callback(self.upper_function_get_result_callback)
+
+    def upper_function_get_result_callback(self, future):
+        result = future.result().result
+        self.get_logger().debug(f'Result received: success={result.success}, duration={result.actual_duration:.2f}s')
+
+    
+    
 
 def main(args=None):
     rclpy.init(args=args)
