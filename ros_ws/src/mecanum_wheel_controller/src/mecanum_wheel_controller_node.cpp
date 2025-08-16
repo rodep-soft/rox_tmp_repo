@@ -51,7 +51,7 @@ void MecanumWheelControllerNode::declare_parameters() {
   this->declare_parameter<int>("baud_rate", 115200);
   this->declare_parameter<int>("cmd_vel_timeout_ms", 500);
   this->declare_parameter<std::vector<int64_t>>("motor_ids", {1, 2, 3, 4});
-  
+
   // Motor hardware correction factors
   this->declare_parameter<double>("motor_correction_fl", 1.0);
   this->declare_parameter<double>("motor_correction_fr", 1.0);
@@ -69,7 +69,7 @@ void MecanumWheelControllerNode::get_parameters() {
 
   auto motor_ids_int64 = this->get_parameter("motor_ids").as_integer_array();
   motor_ids_.assign(motor_ids_int64.begin(), motor_ids_int64.end());
-  
+
   // Get motor correction factors
   motor_correction_fl_ = this->get_parameter("motor_correction_fl").as_double();
   motor_correction_fr_ = this->get_parameter("motor_correction_fr").as_double();
@@ -127,31 +127,37 @@ void MecanumWheelControllerNode::timer_send_velocity_callback() {
   const double wheel_rear_right_vel = (vx - vy + lxy_sum * wz) / wheel_radius_;
 
   // Convert to RPM with hardware correction factors applied
-  int16_t rpm_front_left = static_cast<int16_t>(wheel_front_left_vel * rad_to_rpm * motor_correction_fl_);
-  int16_t rpm_front_right = static_cast<int16_t>(wheel_front_right_vel * rad_to_rpm * -1 * motor_correction_fr_);
-  int16_t rpm_rear_left = static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm * motor_correction_rl_);
-  int16_t rpm_rear_right = static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm * -1 * motor_correction_rr_);
+  int16_t rpm_front_left =
+      static_cast<int16_t>(wheel_front_left_vel * rad_to_rpm * motor_correction_fl_);
+  int16_t rpm_front_right =
+      static_cast<int16_t>(wheel_front_right_vel * rad_to_rpm * -1 * motor_correction_fr_);
+  int16_t rpm_rear_left =
+      static_cast<int16_t>(wheel_rear_left_vel * rad_to_rpm * motor_correction_rl_);
+  int16_t rpm_rear_right =
+      static_cast<int16_t>(wheel_rear_right_vel * rad_to_rpm * -1 * motor_correction_rr_);
 
   // モーター値の詳細ログ（前後移動とゼロ速度変化を監視）
   static int16_t prev_fl = 0, prev_fr = 0, prev_rl = 0, prev_rr = 0;
-  bool velocity_changed = (rpm_front_left != prev_fl || rpm_front_right != prev_fr || 
-                          rpm_rear_left != prev_rl || rpm_rear_right != prev_rr);
-  
+  bool velocity_changed = (rpm_front_left != prev_fl || rpm_front_right != prev_fr ||
+                           rpm_rear_left != prev_rl || rpm_rear_right != prev_rr);
+
   if (velocity_changed || std::abs(vx) > 0.1 || std::abs(vy) > 0.1) {
     RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 500,
-                         "MOTOR DETAIL: vx=%.3f,vy=%.3f,wz=%.3f -> FL=%d,FR=%d,RL=%d,RR=%d", 
-                         vx, vy, wz, rpm_front_left, rpm_front_right, rpm_rear_left, rpm_rear_right);
+                          "MOTOR DETAIL: vx=%.3f,vy=%.3f,wz=%.3f -> FL=%d,FR=%d,RL=%d,RR=%d", vx,
+                          vy, wz, rpm_front_left, rpm_front_right, rpm_rear_left, rpm_rear_right);
   }
-  
-  prev_fl = rpm_front_left; prev_fr = rpm_front_right; 
-  prev_rl = rpm_rear_left; prev_rr = rpm_rear_right;
 
-  // 従来の回転ログ  
+  prev_fl = rpm_front_left;
+  prev_fr = rpm_front_right;
+  prev_rl = rpm_rear_left;
+  prev_rr = rpm_rear_right;
+
+  // 従来の回転ログ
   if (std::abs(wz) > 0.1) {
     RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                         "MOTOR CMD: wz=%.3f -> FL=%d,FR=%d,RL=%d,RR=%d (%s rotation)", 
-                         wz, rpm_front_left, rpm_front_right, rpm_rear_left, rpm_rear_right,
-                         (wz > 0) ? "LEFT" : "RIGHT");
+                          "MOTOR CMD: wz=%.3f -> FL=%d,FR=%d,RL=%d,RR=%d (%s rotation)", wz,
+                          rpm_front_left, rpm_front_right, rpm_rear_left, rpm_rear_right,
+                          (wz > 0) ? "LEFT" : "RIGHT");
   }
 
   // 逐次送信に戻す（並列送信は効果が薄いため）

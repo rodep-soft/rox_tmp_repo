@@ -2,8 +2,8 @@ services:
   ros2_rox:
     # Instead of 'image', use 'build' to build from your Dockerfile
     build:
-      context: .. # Looks for Dockerfile in the current directory
-      dockerfile: automation/Dockerfile
+      context: . # Looks for Dockerfile in the current directory
+      dockerfile: Dockerfile
 
     container_name: ros2_rox_container
     tty: true
@@ -20,7 +20,7 @@ services:
       # Mount host ~/.ssh to the new user's home in container
       - ~/.ssh:/root/.ssh:ro # <--- REPLACE with your actual host username
       # Mount your ROS workspace
-      - ../ros_ws:/root/ros_ws # <--- REPLACE with your actual host username
+      - ./ros_ws:/root/ros_ws # <--- REPLACE with your actual host username
       - ~/.ccache:/root/.ccache
     devices:
       # - /dev/*:/dev/* # Allow access to all devices
@@ -29,9 +29,13 @@ services:
     # The CMD in the Dockerfile will handle starting bash.
     # If you need a specific command to run at startup, you can add it here,
     # but it won't include installations.
+
+    # ここで実行しないとバグる
+    # ただ、もっと良い方法があるかも
+    # command: bash -c "python3 -m pip install /Adafruit_Blinka && bash"
     command: >
       bash -c "
-        source /opt/ros/humble/setup.bash &&
+        source /opt/ros/hubmel/setup.bash &&
         source install/setup.bash &&
         ros2 launch launch/launch.py
       "

@@ -2,14 +2,11 @@
 import rclpy
 from color_sensor.tca9548a import TCS9548A
 from color_sensor.tcs34725 import TCS34725
-from std_msgs.msg import Bool, Float64
-from geometry_msgs.msg import Twist
-from rclpy.node import Node
-from rclpy.action import ActionClient
-from std_msgs.msg import ColorRGBA
 from custom_interfaces.action import UpperFunction
-
-
+from geometry_msgs.msg import Twist
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from std_msgs.msg import Bool, ColorRGBA, Float64
 
 
 class ColorPublisher(Node):
@@ -19,7 +16,9 @@ class ColorPublisher(Node):
         self.tca9548 = TCS9548A(1, 0x70)
         self.tca9548_channel = tca9548_channel
         self.tca9548.enable_channel(tca9548_channel)
-        self.get_logger().info(f"Enabled TCA9548A channel {tca9548_channel}")
+        self.get_logger().info(f"Enabled TCA9548A This branch has conflicts that must be resolved
+
+Use the web editor or the command line to resolve conflicts before continuing.channel {tca9548_channel}")
         # Initialize TCS34725 sensor with the specified integration time
 
         self.TCS34725 = TCS34725(1, 0x29)
@@ -30,11 +29,9 @@ class ColorPublisher(Node):
         node_name = f"color_publisher_{tca9548_channel}"
         self.publisher_ = self.create_publisher(ColorRGBA, node_name, 10)
 
-
         timer_period = 0.01  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
         self.get_logger().info("Color Publisher Node has been started.")
-
 
     def timer_callback(self):
         self.tca9548.enable_channel(self.tca9548_channel)
@@ -45,7 +42,7 @@ class ColorPublisher(Node):
         msg.b = b / self.integration_gain_  # Normalize to [0, 1]
         msg.a = c / self.integration_gain_  # Normalize to [0, 1]
         self.publisher_.publish(msg)
-        #self.get_logger().info(f"Publishing: R:{msg.r} G:{msg.g} B:{msg.b} C:{msg.a}")
+        # self.get_logger().info(f"Publishing: R:{msg.r} G:{msg.g} B:{msg.b} C:{msg.a}")
 
     def __del__(self):
         self.TCS34725.disable()
@@ -80,7 +77,9 @@ class LineFollower(Node):
         self.is_enable = False
         self.is_waiting_for_action = False
         self.is_already_executed_action = False
-        self.is_straight = True
+        self.is_straight = TrueThis branch has conflicts that must be resolved
+
+Use the web editor or the command line to resolve conflicts before continuing.
         self.straight_lock_flag = False
         self.get_logger().info("Line Follower Node has been started.")
 
@@ -92,7 +91,7 @@ class LineFollower(Node):
 
     def color_callback_2(self, msg):
         self.color_2_ = msg
-    
+
     def color_callback_3(self, msg):
         self.color_3_ = msg
         self.color_3_.a = self.color_3_.a
@@ -102,12 +101,12 @@ class LineFollower(Node):
 
     def publish_twist(self):
         if not self.is_enable:
-            #self.get_logger().info("Line trace is disabled, not publishing Twist.")
+            # self.get_logger().info("Line trace is disabled, not publishing Twist.")
             self.before_diff = None
             self.integral = 0.0
             self.lock_flag = False
             return
-        
+
         twist = Twist()
         float64 = Float64()
         color_1 = self.color_1_.r + self.color_1_.g + self.color_1_.b
@@ -115,6 +114,7 @@ class LineFollower(Node):
         diff_outer = (self.color_0_.a - self.color_3_.a) / (self.color_0_.a + self.color_3_.a)
         # self.color_2_.a = self.color_2_.a + 0.012
         diff = (color_1 - color_2) / (color_1 + color_2)
+
 
         if self.before_diff is None:
             self.before_diff = diff
@@ -133,7 +133,9 @@ class LineFollower(Node):
 
         if self.integral * diff < 0:
             ki = 0.0
-            self.integral *= 0.9
+            self.integral *= 0.9This branch has conflicts that must be resolved
+
+Use the web editor or the command line to resolve conflicts before continuing.
         power = ((kp * diff) + (kd * derivative) + (ki * self.integral))
 
         self.get_logger().info("p : {}".format(kp * diff))
@@ -143,6 +145,7 @@ class LineFollower(Node):
 
         x_power = 0.8 - (abs(power) * 0.0)
       
+
         twist.linear.x = -x_power
         twist.linear.y = power * 1.0 * 0.0
         twist.angular.z = power * 1.0
@@ -160,9 +163,7 @@ class LineFollower(Node):
             twist.angular.z = 0.0
             self.integral = 0.0
 
-
-
-        #(80.0 * diff_pow) + (1.0 * derivative) + (0.8 * self.integral)
+        # (80.0 * diff_pow) + (1.0 * derivative) + (0.8 * self.integral)
         self.cmd_vel_publisher_.publish(twist)
         self.outer_diff_publisher_.publish(float64)
         self.before_diff = diff
@@ -174,40 +175,46 @@ class LineFollower(Node):
         self.get_logger().info(f"Sending upper function goal: is_rising={is_rising}")
 
         if not self.upper_action_client_.wait_for_server(timeout_sec=3.0):
-            self.get_logger().error('Action server not available!')
+            self.get_logger().error("Action server not available!")
             return
 
         self._send_goal_future = self.upper_action_client_.send_goal_async(
-            goal,
-            feedback_callback=self.upper_function_feedback_callback)
+            goal, feedback_callback=self.upper_function_feedback_callback
+        )
 
-        self._send_goal_future.add_done_callback(self.upper_function_goal_response_callback)
+        self._send_goal_future.add_done_callback(
+            self.upper_function_goal_response_callback
+        )
 
     def upper_function_feedback_callback(self, feedback_msg):
         elapsed = feedback_msg.feedback.elapsed_time
-        self.get_logger().info(f"Upper function feedback: Elapsed time {elapsed:.2f} seconds")
+        self.get_logger().info(
+            f"Upper function feedback: Elapsed time {elapsed:.2f} seconds"
+        )
 
     def upper_function_goal_response_callback(self, future):
         goal_handle = future.result()
 
         if not goal_handle.accepted:
-            self.get_logger().debug('Goal rejected')
+            self.get_logger().debug("Goal rejected")
             return
 
-        self.get_logger().debug('Goal accepted')
+        self.get_logger().debug("Goal accepted")
 
         self._get_result_future = goal_handle.get_result_async()
-        self._get_result_future.add_done_callback(self.upper_function_get_result_callback)
+        self._get_result_future.add_done_callback(
+            self.upper_function_get_result_callback
+        )
 
     def upper_function_get_result_callback(self, future):
         result = future.result().result
-        self.get_logger().info(f'Result received: success={result.success}, duration={result.actual_duration:.2f}s')
+        self.get_logger().info(
+            f"Result received: success={result.success}, duration={result.actual_duration:.2f}s"
+        )
         if self.is_waiting_for_action:
             self.send_upper_function_goal(False)
         self.is_waiting_for_action = False
 
-    
-    
 
 def main(args=None):
     rclpy.init(args=args)

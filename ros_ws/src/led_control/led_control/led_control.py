@@ -1,9 +1,11 @@
+import os
+import subprocess
 from time import sleep
+
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-import subprocess
-import os
+
 
 class LedControlNode(Node):
     def __init__(self):
@@ -14,21 +16,17 @@ class LedControlNode(Node):
 
         self.current_process = None
 
+        # 走行モード・昇降モードの状態保持
+        self.driver_mode = None
+        self.lifting_mode = None
+
         self.driver_mode_subscription = self.create_subscription(
-            String,
-            "/mode",
-            self.driver_mode_callback,
-            10
+            String, "/mode", self.driver_mode_callback, 10
         )
 
-
-
-        # self.lifting_mode_subscription = self.create_subscription(
-        #     String,
-        #     "/lifting_mode",
-        #     self.lifting_mode_callback,
-        #     10
-        # )
+        self.lifting_mode_subscription = self.create_subscription(
+            String, "/lifting_mode", self.lifting_mode_callback, 10
+        )
 
         # self.current_color = 'red'
 
@@ -60,34 +58,36 @@ class LedControlNode(Node):
         # self.get_logger().info(f"LED script開始: {script_name}")
         self.current_process = subprocess.Popen(["python3.11", script_path])
 
+    def update_led_by_modes(self):
+        """
+        走行モードと昇降モードの組み合わせでLEDスクリプトを選択
+        """
+        # デフォルト
+        script = "off.py"
+
+        # 組み合わせ例（必要に応じて追加・変更）
+        if self.driver_mode == "STOP":
+            script = "red.py"
+        elif self.lifting_mode == "TO_MAX":
+            script = "violet.py"
+        elif self.driver_mode == "JOY_FAST":
+            script = "green.py"
+        elif self.driver_mode == "JOY_SLOW":
+            script = "green_gear_down.py"
+        elif self.driver_mode == "DPAD":
+            script = "blue.py"
+        elif self.driver_mode == "LINETRACE":
+            script = "white.py"
+
+        self.start_led_script(script)
+
     def driver_mode_callback(self, msg):
-        mode = msg.data
-        # self.get_logger().info(f"モード切替: {mode}")
-        
-        # try:
-        if mode == "STOP":
-            self.start_led_script("red.py")
-        elif mode == "JOY_FAST":
-            self.start_led_script("green.py")
-        elif mode == "JOY_SLOW":
-            self.start_led_script("green_gear_down.py")
-        elif mode == "DPAD":
-            self.start_led_script("blue.py")
-        elif mode == "LINETRACE":
-            self.start_led_script("white.py")
-        else:
-            self.start_led_script("off.py")
-        # except Exception as e:
-        #     self.get_logger().error(f"LED制御エラー: {e}")  
+        self.driver_mode = msg.data
+        self.update_led_by_modes()
 
-    # def lifting_mode_callback(self, msg):
-    #     mode = msg.data
-
-    #     if mode == 'INIT':
-        
-    #     elif mode == 'TO_MAX':
-        
-    #     elif mode == 'RETURN_TO_MIN'
+    def lifting_mode_callback(self, msg):
+        self.lifting_mode = msg.data
+        self.update_led_by_modes()
 
 
 def main(args=None):
@@ -98,6 +98,6 @@ def main(args=None):
     node.destroy_node()
     rclpy.shutdown()
 
+
 if __name__ == "__main__":
     main()
-
