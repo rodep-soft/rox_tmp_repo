@@ -16,7 +16,7 @@ JoyDriverNode::JoyDriverNode() : Node("joy_driver_node") {
       std::bind(&JoyDriverNode::rpy_callback, this, std::placeholders::_1));
 
   imu_subscription_ = this->create_subscription<sensor_msgs::msg::Imu>(
-      "/imu", best_effort_qos,
+      "/imu/data", best_effort_qos,
       std::bind(&JoyDriverNode::imu_callback, this, std::placeholders::_1));
 
   // Create publisher for the /cmd_vel topic
@@ -314,7 +314,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
 
         // PID補正を適用
         double pid_correction = calculateAngularCorrectionWithVelocity(
-            error, filtered_angular_vel_z_, dt, velocity_factor);
+            error, filtered_angular_vel_x_, dt, velocity_factor);
 
         // PID補正値を適用（符号反転を除去）
         twist_msg->angular.z = -pid_correction * angular_scale_;
@@ -367,13 +367,13 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
         // DPADモードでは最大強度で角度+角速度補正を適用
         // 符号修正：エラーと同じ方向に補正して打ち消す
         twist_msg->angular.z =
-            calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_z_, dt, 1.0);
+            calculateAngularCorrectionWithVelocity(error, filtered_angular_vel_x_, dt, 1.0);
 
         // デバッグ出力（補正時のみ）
         if (std::abs(twist_msg->angular.z) > 0.01) {
           RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                                "DPAD correction: error=%.3f, ang_vel=%.3f, correction=%.3f", error,
-                               filtered_angular_vel_z_, twist_msg->angular.z);
+                               filtered_angular_vel_x_, twist_msg->angular.z);
         }
       } else {
         // 手動回転時はPID状態をリセット
@@ -580,9 +580,9 @@ void JoyDriverNode::imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg) {
                        "IMU Angular Velocity: x=%.3f, y=%.3f, z=%.3f rad/s", angular_vel_x_,
                        angular_vel_y_, angular_vel_z_);
 
-  // Z軸角速度にローパスフィルタを適用
-  filtered_angular_vel_z_ =
-      YAW_FILTER_ALPHA * angular_vel_z_ + (1.0 - YAW_FILTER_ALPHA) * filtered_angular_vel_z_;
+  // X軸角速度（yaw）にローパスフィルタを適用
+  filtered_angular_vel_x_ =
+      YAW_FILTER_ALPHA * angular_vel_x_ + (1.0 - YAW_FILTER_ALPHA) * filtered_angular_vel_x_;
 }
 
 double JoyDriverNode::get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg) {
@@ -643,7 +643,7 @@ double JoyDriverNode::normalizeAngle(double angle) {
 }
 
 double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
-                                                             double angular_vel_z, double dt,
+                                                             double angular_vel_x, double dt,
                                                              double velocity_factor) {
   // デッドバンド処理を一時無効化（すべての誤差に対して補正を適用）
   // if (std::abs(angle_error) < deadband_) {
@@ -671,23 +671,29 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   double angle_correction =
       adaptive_kp * angle_error + adaptive_ki * integral_error_ + adaptive_kd * derivative;
 
-  // 角速度フィードバック制御を適切に調整（現在の回転を適度に抑制）
-  double current_angular_vel =
-      (std::abs(angular_vel_z) > 0.001) ? angular_vel_z : filtered_angular_vel_z_;
-  double velocity_damping = -0.1 * current_angular_vel * velocity_factor;  // ダンピングを適度に
+  // 角速度フィードバック制御を強化（yaw軸 = x軸の角速度を使用）
+  // 現在の角速度に基づく予測制御とダンピング
+  double current_angular_vel = (std::abs(angular_vel_x) > 0.001) ? angular_vel_x : filtered_angular_vel_x_;
+  
+  // 角速度に基づく予測補正（将来の角度誤差を予測）
+  double predicted_error = angle_error + current_angular_vel * dt;
+  double velocity_prediction_correction = -0.3 * predicted_error * velocity_factor;
+  
+  // 角速度ダンピング（現在の回転を適度に抑制）
+  double velocity_damping = -0.2 * current_angular_vel * velocity_factor;
 
-  // 総合補正値
-  double total_correction = angle_correction + velocity_damping;
+  // 総合補正値（角度PID + 角速度予測 + ダンピング）
+  double total_correction = angle_correction + velocity_prediction_correction + velocity_damping;
 
   // 微小補正も含めた詳細ログ
   static int debug_counter = 0;
   debug_counter++;
   if (std::abs(angle_error) > 0.01 && debug_counter % 50 == 0) {  // 0.6度以上の誤差で50回に1回ログ
     RCLCPP_INFO(this->get_logger(),
-                "PID_DETAIL: err=%.4f°, P=%.4f, I=%.4f, D=%.4f, VelDamp=%.4f, Total=%.4f",
+                "PID_ENHANCED: err=%.4f°, P=%.4f, I=%.4f, D=%.4f, VelPred=%.4f, VelDamp=%.4f, Total=%.4f",
                 angle_error * 180.0 / M_PI, adaptive_kp * angle_error,
-                adaptive_ki * integral_error_, adaptive_kd * derivative, velocity_damping,
-                total_correction);
+                adaptive_ki * integral_error_, adaptive_kd * derivative, 
+                velocity_prediction_correction, velocity_damping, total_correction);
   }
 
   // 出力制限

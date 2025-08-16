@@ -35,7 +35,7 @@ class JoyDriverNode : public rclcpp::Node {
   static double applyDeadzone(double val, double threshold = 0.05);
   static double normalizeAngle(double angle);
   double calculatePIDCorrection(double error, double dt, double velocity_factor = 1.0);
-  double calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_z, double dt,
+  double calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_x, double dt,
                                                 double velocity_factor = 1.0);
   std::string mode_to_string(Mode mode, bool is_gear_down_param);
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg);
@@ -122,6 +122,7 @@ class JoyDriverNode : public rclcpp::Node {
   double angular_vel_x_ = 0.0;
   double angular_vel_y_ = 0.0;
   double angular_vel_z_ = 0.0;
+  double filtered_angular_vel_x_ = 0.0;  // yaw軸（x軸）のフィルタ済み角速度
   double filtered_angular_vel_z_ = 0.0;
 
   // 初期化時のyaw値
