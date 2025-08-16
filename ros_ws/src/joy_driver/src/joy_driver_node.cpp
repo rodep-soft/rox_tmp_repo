@@ -42,9 +42,9 @@ void JoyDriverNode::declare_parameters() {
   this->declare_parameter<int>("linear_y_axis", 0);  // Horizontal movement
   this->declare_parameter<int>("angular_axis", 2);
 
-  this->declare_parameter<double>("Kp", 0.15);       // 比例ゲイン（より控えめに）
-  this->declare_parameter<double>("Ki", 0.01);       // 積分ゲイン（より控えめに）
-  this->declare_parameter<double>("Kd", 0.02);       // 微分ゲイン（より控えめに）
+  this->declare_parameter<double>("Kp", 0.20);       // 比例ゲインを少し上げて角度重視
+  this->declare_parameter<double>("Ki", 0.008);      // 積分ゲインを少し下げて安定性向上
+  this->declare_parameter<double>("Kd", 0.005);      // 微分ゲインを大幅に下げて振動抑制
   this->declare_parameter<double>("deadband", 0.1);  // デッドバンドを大きく（rad）
   this->declare_parameter<double>("max_angular_correction", 0.3);  // 最大補正を制限
 }
@@ -671,26 +671,26 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   double angle_correction =
       adaptive_kp * angle_error + adaptive_ki * integral_error_ + adaptive_kd * derivative;
 
-  // 角速度フィードバック制御を強化（yaw軸 = x軸の角速度を使用）
-  // 現在の角速度に基づく予測制御とダンピング
+  // 角速度フィードバック制御を緩和（yaw軸 = x軸の角速度を使用）
+  // 角度制御を優先し、角速度の影響を最小限に抑制
   double current_angular_vel = (std::abs(angular_vel_x) > 0.001) ? angular_vel_x : filtered_angular_vel_x_;
   
-  // 角速度に基づく予測補正（将来の角度誤差を予測）
+  // 角速度に基づく予測補正を大幅に緩和（将来の角度誤差を予測）
   double predicted_error = angle_error + current_angular_vel * dt;
-  double velocity_prediction_correction = -0.3 * predicted_error * velocity_factor;
+  double velocity_prediction_correction = -0.05 * predicted_error * velocity_factor;  // 0.3 -> 0.05に減少
   
-  // 角速度ダンピング（現在の回転を適度に抑制）
-  double velocity_damping = -0.2 * current_angular_vel * velocity_factor;
+  // 角速度ダンピングを軽減（現在の回転を軽く抑制）
+  double velocity_damping = -0.05 * current_angular_vel * velocity_factor;  // 0.2 -> 0.05に減少
 
-  // 総合補正値（角度PID + 角速度予測 + ダンピング）
+  // 総合補正値（角度PID重視 + 軽微な角速度補正）
   double total_correction = angle_correction + velocity_prediction_correction + velocity_damping;
 
-  // 微小補正も含めた詳細ログ
+  // 微小補正も含めた詳細ログ（角度制御重視を表示）
   static int debug_counter = 0;
   debug_counter++;
   if (std::abs(angle_error) > 0.01 && debug_counter % 50 == 0) {  // 0.6度以上の誤差で50回に1回ログ
     RCLCPP_INFO(this->get_logger(),
-                "PID_ENHANCED: err=%.4f°, P=%.4f, I=%.4f, D=%.4f, VelPred=%.4f, VelDamp=%.4f, Total=%.4f",
+                "PID_ANGLE_PRIORITY: err=%.4f°, P=%.4f, I=%.4f, D=%.4f, VelPred=%.4f(min), VelDamp=%.4f(min), Total=%.4f",
                 angle_error * 180.0 / M_PI, adaptive_kp * angle_error,
                 adaptive_ki * integral_error_, adaptive_kd * derivative, 
                 velocity_prediction_correction, velocity_damping, total_correction);

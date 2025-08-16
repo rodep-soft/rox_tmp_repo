@@ -106,7 +106,7 @@ class JoyDriverNode : public rclcpp::Node {
   double last_correction_time_ = 0.0;
 
   // ローパスフィルタ係数（0.0-1.0, 小さいほど平滑化が強い）
-  static constexpr double YAW_FILTER_ALPHA = 0.5;  // より強い平滑化
+  static constexpr double YAW_FILTER_ALPHA = 0.3;  // 角速度振動抑制のため強いフィルタ
 
   // 積分項のウィンドアップ防止
   static constexpr double MAX_INTEGRAL_ERROR = 0.5;
