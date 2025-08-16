@@ -1,15 +1,24 @@
 #!/usr/bin/bash
 
+# Usage
+# sudo ./setup.bash (automation dirにいる前提)
 
-# systemd service用のファイルを作成
-touch /etc/systemd/system/robot.service
-# robot.serviceの内容を追加
-cat ./robot.service >> /etc/systemd/system/robot.service
 
-# .bashrcにエイリアスを追加する
-echo 'alias start="sudo systemctl start robot.service"' >> ~/.bashrc
+# rootで実行されてるかチェック
+if [ "$EUID" -ne 0 ]; then
+    echo "Please run as root: sudo $0"
+    exit 1
+fi
 
-# ====== systemd serviceの設定周り =====
+
+# systemd service用のファイルを作成&追加
+cat ./robot.service > /etc/systemd/system/robot.service
+
+# もし.bashrcにaliasがなければsystemd service起動用のaliasを追加する
+grep -qxF 'alias start="sudo systemctl start robot.service"' ~/.bashrc || \
+    echo 'alias start="sudo systemctl start robot.service"' >> ~/.bashrc
+
+# ====== systemd service configuration =====
 
 # 書き換えた後、絶対に必要
 systemctl daemon-reload
