@@ -1,7 +1,5 @@
 #!/usr/bin/bash
 
-# rootに切り替える必要がある。権限の問題
-su
 
 # systemd service用のファイルを作成
 touch /etc/systemd/system/robot.service
