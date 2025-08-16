@@ -1,5 +1,6 @@
+from time import sleep
+
 from gpiozero import OutputDevice
-from time import sleep  
 
 RELAY_PIN = 9
 
@@ -13,5 +14,3 @@ while True:
     device.on()
     print("Device : on")
     sleep(2)
-
-

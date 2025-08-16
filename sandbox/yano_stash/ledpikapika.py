@@ -1,15 +1,18 @@
 # import necessary libraries
-# 
+#
 # pip install adafruit-circuitpython-neopixel
 
 # import subprocess
 # subprocess.Popen(["python3.11", "ledpikapika.py"])
 
-import board
-import neopixel
 import time
 
-pixels = neopixel.NeoPixel(board.D23, 6, brightness=0.5, auto_write=False, pixel_order=neopixel.RGB)
+import board
+import neopixel
+
+pixels = neopixel.NeoPixel(
+    board.D23, 6, brightness=0.5, auto_write=False, pixel_order=neopixel.RGB
+)
 
 while True:
     pixels.fill((255, 0, 0))  # 赤

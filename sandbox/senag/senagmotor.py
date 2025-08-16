@@ -1,5 +1,6 @@
-import gpiozero as gpio
 from time import sleep
+
+import gpiozero as gpio
 
 motor_A_PIN = 17  # モーターAの方向入力A
 motor_B_PIN = 27  # モーターAの方向入力B

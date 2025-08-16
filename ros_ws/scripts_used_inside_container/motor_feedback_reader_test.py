@@ -1,17 +1,22 @@
-import time
-import serial
 import struct
+import time
+
+import serial
 
 SERIAL_PORT = "/dev/ttyACM0"
 BAUD_RATE = 115200
+
 
 def parse_motor_feedback(data: bytes):
     if len(data) != 10:
         raise ValueError("データ長は10バイトじゃないにゃ！")
 
-    ID, mode, torque_hi, torque_lo, vel_hi, vel_lo, pos_hi, pos_lo, error, crc = struct.unpack('10B', data)
+    ID, mode, torque_hi, torque_lo, vel_hi, vel_lo, pos_hi, pos_lo, error, crc = (
+        struct.unpack("10B", data)
+    )
     velocity = (vel_hi << 8) | vel_lo
     return ID, velocity
+
 
 try:
     ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
