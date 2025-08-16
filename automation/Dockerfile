@@ -14,7 +14,10 @@ RUN apt-get update && apt-get upgrade -y && \
     fish \
     lsof \
     ccache \
-    python3 \
+    python3.11 \
+    python3.11-dev \
+    python3.11-venv \
+    python3.11-distutils \
     python3-pip \
     python3-gpiozero \
     libboost-system-dev \
@@ -25,9 +28,11 @@ RUN apt-get update && apt-get upgrade -y && \
     gpiod && \
     rm -rf /var/lib/apt/lists/* # Clean up apt cache
 
+    
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo install just
+
 
 ENV CCACHE_DIR=/root/.ccache
 ENV PATH="/usr/lib/ccache:$PATH"
@@ -40,6 +45,35 @@ RUN pip install smbus2 \
     adafruit-circuitpython-neopixel-spi \
     rpi_ws281x
 
+# 悪いコマンド
+# RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
+
+
+# RUN git clone https://github.com/adafruit/Adafruit_Blinka.git
+RUN git clone https://github.com/adafruit/Adafruit_CircuitPython_NeoPixel.git
+# RUN python3 -m pip install --upgrade pip setuptools wheel
+
+
+# RUN python3.11 -m pip install --upgrade pip wheel
+
+# setuptoolsとsetuptools_scmのバージョンを指定して入れる
+RUN python3.10 -m pip install setuptools_scm==6.4.2 \
+    setuptools==65.5.0 \
+    packaging==25.0
+
+RUN python3.11 -m pip install Adafruit_CircuitPython_NeoPixel
+# RUN python3 -m pip install Adafruit_Blinka
+RUN python3.11 -m pip install Adafruit-Blinka-Raspberry-Pi5-Neopixel
+
+
+
+RUN python3.11 -m pip install --force-reinstall --no-cache-dir lgpio
+# RUN python3.11 -m pip install --upgrade pip wheel
+
+
+RUN python3 -m pip install --force-reinstall numpy
+
+
 # --- Configure Shell Defaults and ROS 2 setup ---
 # This ensures colcon --symlink-install is default and ROS setup.bash is sourced
 RUN mkdir -p /root/.config/colcon && \
@@ -47,6 +81,7 @@ RUN mkdir -p /root/.config/colcon && \
     echo '  args: ['\''--symlink-install'\'']' >> /root/.config/colcon/defaults.yaml && \
     echo 'source /opt/ros/humble/setup.bash' >> /root/.bashrc && \
     echo 'source /opt/ros/humble/setup.bash' >> /root/.profile
+
 
 # Set the working directory for subsequent commands and when the container starts
 # This should match the working_dir in docker-compose.yml
@@ -59,3 +94,5 @@ CMD ["bash"]
 
 # launch foxglove
 # ros2 launch foxglove_bridge foxglove_bridge_launch.xml &
+
+
