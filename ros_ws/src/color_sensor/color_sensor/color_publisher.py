@@ -16,13 +16,15 @@ class ColorPublisher(Node):
         self.tca9548 = TCS9548A(1, 0x70)
         self.tca9548_channel = tca9548_channel
         self.tca9548.enable_channel(tca9548_channel)
-        self.get_logger().info(f"Enabled TCA9548A channel {tca9548_channel}")
+        self.get_logger().info(f"Enabled TCA9548A This branch has conflicts that must be resolved
+
+Use the web editor or the command line to resolve conflicts before continuing.channel {tca9548_channel}")
         # Initialize TCS34725 sensor with the specified integration time
 
         self.TCS34725 = TCS34725(1, 0x29)
         self.TCS34725.change_integration_time(integration_time)
         self.integration_gain_ = (256 - integration_time) * 1024.0
-        self.TCS34725.change_gain(0x03)  # Set gain to 60x
+        self.TCS34725.change_gain(0x00)  # Set gain to 60x
         self.TCS34725.enable()
         node_name = f"color_publisher_{tca9548_channel}"
         self.publisher_ = self.create_publisher(ColorRGBA, node_name, 10)
@@ -75,7 +77,9 @@ class LineFollower(Node):
         self.is_enable = False
         self.is_waiting_for_action = False
         self.is_already_executed_action = False
-        self.is_straight = True
+        self.is_straight = TrueThis branch has conflicts that must be resolved
+
+Use the web editor or the command line to resolve conflicts before continuing.
         self.straight_lock_flag = False
         self.get_logger().info("Line Follower Node has been started.")
 
@@ -105,40 +109,54 @@ class LineFollower(Node):
 
         twist = Twist()
         float64 = Float64()
-        diff_outer = (self.color_0_.a - self.color_3_.a) / (
-            self.color_0_.a + self.color_3_.a
-        )
-        self.color_2_.a = self.color_2_.a + 0.012
-        diff = (self.color_1_.a - self.color_2_.a) / (self.color_1_.a + self.color_2_.a)
+        color_1 = self.color_1_.r + self.color_1_.g + self.color_1_.b
+        color_2 = self.color_2_.r + self.color_2_.g + self.color_2_.b
+        diff_outer = (self.color_0_.a - self.color_3_.a) / (self.color_0_.a + self.color_3_.a)
+        # self.color_2_.a = self.color_2_.a + 0.012
+        diff = (color_1 - color_2) / (color_1 + color_2)
+
 
         if self.before_diff is None:
             self.before_diff = diff
         derivative = diff - self.before_diff
-        # if abs(derivative - self.before_diff) <= abs(self.before_diff):
+
+        # if derivative * diff < 0:
         #     derivative = 0.0
 
-        if abs(diff + self.integral) < abs(self.integral):
-            self.integral = self.integral * 0.9
 
         self.integral += diff
 
-        power = (6.0 * diff) + (30.0 * derivative) + (0.8 * self.integral)
+        kp = 1.7
+        ki = 0.03
+        kd = 0.0
 
-        # self.get_logger().info("Publishing Twist: power={}".format(power))
 
-        x_power = 0.1 - (abs(power) * 0.0)
+        if self.integral * diff < 0:
+            ki = 0.0
+            self.integral *= 0.9This branch has conflicts that must be resolved
+
+Use the web editor or the command line to resolve conflicts before continuing.
+        power = ((kp * diff) + (kd * derivative) + (ki * self.integral))
+
+        self.get_logger().info("p : {}".format(kp * diff))
+        self.get_logger().info("i : {}".format(ki * self.integral))
+        self.get_logger().info("d : {}".format(kd * derivative))
+        self.get_logger().info("power : {}".format(power))
+
+        x_power = 0.8 - (abs(power) * 0.0)
+      
 
         twist.linear.x = -x_power
-        twist.linear.y = power * 1.0 * 0.1
+        twist.linear.y = power * 1.0 * 0.0
         twist.angular.z = power * 1.0
 
         float64.data = diff_outer
 
-        if diff_outer < -0.1 and self.is_already_executed_action == False:
-            self.is_waiting_for_action = True
-            self.is_already_executed_action = True
-            self.send_upper_function_goal(True)
-
+        # if diff_outer < -0.1 and self.is_already_executed_action == False:  
+        #     self.is_waiting_for_action = True
+        #     self.is_already_executed_action = True
+        #     self.send_upper_function_goal(True)
+    
         if self.is_waiting_for_action == True:
             twist.linear.x = 0.0
             twist.linear.y = 0.0
@@ -201,8 +219,8 @@ class LineFollower(Node):
 def main(args=None):
     rclpy.init(args=args)
     color_publisher_0 = ColorPublisher(0, 0xFC)
-    color_publisher_1 = ColorPublisher(1, 0xFC)
-    color_publisher_2 = ColorPublisher(2, 0xFC)
+    color_publisher_1 = ColorPublisher(1, 0xFF)
+    color_publisher_2 = ColorPublisher(2, 0xFF)
     color_publisher_3 = ColorPublisher(3, 0xFC)
     twist_publisher = LineFollower()
 
