@@ -1,5 +1,6 @@
-import gpiozero as gpio
 from time import sleep
+
+import gpiozero as gpio
 
 relay_pin = 17  # GPIOピン番号を指定
 relay = gpio.DigitalOutputDevice(relay_pin)

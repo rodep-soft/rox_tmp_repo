@@ -1,10 +1,12 @@
-from gpiozero import Motor, OutputDevice, Button
+from gpiozero import Button, Motor, OutputDevice
 
 # このコードには状態遷移に関する情報、またメインのロジックは絶対に含まないこと
 # relay, MD, Buttonの制御、要するにGPIO周りの制御のみを担当するクラスを作成する
 
+
 class MotorDriver:
     """モーターの制御とボタンの状態検知のみを行うクラス"""
+
     def __init__(self):
         # -----GPIO configuration-----
         # リレーの制御用ピン
@@ -27,8 +29,16 @@ class MotorDriver:
         self.throwing_motor = OutputDevice(self.relay_pin)
 
         # Initialize motors
-        self.ejection_motor = Motor(forward=self.ejection_motor_forward_pin, backward=self.ejection_motor_backward_pin, enable=self.ejection_motor_enable_pin)
-        self.elevation_motor = Motor(forward=self.elevation_motor_forward_pin, backward=self.elevation_motor_backward_pin, enable=self.elevation_motor_enable_pin)
+        self.ejection_motor = Motor(
+            forward=self.ejection_motor_forward_pin,
+            backward=self.ejection_motor_backward_pin,
+            enable=self.ejection_motor_enable_pin,
+        )
+        self.elevation_motor = Motor(
+            forward=self.elevation_motor_forward_pin,
+            backward=self.elevation_motor_backward_pin,
+            enable=self.elevation_motor_enable_pin,
+        )
 
         # Limit switches
         self.ejection_maxlim = Button(26)
@@ -38,15 +48,14 @@ class MotorDriver:
 
         # -----Motor and Switch initialization END-----
 
-
     def get_switch_states(self) -> dict:
         return {
             "ejection_max": self.ejection_maxlim.is_pressed,
             "ejection_min": self.ejection_minlim.is_pressed,
             "elevation_max": self.elevation_maxlim.is_pressed,
-            "elevation_min": self.elevation_minlim.is_pressed
+            "elevation_min": self.elevation_minlim.is_pressed,
         }
-    
+
     # 射出はリレー制御
     # 昇降と押出しはMDで制御
     # 昇降が動いているかの確認は恐らく使わないと思う
@@ -54,9 +63,9 @@ class MotorDriver:
         return {
             "is_ejection_motor_running": self.ejection_motor.is_active,
             "is_elevation_motor_running": self.elevation_motor.is_active,
-            "is_throwing_motor_running": self.throwing_motor.is_active
+            "is_throwing_motor_running": self.throwing_motor.is_active,
         }
-    
+
     # API functions for motor controller
 
     def throwing_on(self):
@@ -89,10 +98,14 @@ class MotorDriver:
     def elevation_control(self, elevation_mode, current_state, elevation_speed=1.0):
         """昇降モーター制御（INIT状態でのみ駆動可能、それ以外は強制的に下降位置へ）"""
         switch_states = self.get_switch_states()
-        
+
         if current_state.name == "INIT":  # Enumの比較
             # INIT状態でのみ自由に昇降可能
-            if elevation_mode == 1 and not switch_states["elevation_max"] and switch_states["ejection_min"]:
+            if (
+                elevation_mode == 1
+                and not switch_states["elevation_max"]
+                and switch_states["ejection_min"]
+            ):
                 # 上昇（最大リミットに達していない かつ 押し出しが引っ込んでいる場合のみ）
                 self.elevation_forward(speed=elevation_speed)
                 return "elevating"
@@ -118,13 +131,12 @@ class MotorDriver:
                 # 最小位置に達している場合は停止
                 self.elevation_stop()
                 return "at_bottom"  # 下降完了
-            
+
     # def linetrace_elevation_control(self, is_rising, current_state):
     #     switch_states = self.get_switch_states()
 
     #     if current_state.name == "INIT":
     #         if is_rising and not switch_states["elevation_max"]
-
 
     def stop_all_motors(self):
         """緊急時用：全モーター停止"""
@@ -134,11 +146,8 @@ class MotorDriver:
 
     def get_all_states(self) -> dict:
         """全状態を一度に取得（デバッグ用）"""
-        return {
-            **self.get_switch_states(),
-            **self.get_motor_states()
-        }
-    
+        return {**self.get_switch_states(), **self.get_motor_states()}
+
     def validate_hardware(self) -> bool:
         """ハードウェアの基本チェック"""
         try:

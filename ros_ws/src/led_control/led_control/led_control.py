@@ -1,9 +1,11 @@
+import os
+import subprocess
 from time import sleep
+
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-import subprocess
-import os
+
 
 class LedControlNode(Node):
     def __init__(self):
@@ -19,17 +21,11 @@ class LedControlNode(Node):
         self.lifting_mode = None
 
         self.driver_mode_subscription = self.create_subscription(
-            String,
-            "/mode",
-            self.driver_mode_callback,
-            10
+            String, "/mode", self.driver_mode_callback, 10
         )
 
         self.lifting_mode_subscription = self.create_subscription(
-            String,
-            "/lifting_mode",
-            self.lifting_mode_callback,
-            10
+            String, "/lifting_mode", self.lifting_mode_callback, 10
         )
 
         # self.current_color = 'red'
@@ -83,7 +79,6 @@ class LedControlNode(Node):
         elif self.driver_mode == "LINETRACE":
             script = "white.py"
 
-
         self.start_led_script(script)
 
     def driver_mode_callback(self, msg):
@@ -103,6 +98,6 @@ def main(args=None):
     node.destroy_node()
     rclpy.shutdown()
 
+
 if __name__ == "__main__":
     main()
-

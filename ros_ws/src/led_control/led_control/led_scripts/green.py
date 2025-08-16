@@ -1,20 +1,23 @@
+import fcntl
+import time
+
 import board
 import neopixel
-import time
-import fcntl
-
 
 # # while True:
 # pixels.fill((0, 255, 0))  # 赤
 # pixels.show()
 
-LOCK_FILE = '/tmp/led.lock'
+LOCK_FILE = "/tmp/led.lock"
+
 
 def main():
-    with open(LOCK_FILE, 'w') as lockfile:
+    with open(LOCK_FILE, "w") as lockfile:
         fcntl.flock(lockfile, fcntl.LOCK_EX)
         try:
-            pixels = neopixel.NeoPixel(board.D23, 6, brightness=1.0, auto_write=False, pixel_order=neopixel.RGB)
+            pixels = neopixel.NeoPixel(
+                board.D23, 6, brightness=1.0, auto_write=False, pixel_order=neopixel.RGB
+            )
             pixels.fill((255, 0, 0))
             pixels.show()
             while True:

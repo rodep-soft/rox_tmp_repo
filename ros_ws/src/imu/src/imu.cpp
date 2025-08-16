@@ -47,12 +47,14 @@ class IMUNode : public rclcpp::Node {
 
     Vector<3> euler = imu_sensor_.getVector(VECTOR_EULER);
 
+    // これほんとにindexあってるか？？
     rpy_msg.x = euler[0];
     rpy_msg.y = euler[1];
     rpy_msg.z = euler[2];
 
     // --- ここからImuメッセージ ---
 
+    // /imu/data
     auto imu_accel_and_gyro_msg = sensor_msgs::msg::Imu();
 
     Quaternion quat = imu_sensor_.getQuat();
@@ -70,6 +72,7 @@ class IMUNode : public rclcpp::Node {
 
     Vector<3> gyro = imu_sensor_.getVector(VECTOR_GYROSCOPE);
 
+    // これもほんとにあってるのか??
     imu_accel_and_gyro_msg.angular_velocity.x = gyro[0];
     imu_accel_and_gyro_msg.angular_velocity.y = gyro[1];
     imu_accel_and_gyro_msg.angular_velocity.z = gyro[2];
