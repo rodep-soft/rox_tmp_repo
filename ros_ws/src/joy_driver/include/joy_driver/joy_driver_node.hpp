@@ -12,8 +12,8 @@
 
 // ROS messages
 #include <geometry_msgs/msg/twist.hpp>
-#include <sensor_msgs/msg/joy.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <sensor_msgs/msg/joy.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/string.hpp>
 
@@ -35,7 +35,8 @@ class JoyDriverNode : public rclcpp::Node {
   static double applyDeadzone(double val, double threshold = 0.05);
   static double normalizeAngle(double angle);
   double calculatePIDCorrection(double error, double dt, double velocity_factor = 1.0);
-  double calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_z, double dt, double velocity_factor = 1.0);
+  double calculateAngularCorrectionWithVelocity(double angle_error, double angular_vel_z, double dt,
+                                                double velocity_factor = 1.0);
   std::string mode_to_string(Mode mode, bool is_gear_down_param);
   double get_angular_velocity(const sensor_msgs::msg::Joy::SharedPtr& msg);
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg);
@@ -103,10 +104,10 @@ class JoyDriverNode : public rclcpp::Node {
   double prev_yaw_error_ = 0.0;
   double integral_error_ = 0.0;
   double last_correction_time_ = 0.0;
-  
+
   // ローパスフィルタ係数（0.0-1.0, 小さいほど平滑化が強い）
   static constexpr double YAW_FILTER_ALPHA = 0.5;  // より強い平滑化
-  
+
   // 積分項のウィンドアップ防止
   static constexpr double MAX_INTEGRAL_ERROR = 0.5;
 

@@ -35,7 +35,8 @@ TEST_F(JoyDriverTest, TestApplyDeadzone) {
 // Test mode string conversion
 TEST_F(JoyDriverTest, TestModeToString) {
   EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::STOP, false), "STOP");
-  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::JOY, false), "JOY");
+  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::JOY, false), "JOY_FAST");
+  EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::JOY, true), "JOY_SLOW");
   EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::DPAD, false), "DPAD");
   EXPECT_EQ(node_->mode_to_string(JoyDriverNode::Mode::LINETRACE, false), "LINETRACE");
 }
