@@ -109,7 +109,7 @@ class LiftingMotorNode(Node):
             # 昇降制御実行
             current_state = self.state_machine.get_current_state()
             elevation_status = self.motor_driver.elevation_control(
-                elevation_mode, current_state, self.linetrace_elevation_speed
+                elevation_mode, State.INIT, self.linetrace_elevation_speed
             )
             self.get_logger().info(
                 f"昇降状態: {elevation_status}, 現在の状態: {current_state.name}"
@@ -205,7 +205,7 @@ class LiftingMotorNode(Node):
             if self.state_machine.just_entered_state(State.TO_MAX):
                 self.motor_driver.throwing_on()
                 self.get_logger().info("TO_MAX遷移: リレーをONにしました")
-                sleep(1)  # 2秒待機後、下記の押し出し制御で前進開始
+                sleep(0.5)  # 0.5秒待機後、下記の押し出し制御で前進開始
 
             # RETURN_TO_MINに遷移したときの一度だけの処理（副作用）
             if self.state_machine.just_entered_state(State.RETURN_TO_MIN):

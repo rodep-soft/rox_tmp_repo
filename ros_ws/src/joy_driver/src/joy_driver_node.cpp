@@ -445,12 +445,14 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
       upper_msg->is_ejection_on = false;
     }
 
-    // square button (射出止める)
-    if (msg->buttons[2] == 1) {
-      upper_msg->is_throwing_on = true;
-    } else {
-      upper_msg->is_throwing_on = false;
-    }
+    // Deprecated
+    // // square button (射出止める)
+    // if (msg->buttons[2] == 1) {
+    //   upper_msg->is_throwing_on = true;
+    // } else {
+    //   upper_msg->is_throwing_on = false;
+    // }
+    upper_msg->is_throwing_on = false;
 
     // 昇降制御（方向パッド）
     if (msg->buttons[3] == 1) {         // triangle
