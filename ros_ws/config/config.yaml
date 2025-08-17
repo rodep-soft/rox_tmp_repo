@@ -7,13 +7,13 @@
     linear_x_axis: 1
     linear_y_axis: 0
     angular_axis: 2  
-    Kp: 4.0   # 比例ゲインを大幅に下げて振動抑制
-    Ki: 0.2  # 積分ゲインを小さく（I項の飽和を防ぐ）
-    Kd: 0.1   # 微分ゲインを小さく設定（振動抑制）
-    deadband: 0.08 # デッドバンドを広げてノイズ除去
-    max_angular_correction: 1.0 # 最大補正を制限して急激な動きを防ぐ
-    vel_prediction_gain: -0.08  # 予測補正を小さく
-    vel_damping_gain: -0.003     # ダンピングを小さく
+    Kp: 3.0   # ドリフトに対抗するため大幅強化（5.0→7.0、応答速度向上）
+    Ki: 0.3   # 微小ドリフト蓄積補正を強化（1.0→1.2）
+    Kd: 0.08  # 急激な変化を抑制（0.5→0.2、振動抑制）
+    deadband: 0.07 # デッドバンド完全無効化（微小ドリフトも検出）
+    max_angular_correction: 1.0 # 最大補正力強化（1.0→1.5、angular_scale=3.0倍後に4.5rad/s）
+    vel_prediction_gain: -0.035  # 角速度予測補正ゲイン（振動抑制）
+    vel_damping_gain: -0.001   # 角速度ダンピングゲイン（振動抑制）
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08
@@ -24,9 +24,7 @@
     # Motor Hardware Correction Factors (to compensate for individual motor differences)
     motor_correction_fl: 1.0    # Front Left correction factor
     motor_correction_fr: 1.0    # Front Right correction factor  
-    motor_correction_rl: 1.1    # Rear Left correction factor
+    motor_correction_rl: 1.01    # Rear Left correction factor
     motor_correction_rr: 1.0    # Rear Right correction factor
     baud_rate: 115200
     motor_ids: [1, 2, 3, 4]  # FL, FR, BL, BR
-
-
