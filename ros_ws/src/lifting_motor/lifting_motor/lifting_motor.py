@@ -46,8 +46,7 @@ class LiftingMotorNode(Node):
         self.elevation_warning_logged = False  # 昇降警告ログのフラグ
         self.ejection_blocking_logged = False  # 押し出しブロック警告ログのフラグ
 
-        # 追加---------------------------------------------------------------------------------------
-        self.prev_unix_time = time.time()  # 前回のUNIX時刻
+
 
         # Modeの名前を保持する変数
         # self.mode = ""
@@ -213,6 +212,8 @@ class LiftingMotorNode(Node):
                 self.get_logger().info("TO_MAX遷移: リレーをONにしました")
                 # sleep(0.5)  # 0.5秒待機後、下記の押し出し制御で前進開始
                 # 一旦Delayなし!
+                # 追加---------------------------------------------------------------------------------------
+                self.prev_unix_time = time.time()  # 前回のUNIX時刻
 
             # RETURN_TO_MINに遷移したときの一度だけの処理（副作用）
             if self.state_machine.just_entered_state(State.RETURN_TO_MIN):
@@ -242,7 +243,7 @@ class LiftingMotorNode(Node):
                     self.motor_driver.ejection_stop()
             elif current_state == State.TO_MAX:
                 self.motor_driver.ejection_forward()  # 射出駆動
-                if self.current_time - self.prev_unix_time > 2.0:
+                if self.current_time - self.prev_unix_time > 1.5:
                     self.motor_driver.throwing_off()
                     self.prev_unix_time = self.current_time # UNIX時刻を更新
             elif current_state == State.RETURN_TO_MIN:
