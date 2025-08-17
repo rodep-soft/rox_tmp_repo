@@ -1,4 +1,5 @@
 from time import sleep
+import time
 
 import rclpy
 from custom_interfaces.action import UpperFunction
@@ -44,6 +45,9 @@ class LiftingMotorNode(Node):
 
         self.elevation_warning_logged = False  # 昇降警告ログのフラグ
         self.ejection_blocking_logged = False  # 押し出しブロック警告ログのフラグ
+
+        # 追加---------------------------------------------------------------------------------------
+        self.prev_unix_time = time.time()  # 前回のUNIX時刻
 
         # Modeの名前を保持する変数
         # self.mode = ""
@@ -158,6 +162,8 @@ class LiftingMotorNode(Node):
             # スイッチの状態を取得
             sw = self.motor_driver.get_switch_states()
 
+            self.current_time = time.time()  # 現在のUNIX時刻
+
             # エッジ検出
             throwing_edge = msg.is_throwing_on and not self.prev_throwing_on
             ejection_edge = msg.is_ejection_on and not self.prev_ejection_on
@@ -205,7 +211,8 @@ class LiftingMotorNode(Node):
             if self.state_machine.just_entered_state(State.TO_MAX):
                 self.motor_driver.throwing_on()
                 self.get_logger().info("TO_MAX遷移: リレーをONにしました")
-                sleep(0.5)  # 0.5秒待機後、下記の押し出し制御で前進開始
+                # sleep(0.5)  # 0.5秒待機後、下記の押し出し制御で前進開始
+                # 一旦Delayなし!
 
             # RETURN_TO_MINに遷移したときの一度だけの処理（副作用）
             if self.state_machine.just_entered_state(State.RETURN_TO_MIN):
@@ -235,6 +242,9 @@ class LiftingMotorNode(Node):
                     self.motor_driver.ejection_stop()
             elif current_state == State.TO_MAX:
                 self.motor_driver.ejection_forward()  # 射出駆動
+                if self.current_time - self.prev_unix_time > 1.0:
+                    self.motor_driver.throwing_off()
+                    self.prev_unix_time = self.current_time # UNIX時刻を更新
             elif current_state == State.RETURN_TO_MIN:
                 self.motor_driver.ejection_backward()
 
