@@ -114,7 +114,7 @@ class LineFollower(Node):
         color_2 = self.color_2_.r + self.color_2_.g + self.color_2_.b
         diff_outer = (self.color_0_.a - self.color_3_.a) / (self.color_0_.a + self.color_3_.a)
         # self.color_2_.a = self.color_2_.a + 0.012
-        diff = (color_1 - color_2) / (color_1 + color_2)
+        diff = (color_1 - color_2) / (color_1 + color_2 + 0.0001)
 
         if self.before_diff is None:
             self.before_diff = diff
@@ -212,8 +212,8 @@ class LineFollower(Node):
 def main(args=None):
     rclpy.init(args=args)
     color_publisher_0 = ColorPublisher(0, 0xFC)
-    color_publisher_1 = ColorPublisher(1, 0xFF)
-    color_publisher_2 = ColorPublisher(2, 0xFF)
+    color_publisher_1 = ColorPublisher(1, 0xFC)
+    color_publisher_2 = ColorPublisher(2, 0xFC)
     color_publisher_3 = ColorPublisher(3, 0xFC)
     twist_publisher = LineFollower()
 
