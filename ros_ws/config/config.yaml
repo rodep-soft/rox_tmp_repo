@@ -12,6 +12,8 @@
     Kd: 0.0   # 急激な変化を抑制（0.5→0.2、振動抑制）
     deadband: 0.01 # デッドバンド完全無効化（微小ドリフトも検出）
     max_angular_correction: 2.0 # 最大補正力強化（1.0→1.5、angular_scale=3.0倍後に4.5rad/s）
+    vel_prediction_gain: 0.00  # 角速度予測補正ゲイン（振動抑制）
+    vel_damping_gain: 0.00   # 角速度ダンピングゲイン（振動抑制）
 
     # Mecanum Wheel Controller Parameters
     wheel_radius: 0.08

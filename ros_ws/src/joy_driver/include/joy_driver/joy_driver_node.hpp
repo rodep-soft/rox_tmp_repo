@@ -98,6 +98,8 @@ class JoyDriverNode : public rclcpp::Node {
   double Kd_;
   double deadband_;
   double max_angular_correction_;
+  double vel_prediction_gain_;   // 角速度予測補正ゲイン
+  double vel_damping_gain_;      // 角速度ダンピングゲイン
 
   // IMU補正用のフィルタとPID制御変数
   double filtered_yaw_ = 0.0;

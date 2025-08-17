@@ -47,6 +47,8 @@ void JoyDriverNode::declare_parameters() {
   this->declare_parameter<double>("Kd", 0.005);      // 微分ゲインを大幅に下げて振動抑制
   this->declare_parameter<double>("deadband", 0.1);  // デッドバンドを大きく（rad）
   this->declare_parameter<double>("max_angular_correction", 0.3);  // 最大補正を制限
+  this->declare_parameter<double>("vel_prediction_gain", -0.01);  // 角速度予測補正ゲイン
+  this->declare_parameter<double>("vel_damping_gain", -0.02);     // 角速度ダンピングゲイン
 }
 
 void JoyDriverNode::get_parameters() {
@@ -63,6 +65,8 @@ void JoyDriverNode::get_parameters() {
   deadband_ = this->get_parameter("deadband").as_double();  // デッドバンド
   max_angular_correction_ =
       this->get_parameter("max_angular_correction").as_double();  // 最大角速度補正
+  vel_prediction_gain_ = this->get_parameter("vel_prediction_gain").as_double();  // 角速度予測補正ゲイン
+  vel_damping_gain_ = this->get_parameter("vel_damping_gain").as_double();        // 角速度ダンピングゲイン
 
   // パラメータ値をログ出力して確認
   RCLCPP_INFO(
@@ -673,16 +677,16 @@ double JoyDriverNode::calculateAngularCorrectionWithVelocity(double angle_error,
   double angle_correction =
       adaptive_kp * angle_error + adaptive_ki * integral_error_ + adaptive_kd * derivative;
 
-  // 角速度フィードバック制御を緩和（yaw軸 = x軸の角速度を使用）
+  // 角速度フィードバック制御（yaw軸 = x軸の角速度を使用）
   // 角度制御を優先し、角速度の影響を最小限に抑制
-  double current_angular_vel = (std::abs(angular_vel_x) > 0.001) ? angular_vel_x : filtered_angular_vel_x_;
+  double current_angular_vel = angular_vel_x;
   
-  // 角速度に基づく予測補正を大幅に緩和（将来の角度誤差を予測）
+  // 角速度に基づく予測補正（パラメータで調整可能）
   double predicted_error = angle_error + current_angular_vel * dt;
-  double velocity_prediction_correction = -0.05 * predicted_error * velocity_factor;  // 0.3 -> 0.05に減少
+  double velocity_prediction_correction = vel_prediction_gain_ * predicted_error * velocity_factor;
   
-  // 角速度ダンピングを軽減（現在の回転を軽く抑制）
-  double velocity_damping = -0.05 * current_angular_vel * velocity_factor;  // 0.2 -> 0.05に減少
+  // 角速度ダンピング（パラメータで調整可能）
+  double velocity_damping = vel_damping_gain_ * current_angular_vel * velocity_factor;
 
   // 総合補正値（角度PID重視 + 軽微な角速度補正）
   double total_correction = angle_correction + velocity_prediction_correction + velocity_damping;
