@@ -7,8 +7,8 @@
     linear_x_axis: 1
     linear_y_axis: 0
     angular_axis: 2  
-    Kp: 2.5   # ドリフトに対抗するため大幅強化（5.0→7.0、応答速度向上）
-    Ki: 0.5   # 微小ドリフト蓄積補正を強化（1.0→1.2）
+    Kp: 2.0   # ドリフトに対抗するため大幅強化（5.0→7.0、応答速度向上）
+    Ki: 0.1   # 微小ドリフト蓄積補正を強化（1.0→1.2）
     Kd: 0.05   # 急激な変化を抑制（0.5→0.2、振動抑制）
     deadband: 0.01 # デッドバンド完全無効化（微小ドリフトも検出）
     max_angular_correction: 2.0 # 最大補正力強化（1.0→1.5、angular_scale=3.0倍後に4.5rad/s）
@@ -22,7 +22,7 @@
     # Motor Hardware Correction Factors (to compensate for individual motor differences)
     motor_correction_fl: 1.0    # Front Left correction factor
     motor_correction_fr: 1.0    # Front Right correction factor  
-    motor_correction_rl: 1.0    # Rear Left correction factor
+    motor_correction_rl: 1.05    # Rear Left correction factor
     motor_correction_rr: 1.0    # Rear Right correction factor
     baud_rate: 115200
     motor_ids: [1, 2, 3, 4]  # FL, FR, BL, BR
