@@ -22,7 +22,7 @@
     # Motor Hardware Correction Factors (to compensate for individual motor differences)
     motor_correction_fl: 1.0    # Front Left correction factor
     motor_correction_fr: 1.0    # Front Right correction factor  
-    motor_correction_rl: 1.3    # Rear Left correction factor
+    motor_correction_rl: 1.0    # Rear Left correction factor
     motor_correction_rr: 1.0    # Rear Right correction factor
     baud_rate: 115200
     motor_ids: [1, 2, 3, 4]  # FL, FR, BL, BR
