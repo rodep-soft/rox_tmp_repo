@@ -128,8 +128,6 @@ void MotorController::send_velocity_command(uint8_t motor_id, int16_t rpm, bool 
   try {
     // コマンド送信
     boost::asio::write(serial_port_, boost::asio::buffer(data, data.size()));
-    RCLCPP_INFO(logger_, "Sent command to motor %d: RPM=%d, Brake=%s", motor_id, rpm,
-                 brake ? "ON" : "OFF");
 
     // フィードバック待ち（参考コードのアプローチ）
     wait_for_feedback_response(motor_id);
@@ -140,9 +138,6 @@ void MotorController::send_velocity_command(uint8_t motor_id, int16_t rpm, bool 
     // port_name_[port_name_.size() - 1] = '1';
     if (!reinitialize_port()) {
       RCLCPP_ERROR(logger_, "Failed to reinitialize port: %s", port_name_.c_str());
-    }
-    else
-    {
     }
   }
 }
@@ -176,7 +171,6 @@ void MotorController::clear_serial_buffer() {
 
 void MotorController::start_async_read() {
   if (!reading_) return;
-  RCLCPP_INFO(logger_, "Starting async read");
   serial_port_.async_read_some(
       boost::asio::buffer(read_buf_), [this](boost::system::error_code ec, std::size_t length) {
         if (!ec && length > 0) {
@@ -187,13 +181,11 @@ void MotorController::start_async_read() {
             RCLCPP_DEBUG(logger_, "Read error: %s", ec.message().c_str());
           }
         }
-        RCLCPP_INFO(logger_, "Async read completed");
         start_async_read();
       });
 }
 
 void MotorController::parse_buffer() {
-  RCLCPP_INFO(logger_, "buffer size: %zu", buffer_.size());
   // 10バイトパケット単位でチェック
   while (buffer_.size() >= 10) {
     // パケット開始候補を探す(IDは1~4の範囲)
@@ -263,9 +255,7 @@ void MotorController::wait_for_feedback_response(uint8_t motor_id, int timeout_m
   }
 
   // タイムアウト - でも動作は継続
-  int temp = last_motor_id_;
-  bool reading = reading_;
-  RCLCPP_INFO(logger_, "Motor %d feedback timeout, but continuing %d, now reading_ is %d", motor_id, temp, reading);
+  RCLCPP_DEBUG(logger_, "Motor %d feedback timeout, but continuing", motor_id);
 }
 
 void MotorController::send_velocity_commands_sequential(
