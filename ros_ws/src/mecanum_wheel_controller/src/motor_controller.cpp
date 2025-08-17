@@ -134,10 +134,14 @@ void MotorController::send_velocity_command(uint8_t motor_id, int16_t rpm, bool 
 
   } catch (const std::exception& e) {
     RCLCPP_ERROR(logger_, "Failed to communicate with motor %d: %s", motor_id, e.what());
-
-    // port_name_[port_name_.size() - 1] = '1';
     if (!reinitialize_port()) {
       RCLCPP_ERROR(logger_, "Failed to reinitialize port: %s", port_name_.c_str());
+      char temp = port_name_[port_name_.size() - 1];
+      port_name_[port_name_.size() - 1] = '1';
+      if (!reinitialize_port()) {
+        RCLCPP_ERROR(logger_, "Failed to reinitialize port: %s", port_name_.c_str());
+        port_name_[port_name_.size() - 1] = temp;
+      }
     }
   }
 }
