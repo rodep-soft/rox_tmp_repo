@@ -242,7 +242,7 @@ class LiftingMotorNode(Node):
                     self.motor_driver.ejection_stop()
             elif current_state == State.TO_MAX:
                 self.motor_driver.ejection_forward()  # 射出駆動
-                if self.current_time - self.prev_unix_time > 1.0:
+                if self.current_time - self.prev_unix_time > 2.0:
                     self.motor_driver.throwing_off()
                     self.prev_unix_time = self.current_time # UNIX時刻を更新
             elif current_state == State.RETURN_TO_MIN:
