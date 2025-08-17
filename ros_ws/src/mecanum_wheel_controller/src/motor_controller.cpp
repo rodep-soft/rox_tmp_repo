@@ -40,8 +40,10 @@ MotorController::~MotorController() {
 
 bool MotorController::init_port(const std::string& port_name, int baud_rate) {
   try {
-    serial_port_.open(port_name);
-    serial_port_.set_option(boost::asio::serial_port_base::baud_rate(baud_rate));
+    this->port_name_ = port_name;
+    this->baud_rate_ = baud_rate;
+    serial_port_.open(this->port_name_);
+    serial_port_.set_option(boost::asio::serial_port_base::baud_rate(this->baud_rate_));
     serial_port_.set_option(boost::asio::serial_port_base::character_size(8));
     serial_port_.set_option(boost::asio::serial_port_base::flow_control(
         boost::asio::serial_port_base::flow_control::none));
@@ -61,6 +63,44 @@ bool MotorController::init_port(const std::string& port_name, int baud_rate) {
     RCLCPP_ERROR(logger_, "Failed to open serial port %s: %s", port_name.c_str(), e.what());
     return false;
   }
+  return true;
+}
+
+bool MotorController::reinitialize_port() {
+  reading_ = false;
+  io_context_.stop();
+  if(io_thread_.joinable()) {
+    io_thread_.join();
+  }
+  try {
+    if(serial_port_.is_open()) {
+      serial_port_.close();
+    }
+    serial_port_.open(this->port_name_);
+
+    serial_port_.set_option(boost::asio::serial_port_base::baud_rate(this->baud_rate_));
+    serial_port_.set_option(boost::asio::serial_port_base::character_size(8));
+    serial_port_.set_option(boost::asio::serial_port_base::flow_control(
+        boost::asio::serial_port_base::flow_control::none));
+    serial_port_.set_option(
+        boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
+    serial_port_.set_option(
+        boost::asio::serial_port_base::stop_bits(boost::asio::serial_port_base::stop_bits::one));    
+
+    io_context_.restart();
+    // 非同期読み取り開始
+    reading_ = true;
+    start_async_read();
+
+    // io_contextを別スレッドで実行
+    io_thread_ = std::thread([this]() { io_context_.run(); });
+  
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(logger_, "Failed to open serial port %s: %s", port_name_.c_str(), e.what());
+    return false;
+  }
+
+  RCLCPP_INFO(logger_, "Reinitialized serial port %s", port_name_.c_str());
   return true;
 }
 
@@ -94,6 +134,15 @@ void MotorController::send_velocity_command(uint8_t motor_id, int16_t rpm, bool 
 
   } catch (const std::exception& e) {
     RCLCPP_ERROR(logger_, "Failed to communicate with motor %d: %s", motor_id, e.what());
+    if (!reinitialize_port()) {
+      RCLCPP_ERROR(logger_, "Failed to reinitialize port: %s", port_name_.c_str());
+      char temp = port_name_[port_name_.size() - 1];
+      port_name_[port_name_.size() - 1] = '1';
+      if (!reinitialize_port()) {
+        RCLCPP_ERROR(logger_, "Failed to reinitialize port: %s", port_name_.c_str());
+        port_name_[port_name_.size() - 1] = temp;
+      }
+    }
   }
 }
 
@@ -126,18 +175,17 @@ void MotorController::clear_serial_buffer() {
 
 void MotorController::start_async_read() {
   if (!reading_) return;
-
   serial_port_.async_read_some(
       boost::asio::buffer(read_buf_), [this](boost::system::error_code ec, std::size_t length) {
         if (!ec && length > 0) {
           buffer_.insert(buffer_.end(), read_buf_.begin(), read_buf_.begin() + length);
           parse_buffer();
-          start_async_read();
         } else {
           if (ec) {
             RCLCPP_DEBUG(logger_, "Read error: %s", ec.message().c_str());
           }
         }
+        start_async_read();
       });
 }
 

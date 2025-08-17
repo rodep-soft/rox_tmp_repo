@@ -21,6 +21,7 @@ class MotorController {
   ~MotorController();
 
   bool init_port(const std::string& port_name, int baud_rate);
+  bool reinitialize_port();
 
   // Motor control functions
   void send_velocity_command(uint8_t motor_id, int16_t rpm, bool brake = false);
@@ -39,6 +40,8 @@ class MotorController {
   bool validate_motor_response(const std::vector<uint8_t>& response, uint8_t expected_id);
 
  private:
+  std::string port_name_;
+  int baud_rate_;
   boost::asio::io_context io_context_;
   boost::asio::serial_port serial_port_;
   rclcpp::Logger logger_;
