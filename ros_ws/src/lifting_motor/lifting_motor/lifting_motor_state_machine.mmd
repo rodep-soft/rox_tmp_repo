@@ -1,0 +1,11 @@
+---
+config:
+  theme: default
+---
+stateDiagram
+    [*] --> INIT: 初期状態
+    INIT --> STOPPED: is_system_ready==True
+    STOPPED --> INIT: is_system_ready==True (ループ防止)
+    STOPPED --> TO_MAX: "射出条件成立\n(is_throwing_motor_off && elevation_minlim_on && ejection_on)"
+    TO_MAX --> RETURN_TO_MIN: ejection_maxlim_on==True
+    RETURN_TO_MIN --> STOPPED: ejection_minlim_on==True
