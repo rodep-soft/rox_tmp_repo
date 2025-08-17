@@ -112,7 +112,7 @@ class LineFollower(Node):
         float64 = Float64()
         color_1 = self.color_1_.r + self.color_1_.g + self.color_1_.b
         color_2 = self.color_2_.r + self.color_2_.g + self.color_2_.b
-        diff_outer = (self.color_0_.a - self.color_3_.a) / (self.color_0_.a + self.color_3_.a)
+        diff_outer = (self.color_0_.a - self.color_3_.a) / (self.color_0_.a + self.color_3_.a + 0.0001)
         # self.color_2_.a = self.color_2_.a + 0.012
         diff = (color_1 - color_2) / (color_1 + color_2 + 0.0001)
 
