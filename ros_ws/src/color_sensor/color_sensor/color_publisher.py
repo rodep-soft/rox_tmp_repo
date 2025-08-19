@@ -126,14 +126,14 @@ class LineFollower(Node):
 
         self.integral += diff
 
-        kp = 1.7
-        ki = 0.03
+        kp = 1.2
+        ki = 0.05
         kd = 0.0
 
 
         if self.integral * diff < 0:
             ki = 0.0
-            self.integral *= 0.9
+            self.integral *= 0.8
         power = ((kp * diff) + (kd * derivative) + (ki * self.integral))
 
         self.get_logger().info("p : {}".format(kp * diff))
@@ -141,7 +141,7 @@ class LineFollower(Node):
         self.get_logger().info("d : {}".format(kd * derivative))
         self.get_logger().info("power : {}".format(power))
 
-        x_power = 0.8 - (abs(power) * 0.0)
+        x_power = 0.6 - (abs(power) * 0.0)
       
         twist.linear.x = -x_power
         twist.linear.y = power * 1.0 * 0.0

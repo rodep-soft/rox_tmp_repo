@@ -475,9 +475,9 @@ joy_driver:
   max_angular_correction: 0.5  # 最大角度補正速度
 
   # デッドゾーン設定
-  deadzone_moving: 0.3     # 移動中の回転デッドゾーン
-  deadzone_stationary: 0.15 # 停止中の回転デッドゾーン
-  deadzone_linear: 0.05    # 移動軸デッドゾーン
+  deadzone_moving: 0.00     # 移動中の回転デッドゾーン
+  deadzone_stationary: 0.00 # 停止中の回転デッドゾーン
+  deadzone_linear: 0.00    # 移動軸デッドゾーン
 ```
 
 ### 📡 通信プロトコル
