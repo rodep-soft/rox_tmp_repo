@@ -153,6 +153,9 @@ class LineFollower(Node):
             self.is_waiting_for_action = True
             self.is_already_executed_action = True
             self.send_upper_function_goal(True)
+        
+        if diff_outer > 0.1:
+            self.is_already_executed_action = False
     
         if self.is_waiting_for_action == True:
             twist.linear.x = 0.2

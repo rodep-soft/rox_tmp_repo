@@ -279,7 +279,7 @@ void JoyDriverNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg) {
           // PID補正を開始
           twist_msg->angular.z = 0.0;  // 初回は補正なし
         }
-      } else if (std::abs(manual_angular) < 0.01 && is_moving && !waiting_for_target_update) {
+      } else if (std::abs(manual_angular) < 0.01 && !waiting_for_target_update) {
         // 動作開始時にPID状態をリセット（切り返し対応）
         static bool was_moving = false;
         if (!was_moving) {
