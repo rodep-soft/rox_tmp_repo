@@ -13,7 +13,7 @@ services:
     working_dir: /root/ros_ws 
 
     environment:
-      - ROS_DOMAIN_ID=0
+      - ROS_DOMAIN_ID=94
       - DEBIAN_FRONTEND=noninteractive
       # - ROS_DISCOVERY_SERVER=100.121.25.123:11811 # unicast用
     volumes:
