@@ -157,3 +157,6 @@ yarn-error.log*
 
 # Generated documentation
 doxygen_generated/
+
+# GEMINI.md
+GEMINI.md
